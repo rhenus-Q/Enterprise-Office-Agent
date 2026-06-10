@@ -1,0 +1,50 @@
+# ---- Environment / secrets ----
+.env
+.env.*
+*.env
+!.env.example          # keep a template if you add one
+.envrc
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- uv ----
+# Keep uv.lock committed for reproducible installs; ignore the local cache only.
+.uv/
+
+# ---- Test / tooling caches ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---- Project data: persisted vector store ----
+# Rebuilt locally via `uv run python ingestion.py`; do not commit.
+chroma_db/
+
+# ---- Build artifacts ----
+build/
+dist/
+*.egg-info/
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
