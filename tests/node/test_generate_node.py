@@ -8,8 +8,14 @@ reads state and shapes the returned state.
 
 from langchain_core.documents import Document
 
-import graph.nodes.generate as generate_module
+import importlib
+
 from graph.nodes.generate import generate
+
+# graph/nodes/__init__.py re-exports the `generate` function under the same name
+# as its submodule, so `import graph.nodes.generate as ...` would bind the
+# function, not the module. Resolve the real module for monkeypatching.
+generate_module = importlib.import_module("graph.nodes.generate")
 
 
 def _patch_generate_answer(monkeypatch):

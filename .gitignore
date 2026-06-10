@@ -2,7 +2,8 @@
 .env
 .env.*
 *.env
-!.env.example          # keep a template if you add one
+# keep the committed template un-ignored (no trailing comment: gitignore patterns are literal)
+!.env.example
 .envrc
 
 # ---- Python ----

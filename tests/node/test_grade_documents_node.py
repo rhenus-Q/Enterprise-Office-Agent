@@ -7,8 +7,14 @@ Relevance is driven by a content -> bool mapping for deterministic results.
 
 from langchain_core.documents import Document
 
-import graph.nodes.grade_documents as grade_module
+import importlib
+
 from graph.nodes.grade_documents import grade_documents
+
+# graph/nodes/__init__.py re-exports the `grade_documents` function under the same
+# name as its submodule, so `import graph.nodes.grade_documents as ...` would bind
+# the function, not the module. Resolve the real module for monkeypatching.
+grade_module = importlib.import_module("graph.nodes.grade_documents")
 
 
 class _FakeGrade:

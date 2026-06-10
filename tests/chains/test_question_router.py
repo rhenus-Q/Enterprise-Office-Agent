@@ -14,7 +14,7 @@ so only unambiguous examples are used here.
 
 import pytest
 
-from LangGraph.Agentic_RAG_Claude.tests.conftest import requires_openai
+from tests.conftest import requires_openai
 
 from graph.consts import RETRIEVE, WEBSEARCH
 from graph.chains.question_router import question_router, RouteQuery
