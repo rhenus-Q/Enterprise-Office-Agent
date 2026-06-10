@@ -2,3 +2,11 @@ RETRIEVE = "retrieve"
 GRADE_DOCUMENTS = "grade_documents"
 GENERATE = "generate"
 WEBSEARCH = "websearch"
+WEB_SEARCH_DISABLED_NOTICE = "web_search_disabled_notice"
+MAX_RETRIES_NOT_GROUNDED_NOTICE = "max_retries_not_grounded_notice"
+MAX_RETRIES_NOT_USEFUL_NOTICE = "max_retries_not_useful_notice"
+
+# Values for GraphState["stop_reason"] ("" = normal finish).
+STOP_REASON_WEB_SEARCH_DISABLED = "web_search_disabled"
+STOP_REASON_MAX_RETRIES_NOT_GROUNDED = "max_retries_not_grounded"
+STOP_REASON_MAX_RETRIES_NOT_USEFUL = "max_retries_not_useful"

@@ -17,7 +17,7 @@ import pytest
 
 from langchain_core.documents import Document
 
-from LangGraph.Agentic_RAG_Claude.tests.conftest import requires_openai
+from tests.conftest import requires_openai
 
 from graph.chains.hallucination_grader import (
     hallucination_grader,

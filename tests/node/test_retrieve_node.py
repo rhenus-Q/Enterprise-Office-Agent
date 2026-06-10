@@ -7,8 +7,14 @@ Chroma / embeddings call happens. Tests focus on node state input/output.
 
 from langchain_core.documents import Document
 
-import graph.nodes.retrieve as retrieve_module
+import importlib
+
 from graph.nodes.retrieve import retrieve
+
+# graph/nodes/__init__.py re-exports the `retrieve` function under the same name
+# as its submodule, so `import graph.nodes.retrieve as ...` would bind the
+# function, not the module. Resolve the real module for monkeypatching.
+retrieve_module = importlib.import_module("graph.nodes.retrieve")
 
 
 def _patch_retriever(monkeypatch, returned_docs):

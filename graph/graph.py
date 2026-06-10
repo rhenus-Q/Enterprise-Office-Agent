@@ -15,13 +15,23 @@ Workflow (see structure.md):
         └── retrieve → grade_documents
                 ├── relevant docs → generate
                 └── no relevant docs → websearch → generate
-                 └── max retries → END
 
     generate
     → grounding + usefulness check
         ├── not grounded   → regenerate (generate again)
         ├── grounded+useful → END
         └── grounded+not useful → websearch
+
+Privacy mode: when state["web_search_enabled"] is False (seeded from the
+WEB_SEARCH_ENABLED env var by main.py), every websearch route above is disabled —
+questions are never sent to an external search service. Routing falls back to
+vector retrieval / direct generation, and "grounded but not useful" ends the run
+with the grounded answer instead of searching the web.
+
+Failure surfacing: runs that cannot end with a passing answer (web search
+disabled, or MAX_RETRIES exhausted while a quality gate still fails) terminate
+through small notice nodes that record state["stop_reason"], so main.py can
+attach a user-facing caveat instead of presenting the answer as successful.
 """
 
 from dotenv import load_dotenv
@@ -35,9 +45,25 @@ load_dotenv()
 from langgraph.graph import StateGraph, END  # noqa: E402
 
 from graph.state import GraphState  # noqa: E402
-from graph.consts import RETRIEVE, GRADE_DOCUMENTS, GENERATE, WEBSEARCH  # noqa: E402
+from graph.consts import (  # noqa: E402
+    RETRIEVE,
+    GRADE_DOCUMENTS,
+    GENERATE,
+    WEBSEARCH,
+    WEB_SEARCH_DISABLED_NOTICE,
+    MAX_RETRIES_NOT_GROUNDED_NOTICE,
+    MAX_RETRIES_NOT_USEFUL_NOTICE,
+)
 
-from graph.nodes import retrieve, grade_documents, generate, web_search  # noqa: E402
+from graph.nodes import (  # noqa: E402
+    retrieve,
+    grade_documents,
+    generate,
+    web_search,
+    web_search_disabled_notice,
+    max_retries_not_grounded_notice,
+    max_retries_not_useful_notice,
+)
 
 from graph.chains.question_router import get_question_router  # noqa: E402
 from graph.chains.hallucination_grader import get_hallucination_grader  # noqa: E402
@@ -59,9 +85,16 @@ MAX_RETRIES = 5
 def route_question(state: GraphState) -> str:
     """
     Entry routing: decide whether the question goes to web search or vector retrieval first.
+
+    With web search disabled (privacy mode), skip the router LLM entirely: every
+    question goes to vector retrieval and never reaches an external service.
     """
 
     print("---ROUTE QUESTION---")
+
+    if not state.get("web_search_enabled", True):
+        print("---WEB SEARCH DISABLED: ROUTE TO RETRIEVE---")
+        return RETRIEVE
 
     question = state["question"]
     route = get_question_router().invoke({"question": question})
@@ -84,6 +117,13 @@ def decide_to_generate(state: GraphState) -> str:
     print("---ASSESS GRADED DOCUMENTS---")
 
     if state.get("web_search", False):
+        if not state.get("web_search_enabled", True):
+            # Privacy mode: generate from whatever relevant documents remain.
+            # With none left, generation returns its deterministic
+            # insufficient-context answer instead of fabricating one.
+            print("---DECISION: SOME DOCS NOT RELEVANT, WEB SEARCH DISABLED, GENERATE---")
+            return GENERATE
+
         print("---DECISION: SOME DOCS NOT RELEVANT, GO TO WEB SEARCH---")
         return WEBSEARCH
 
@@ -93,13 +133,19 @@ def decide_to_generate(state: GraphState) -> str:
 
 def grade_generation(state: GraphState) -> str:
     """
-    Two-layer quality check after generation, returning four explicit outcomes
+    Two-layer quality check after generation, returning six explicit outcomes
     (each maps one-to-one to the conditional edges below):
 
     - "not_grounded": answer not supported by documents   -> back to GENERATE (regenerate).
     - "useful":       grounded and answers the question    -> END.
     - "not_useful":   grounded but doesn't answer it       -> WEBSEARCH (supplement).
-    - "max_retries":  retry limit reached                  -> END (protective stop).
+    - "web_search_disabled": grounded but off-target with web search disabled
+                             -> notice node recording a stop reason, then END
+                                (no way to add information; main.py shows a caveat).
+    - "max_retries_not_grounded": retry limit reached, answer still not grounded
+                             -> notice node recording a stop reason, then END.
+    - "max_retries_not_useful":   retry limit reached, answer grounded but off-target
+                             -> notice node recording a stop reason, then END.
     """
 
     print("---CHECK HALLUCINATIONS---")
@@ -135,20 +181,29 @@ def grade_generation(state: GraphState) -> str:
             print("---DECISION: ANSWER IS USEFUL---")
             return "useful"
 
-        # Grounded but doesn't answer the question: would normally go to WEBSEARCH for another round.
-        # But if the limit is reached, stop protectively.
+        # Grounded but doesn't answer the question: would normally go to WEBSEARCH
+        # for another round. In privacy mode there is no way to add information --
+        # regenerating from the same documents can't help, so stop with the
+        # grounded answer we have.
+        if not state.get("web_search_enabled", True):
+            print("---DECISION: ANSWER NOT USEFUL, WEB SEARCH DISABLED, STOP---")
+            return "web_search_disabled"
+
+        # But if the limit is reached, stop protectively and record that the
+        # final answer is grounded yet still off-target.
         if retries >= MAX_RETRIES:
-            print(f"---MAX RETRIES ({MAX_RETRIES}) REACHED AFTER CHECK, STOP---")
-            return "max_retries"
+            print(f"---MAX RETRIES ({MAX_RETRIES}) REACHED, ANSWER NOT USEFUL, STOP---")
+            return "max_retries_not_useful"
 
         print("---DECISION: ANSWER NOT USEFUL, GO TO WEB SEARCH---")
         return "not_useful"
 
     # Not grounded: would normally go back to GENERATE to regenerate.
-    # But if the limit is reached, stop protectively.
+    # But if the limit is reached, stop protectively and record that the final
+    # answer still failed the grounding (anti-hallucination) check.
     if retries >= MAX_RETRIES:
-        print(f"---MAX RETRIES ({MAX_RETRIES}) REACHED AFTER CHECK, STOP---")
-        return "max_retries"
+        print(f"---MAX RETRIES ({MAX_RETRIES}) REACHED, ANSWER NOT GROUNDED, STOP---")
+        return "max_retries_not_grounded"
 
     print("---DECISION: NOT GROUNDED, RE-GENERATE---")
     return "not_grounded"
@@ -165,6 +220,9 @@ workflow.add_node(RETRIEVE, retrieve)
 workflow.add_node(GRADE_DOCUMENTS, grade_documents)
 workflow.add_node(GENERATE, generate)
 workflow.add_node(WEBSEARCH, web_search)
+workflow.add_node(WEB_SEARCH_DISABLED_NOTICE, web_search_disabled_notice)
+workflow.add_node(MAX_RETRIES_NOT_GROUNDED_NOTICE, max_retries_not_grounded_notice)
+workflow.add_node(MAX_RETRIES_NOT_USEFUL_NOTICE, max_retries_not_useful_notice)
 
 # 2. Entry: route_question decides the first step
 workflow.set_conditional_entry_point(
@@ -196,14 +254,25 @@ workflow.add_conditional_edges(
     GENERATE,
     grade_generation,
     {
-        "not_grounded": GENERATE,   # not grounded -> regenerate
-        "useful": END,              # grounded and useful -> end
-        "not_useful": WEBSEARCH,    # grounded but off-target -> web search
-        "max_retries": END,         # retry limit reached -> protective stop
+        "not_grounded": GENERATE,       # not grounded -> regenerate
+        "useful": END,                  # grounded and useful -> end
+        "not_useful": WEBSEARCH,        # grounded but off-target -> web search
+        # off-target but privacy mode -> record the stop reason, then stop
+        # with the grounded answer (main.py attaches a user-facing caveat)
+        "web_search_disabled": WEB_SEARCH_DISABLED_NOTICE,
+        # retry limit reached with a still-failing answer -> record which
+        # quality gate failed, then stop (main.py attaches a warning)
+        "max_retries_not_grounded": MAX_RETRIES_NOT_GROUNDED_NOTICE,
+        "max_retries_not_useful": MAX_RETRIES_NOT_USEFUL_NOTICE,
     },
 )
 
-# 7. Compile into a callable app
+# 7. The notice nodes are terminal: they only record a stop reason.
+workflow.add_edge(WEB_SEARCH_DISABLED_NOTICE, END)
+workflow.add_edge(MAX_RETRIES_NOT_GROUNDED_NOTICE, END)
+workflow.add_edge(MAX_RETRIES_NOT_USEFUL_NOTICE, END)
+
+# 8. Compile into a callable app
 app = workflow.compile()
 
 

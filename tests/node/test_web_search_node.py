@@ -7,8 +7,14 @@ web search happens. Tests focus on node state input/output.
 
 from langchain_core.documents import Document
 
-import graph.nodes.web_search as web_search_module
+import importlib
+
 from graph.nodes.web_search import web_search
+
+# graph/nodes/__init__.py re-exports the `web_search` function under the same name
+# as its submodule, so `import graph.nodes.web_search as ...` would bind the
+# function, not the module. Resolve the real module for monkeypatching.
+web_search_module = importlib.import_module("graph.nodes.web_search")
 
 
 def _patch_tool(monkeypatch, results):

@@ -13,7 +13,7 @@ on-topic vs. off-topic.
 
 import pytest
 
-from LangGraph.Agentic_RAG_Claude.tests.conftest import requires_openai
+from tests.conftest import requires_openai
 
 from graph.chains.answer_grader import answer_grader, GradeAnswer
 

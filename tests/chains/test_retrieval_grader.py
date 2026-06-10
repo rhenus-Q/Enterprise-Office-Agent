@@ -13,7 +13,7 @@ doc.page_content per document.
 
 import pytest
 
-from LangGraph.Agentic_RAG_Claude.tests.conftest import requires_openai
+from tests.conftest import requires_openai
 
 from graph.chains.retrieval_grader import retrieval_grader, RetrievalGrade
 
