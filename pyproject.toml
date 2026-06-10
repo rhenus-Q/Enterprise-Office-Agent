@@ -1,0 +1,36 @@
+[project]
+name = "agentic-rag-assistant"
+version = "0.1.0"
+description = "Enterprise internal-document Q&A assistant built with LangGraph (Agentic RAG / CRAG pattern)."
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph",
+    "langchain",
+    "langchain-core",
+    "langchain-community",
+    "langchain-openai",
+    "langchain-chroma",
+    "langchain-text-splitters",
+    "chromadb",
+    "tavily-python",
+    "beautifulsoup4",
+    "python-dotenv",
+    "pydantic",
+]
+
+# This is an application, not a library to be packaged/installed; tell uv not to build the project itself as a package.
+[tool.uv]
+package = false
+
+# Dev / test-only dependencies, excluded from the runtime install.
+# Install with `uv sync --group dev`.
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+# Let pytest import the graph package from the project root (pythonpath="."),
+# and only collect tests under the tests directory.
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
