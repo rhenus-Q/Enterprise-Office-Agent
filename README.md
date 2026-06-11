@@ -37,8 +37,8 @@ flowchart TD
     ROUTE -- "retrieve" --> RET[retrieve<br/>Chroma, k=3]
 
     RET --> GD[grade_documents<br/>relevance gate]
-    GD -- "all docs relevant" --> GEN[generate<br/>gpt-5-mini]
-    GD -- "any doc irrelevant" --> WS
+    GD -- "relevant docs remain" --> GEN[generate<br/>gpt-5-mini]
+    GD -- "no relevant docs<br/>(policy-dependent)" --> WS
     WS --> GEN
 
     GEN --> HG{grounding gate<br/>hallucination_grader}
@@ -56,15 +56,16 @@ flowchart TD
 
 1. **`route_question`** (conditional entry point) — a structured-output router (`datasource: "retrieve" | "websearch"`) decides whether the question is covered by the ingested knowledge base or needs external/current information.
 2. **`retrieve`** — top-3 similarity search against a persisted Chroma vector store.
-3. **`grade_documents`** — each chunk is graded individually (`is_relevant: bool`); irrelevant chunks are dropped, and if any chunk failed, a `web_search` flag routes the flow through Tavily before generating.
+3. **`grade_documents`** — each chunk is graded individually (`is_relevant: bool`); irrelevant chunks are dropped, and any failure sets a `web_search` flag. What happens next is governed by `WEB_FALLBACK_POLICY` (see below): by default (**conservative**) the flow generates from the remaining relevant chunks and only detours through Tavily when *no* relevant chunk survives; `aggressive` restores the legacy any-irrelevant-chunk-triggers-web behavior; `disabled` keeps local retrieval paths local entirely.
 4. **`websearch`** — searches with the rewritten `search_query` on retry rounds (original question otherwise). Each Tavily result is individually graded for relevance against the *original* question (reusing the retrieval grader, so external content faces the same gate as internal chunks); only relevant results are merged into a single `Document` (tagged `source: web_search`, with each contributing page's title/URL kept in `web_sources` metadata for the Sources section), which **replaces** any previous web supplement instead of stacking duplicates. Malformed responses and irrelevant results are dropped defensively — if nothing usable comes back, the workflow continues with the existing documents.
 5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM and flags it via `insufficient_context` in state. Each pass increments `retries`.
-6. **`grade_generation`** (conditional edge) — two-layer check with ten explicit outcomes:
+6. **`grade_generation`** (conditional edge) — two-layer check with eleven explicit outcomes:
    - `insufficient_context` → the generation is the deterministic insufficient-context answer (no usable documents); both graders are skipped — there is nothing to verify and regenerating from the same empty context cannot help — and the run ends honestly on the first pass (in privacy mode via the `web_search_disabled` notice, so the caveat explains why no information could be added),
    - `not_grounded` → `add_grounding_feedback` injects a corrective instruction into the next generation, then regenerate,
    - `useful` → END,
    - `not_useful` → `rewrite_query` produces a more specific search query, then web search and regenerate,
    - `web_search_disabled` → terminal notice node (privacy mode; see below),
+   - `web_fallback_disabled` → terminal notice node (`WEB_FALLBACK_POLICY=disabled` blocked a local-only run's not-useful web retry; see below),
    - `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one),
    - `budget_exhausted` → the per-run cost budget is spent; terminal notice node, the answer goes out with an explicit caveat,
    - `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
@@ -95,7 +96,7 @@ State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the wor
 │   └── acmecorp_internal_docs/  # Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 ├── structure.md             # Architecture deep-dive: full workflow, state machine, design decisions
 ├── docs/
-│   └── adr/                 # Architecture Decision Records 001–010 (with index in README.md)
+│   └── adr/                 # Architecture Decision Records 001–011 (with index in README.md)
 ├── evals/
 │   ├── questions.jsonl      # Behavioral eval dataset (15 rows, 4 categories)
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
@@ -105,8 +106,8 @@ State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the wor
 ├── graph/
 │   ├── graph.py             # StateGraph assembly, routing/decision functions, MAX_RETRIES, compiled `app`
 │   ├── state.py             # GraphState TypedDict
-│   ├── config.py            # Env-driven runtime flags: WEB_SEARCH_ENABLED + per-run budgets
-│   │                        #   (MAX_LLM_CALLS_PER_RUN, MAX_WEB_SEARCHES_PER_RUN, MAX_WEB_RESULTS_TO_GRADE)
+│   ├── config.py            # Env-driven runtime flags: WEB_SEARCH_ENABLED, WEB_FALLBACK_POLICY,
+│   │                        #   per-run budgets (MAX_LLM_CALLS_PER_RUN, MAX_WEB_SEARCHES_PER_RUN, MAX_WEB_RESULTS_TO_GRADE)
 │   ├── consts.py            # Node-name constants and stop_reason values
 │   ├── nodes/               # retrieve, grade_documents, generate, web_search,
 │   │                        #   retry helpers (add_grounding_feedback, rewrite_query),
@@ -147,6 +148,7 @@ See [`.env.example`](.env.example) for the full template:
 | `OPENAI_API_KEY` | Yes | Chat models (router, graders, generation) and embeddings |
 | `TAVILY_API_KEY` | Yes | Web-search fallback node |
 | `WEB_SEARCH_ENABLED` | Optional (default `true`) | Set to `false` to disable all external web search (privacy mode) |
+| `WEB_FALLBACK_POLICY` | Optional (default `conservative`) | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below) |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE` | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below) |
 | `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` | Optional | LangSmith tracing of the correction loops |
 
@@ -173,6 +175,32 @@ answer skips the graders entirely — it contains no claims to verify, and
 regenerating from the same empty context cannot improve it. The default
 (variable unset or any value other than `false`/`0`/`no`/`off`) preserves the
 full web-search behavior.
+
+### Web fallback policy (`WEB_FALLBACK_POLICY`)
+
+Distinct from the privacy switch: `WEB_SEARCH_ENABLED=false` decides whether
+external web search is allowed *at all* (and overrides everything below);
+`WEB_FALLBACK_POLICY` decides *when* the system chooses retrieval-triggered
+fallback while web search is otherwise allowed.
+
+- **`conservative` (default)** — answer from the curated corpus first: if at
+  least one relevant local document survives grading, generate from it; fall
+  back to web search only when nothing relevant remains. A grounded local
+  answer that later fails the usefulness gate can still trigger a rewritten
+  web search.
+- **`aggressive`** — legacy CRAG behavior: any irrelevant retrieved document
+  triggers web fallback before generation. Better first-pass coverage for
+  sparse corpora, at the cost of sending more questions to an external
+  service.
+- **`disabled`** — local retrieval paths never escalate to the web, including
+  the post-generation not-useful retry on runs that have stayed local (those
+  end with an explicit caveat via the `web_fallback_disabled` stop reason).
+  Router-chosen web searches still work when web search is enabled. With no
+  relevant local documents the assistant declines honestly instead of
+  searching.
+
+Invalid values fall back to `conservative`. Rationale and trade-offs:
+[ADR 011](docs/adr/011-web-fallback-policy.md).
 
 ### Retry-exhaustion warnings
 
@@ -371,8 +399,8 @@ are unit-tested without API calls in `tests/evals/`. See
 The major design decisions — `stop_reason` semantics, privacy mode,
 meaningful retries, the web-result relevance gate, run budgets, graceful
 degradation, deterministic provenance, the synthetic corpus, the eval
-harness, and the prompt-injection defense — are documented as short ADRs in
-[`docs/adr/`](docs/adr/), each
+harness, the prompt-injection defense, and the web-fallback policy — are
+documented as short ADRs in [`docs/adr/`](docs/adr/), each
 covering the context, the decision, its consequences, the trade-offs
 accepted, and the alternatives deliberately not chosen. Start with the
 [index](docs/adr/README.md).
@@ -385,7 +413,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 207 tests passing (71 node + 118 graph + 18 evals) | 38 tests passing |
+| Status | 240 tests passing (71 node + 151 graph + 18 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
@@ -393,7 +421,6 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 
 - **Single-turn CLI** — no conversation memory; each question is independent. No API/web surface.
 - **Observability is `print()`-based** — no structured logging, timing, or token/cost tracking out of the box (LangSmith tracing can be enabled via env vars).
-- **Aggressive web fallback** — a single irrelevant retrieved chunk triggers a web-search detour, even when relevant chunks remain.
 - **Per-document sequential grading** — relevance grading makes one LLM call per chunk.
 - **Prompt-injection defense is prompt-level only** — the generation prompt explicitly treats retrieved content (especially web results) as untrusted evidence, never as instructions ([ADR 010](docs/adr/010-prompt-injection-defense.md)). This is a first-line mitigation, not a complete solution: the relevance gate checks topicality, not safety, and there is no injection detection, content sanitization, or domain allowlisting. Generation has no tools to call, which limits — but does not eliminate — the impact of injected instructions.
 

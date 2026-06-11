@@ -89,6 +89,7 @@ defaults.
 | `add_grounding_feedback` | `ADD_GROUNDING_FEEDBACK` | Pass-through: writes the corrective instruction into `retry_feedback`. |
 | `rewrite_query` | `REWRITE_QUERY` | Pass-through: rewrites the question into a more specific search query (`query_rewriter` chain) using the previous not-useful answer; writes `search_query`. |
 | `web_search_disabled_notice` | `WEB_SEARCH_DISABLED_NOTICE` | Terminal: records `stop_reason = "web_search_disabled"`. |
+| `web_fallback_disabled_notice` | `WEB_FALLBACK_DISABLED_NOTICE` | Terminal: records `stop_reason = "web_fallback_disabled"` (`WEB_FALLBACK_POLICY=disabled` blocked a local-only run's not-useful web retry). |
 | `max_retries_not_grounded_notice` | `MAX_RETRIES_NOT_GROUNDED_NOTICE` | Terminal: records `stop_reason = "max_retries_not_grounded"`. |
 | `max_retries_not_useful_notice` | `MAX_RETRIES_NOT_USEFUL_NOTICE` | Terminal: records `stop_reason = "max_retries_not_useful"`. |
 | `budget_exhausted_notice` | `BUDGET_EXHAUSTED_NOTICE` | Terminal: records `stop_reason = "budget_exhausted"`. |
@@ -106,12 +107,18 @@ Three pure decision functions in `graph/graph.py`:
 
 **`decide_to_generate`** (after document grading)
 - All chunks relevant → `generate`.
-- Any chunk irrelevant → `websearch` — unless privacy mode is on, in which case
-  `generate` proceeds with whatever relevant chunks remain (possibly none, which
-  yields the deterministic insufficient-context answer).
+- Any chunk irrelevant (or retrieval failed) → privacy mode wins first:
+  with `web_search_enabled=False`, `generate` proceeds with whatever relevant
+  chunks remain (possibly none → the deterministic insufficient-context
+  answer). Otherwise `WEB_FALLBACK_POLICY` (see ADR 011) decides:
+  - `conservative` (default): `generate` when at least one relevant chunk
+    remains; `websearch` only with zero relevant chunks left.
+  - `aggressive` (legacy): always `websearch`.
+  - `disabled`: always `generate` — local retrieval paths never escalate to
+    the web.
 
-**`grade_generation`** (after generation; ten explicit outcomes, each mapped
-one-to-one to an edge)
+**`grade_generation`** (after generation; eleven explicit outcomes, each
+mapped one-to-one to an edge)
 
 | Outcome | Condition | Next |
 |---|---|---|
@@ -120,6 +127,7 @@ one-to-one to an edge)
 | `not_grounded` | failed grounding, retries remain | `add_grounding_feedback` → `generate` |
 | `not_useful` | grounded but off-target, web search enabled, retries remain | `rewrite_query` → `websearch` → `generate` |
 | `web_search_disabled` | grounded but off-target, privacy mode | notice node → `END` |
+| `web_fallback_disabled` | grounded but off-target on a local-only run (`web_search_count == 0`) with `WEB_FALLBACK_POLICY=disabled` | notice node → `END` |
 | `max_retries_not_grounded` | failed grounding at the retry limit | notice node → `END` |
 | `max_retries_not_useful` | grounded but off-target at the retry limit | notice node → `END` |
 | `budget_exhausted` | per-run cost budget spent (LLM-call budget, checked before grading; or web-search budget when another search round would be needed) | notice node → `END` |
@@ -139,10 +147,12 @@ Ordering details that matter:
 - Otherwise, **grade first, then check the retry limit** — even the final
   allowed generation is fully graded; the cap only fires when the answer would
   otherwise loop.
-- In the not-useful branch the order is **privacy → retry limit → web-search
-  budget**: with web search disabled, improvement was impossible regardless of
-  retries, so the privacy caveat is the accurate one; the web budget stops the
-  loop when another (unaffordable) search round would be required.
+- In the not-useful branch the order is **privacy → fallback policy → retry
+  limit → web-search budget**: with web search disabled (or the fallback
+  policy forbidding a local run's escalation), improvement was impossible
+  regardless of retries, so those caveats are the accurate ones; the web
+  budget stops the loop when another (unaffordable) search round would be
+  required.
 
 ## 6. Full workflow
 
@@ -155,8 +165,8 @@ flowchart TD
 
     RET --> GD[grade_documents<br/>per-chunk relevance gate]
     GD -- "all relevant" --> GEN[generate<br/>retries += 1]
-    GD -- "any irrelevant" --> WS
-    GD -. "any irrelevant,<br/>privacy mode" .-> GEN
+    GD -- "fallback per policy<br/>(conservative: zero relevant left;<br/>aggressive: any irrelevant)" --> WS
+    GD -. "privacy mode or<br/>policy disabled:<br/>generate from what remains" .-> GEN
     WS --> GEN
 
     GEN --> HG{grounding gate}
@@ -169,6 +179,7 @@ flowchart TD
     AG -- "not useful" --> RW[rewrite_query]
     RW --> WS
     AG -- "not useful,<br/>privacy mode" --> N3[web_search_disabled_notice]
+    AG -- "not useful, local-only run,<br/>fallback policy disabled" --> N6[web_fallback_disabled_notice]
     AG -- "not useful,<br/>retries exhausted" --> N2[max_retries_not_useful_notice]
     GEN -. "cost budget spent<br/>(checked before grading)" .-> N4[budget_exhausted_notice]
     AG -. "not useful,<br/>web budget spent" .-> N4
@@ -183,6 +194,7 @@ flowchart TD
     N3 --> E
     N4 --> E
     N5 --> E
+    N6 --> E
 ```
 
 Step by step:
@@ -272,6 +284,7 @@ both modes.
 |---|---|---|
 | `""` | Both gates passed | none |
 | `web_search_disabled` | Grounded but off-target; web search unavailable | "Web search is disabled… answer limited to the local knowledge base." |
+| `web_fallback_disabled` | Grounded but off-target; `WEB_FALLBACK_POLICY=disabled` forbids escalating a local-only run to the web | "Web fallback is disabled by policy… answered only from the local knowledge base." |
 | `max_retries_not_grounded` | Retry limit hit; answer still failed grounding | "Did not pass the anti-hallucination check… do not treat as fully reliable." |
 | `max_retries_not_useful` | Retry limit hit; grounded but still off-target | "Grounded but may not fully answer your question." |
 | `budget_exhausted` | Per-run cost budget spent before the gates passed | "Stopped because the per-run cost/latency budget was reached… may be incomplete or not fully verified." |
@@ -409,7 +422,6 @@ Limitations (deliberate scope):
 - Single-turn CLI; no conversation memory or API surface.
 - `print()`-based observability; LangSmith tracing available via env vars but undocumented in traces/screenshots.
 - Sequential per-chunk / per-result grading (latency and cost scale with k).
-- A single irrelevant chunk triggers the web fallback even when relevant chunks remain.
 - Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 - Prompt-injection defense is prompt-level only (ADR 010): no injection detection, content sanitization, or domain allowlisting; generation has no tools to call, which limits but does not eliminate the impact of injected instructions.
 

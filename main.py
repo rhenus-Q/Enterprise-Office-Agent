@@ -17,6 +17,7 @@ from graph.consts import (  # noqa: E402
     STOP_REASON_MAX_RETRIES_NOT_USEFUL,
     STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_TOOL_ERROR,
+    STOP_REASON_WEB_FALLBACK_DISABLED,
     STOP_REASON_WEB_SEARCH_DISABLED,
     STOP_REASON_WEB_SEARCH_ERROR,
     WEB_SEARCH_SOURCE,
@@ -29,6 +30,14 @@ from graph.graph import app  # noqa: E402
 WEB_SEARCH_DISABLED_NOTE = (
     "Note: Web search is disabled, so I could only use the local knowledge base. "
     "I may not have enough information to fully answer this question."
+)
+
+# Caveat shown when WEB_FALLBACK_POLICY=disabled stopped a local-only run
+# from escalating to web search after its answer was judged not useful.
+# Distinct from the privacy caveat: web search itself may be enabled.
+WEB_FALLBACK_DISABLED_NOTE = (
+    "Note: Web fallback is disabled by policy, so I answered only from the "
+    "local knowledge base. The answer may not fully address your question."
 )
 
 # Caveat shown when the retry limit was reached and the final answer still
@@ -85,6 +94,7 @@ TOOL_ERROR_NOTE = (
 # Maps a recorded stop reason to the caveat appended to the final answer.
 STOP_REASON_NOTES = {
     STOP_REASON_WEB_SEARCH_DISABLED: WEB_SEARCH_DISABLED_NOTE,
+    STOP_REASON_WEB_FALLBACK_DISABLED: WEB_FALLBACK_DISABLED_NOTE,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED: MAX_RETRIES_NOT_GROUNDED_NOTE,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL: MAX_RETRIES_NOT_USEFUL_NOTE,
     STOP_REASON_BUDGET_EXHAUSTED: BUDGET_EXHAUSTED_NOTE,
