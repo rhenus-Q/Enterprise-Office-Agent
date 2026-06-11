@@ -84,7 +84,7 @@ defaults.
 |---|---|---|
 | `retrieve` | `RETRIEVE` | Top-3 similarity search against the persisted Chroma collection. |
 | `grade_documents` | `GRADE_DOCUMENTS` | Grade each chunk (`retrieval_grader`); keep relevant ones, set `web_search=True` if any failed. |
-| `websearch` | `WEBSEARCH` | Tavily search + relevance gate on results (see §7); appends/replaces the web supplement. |
+| `websearch` | `WEBSEARCH` | Tavily search (`langchain-tavily`) + relevance gate on results (see §7); appends/replaces the web supplement, recording each contributing page's title/URL in `web_sources` metadata. |
 | `generate` | `GENERATE` | Generate the answer from question + documents (+ `retry_feedback`); increments `retries`. Empty context → deterministic insufficient-context answer, no LLM call, `insufficient_context=True` (skips the graders downstream). |
 | `add_grounding_feedback` | `ADD_GROUNDING_FEEDBACK` | Pass-through: writes the corrective instruction into `retry_feedback`. |
 | `rewrite_query` | `REWRITE_QUERY` | Pass-through: rewrites the question into a more specific search query (`query_rewriter` chain) using the previous not-useful answer; writes `search_query`. |
@@ -190,7 +190,7 @@ Step by step:
 1. **`route_question`** — vector store vs. web search (or forced retrieval in privacy mode).
 2. **`retrieve`** — top-3 Chroma chunks.
 3. **`grade_documents`** — per-chunk relevance grading; irrelevant chunks dropped; any failure flags a web-search fallback.
-4. **`websearch`** — searches with `search_query` if a retry rewrote it, otherwise the original question. Results are defensively parsed (string error responses, malformed entries, and empty contents are skipped), then **each result is graded for relevance against the original question** — the same gate internal chunks face. Relevant contents merge into one `Document(metadata={"source": "web_search"})`, which **replaces** any previous web supplement rather than stacking duplicates. Nothing usable → documents pass through unchanged.
+4. **`websearch`** — searches with `search_query` if a retry rewrote it, otherwise the original question. Results are defensively parsed (string error responses, malformed entries, and empty contents are skipped), then **each result is graded for relevance against the original question** — the same gate internal chunks face. Relevant contents merge into one `Document(metadata={"source": "web_search"})` whose `web_sources` metadata lists each contributing page's title/URL (page-level provenance), and which **replaces** any previous web supplement rather than stacking duplicates. Nothing usable → documents pass through unchanged.
 5. **`generate`** — strict answer-from-context-only generation; `retry_feedback`, when present, is folded into the question input so a retry differs from the previous attempt. Empty context short-circuits to a fixed insufficient-context answer without calling the LLM.
 6. **Grounding check** (`hallucination_grader`) — is every claim supported by the documents?
 7. **Usefulness check** (`answer_grader`) — does the grounded answer actually address the question?
@@ -294,9 +294,13 @@ formatting of `Document` metadata, never an LLM call, never document content:
   persisted through chunking into Chroma.
 - **The web supplement** is detected via `metadata["source"] ==
   WEB_SEARCH_SOURCE` (a constant in `consts.py` shared with the `websearch`
-  node, which also records `source_type: "web"` and the `search_query` that
-  produced the supplement) and cited as `- Web search: "<query>"` (fallback:
-  `Web search result`).
+  node, which also records `source_type: "web"`, the `search_query` that
+  produced the supplement, and `web_sources` — one `{"title", "url"}` entry
+  per relevant result with a usable URL, deduplicated by URL). Citation is
+  page-level when URLs are known: `- Web search: <title> — <url>` per page
+  (bare URL when the title is missing); the fallback chain is the
+  query-level `- Web search: "<query>"`, then `Web search result`. Only
+  results that passed the relevance gate are cited.
 - Duplicate lines are collapsed order-preservingly (several chunks of one
   page cite it once); an empty document list produces no section at all.
 - Caveat ordering: the stop-reason caveat is printed *before* the sources,
@@ -394,13 +398,11 @@ Limitations (deliberate scope):
 - `print()`-based observability; LangSmith tracing available via env vars but undocumented in traces/screenshots.
 - Sequential per-chunk / per-result grading (latency and cost scale with k).
 - A single irrelevant chunk triggers the web fallback even when relevant chunks remain.
-- Web search still uses the sunset `langchain-community` Tavily integration.
 - Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 
 Future improvements (rough priority): LangSmith tracing evidence + structured
 logging; grader-scored (LLM-as-judge) metrics on top of the deterministic
-eval harness; rationale-bearing grounding feedback; batched grading;
-migration off `langchain-community` for Tavily.
+eval harness; rationale-bearing grounding feedback; batched grading.
 
 GitHub Actions CI (`.github/workflows/ci.yml`) runs the fully mocked suites
 (`tests/node/` + `tests/graph/` + `tests/evals/`) on every push and pull

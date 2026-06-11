@@ -1,7 +1,7 @@
 from functools import lru_cache
 
 from langchain_core.documents import Document
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearch
 
 from graph.chains.retrieval_grader import get_retrieval_grader
 from graph.config import max_web_results_to_grade, max_web_searches_per_run
@@ -16,36 +16,50 @@ from graph.state import GraphState
 @lru_cache(maxsize=1)
 def get_web_search_tool():
     """
-    Lazily build and cache the Tavily search tool.
+    Lazily build and cache the Tavily search tool (langchain-tavily).
     Deferring construction keeps module import free of Tavily API-key validation,
     which also makes the web_search node easy to mock in tests.
     """
 
-    # max_results is the correct argument for TavilySearchResults; the old k= was ignored.
-    return TavilySearchResults(max_results=3)
+    return TavilySearch(max_results=3)
 
 
-def _extract_result_contents(search_results):
+def _extract_results(search_results):
     """
-    Defensively pull text contents out of a Tavily response.
+    Defensively pull usable results out of a Tavily response.
 
-    Tavily normally returns a list of dicts with a "content" key, but error
-    responses can be a plain string, and entries may be malformed. Anything
-    unusable is skipped instead of crashing the node.
+    langchain-tavily's TavilySearch returns a dict with a "results" list; the
+    legacy community tool returned the list directly, and error responses can
+    be a plain string or an {"error": ...} dict. Accept both shapes, skip
+    anything malformed, and keep only entries with non-empty text content.
+    Each usable entry is reduced to {"content", "url", "title"} ("" when a
+    field is missing) so page-level provenance survives alongside the text.
     """
+
+    if isinstance(search_results, dict):
+        search_results = search_results.get("results")
 
     if not isinstance(search_results, list):
         return []
 
-    contents = []
+    results = []
     for result in search_results:
         if not isinstance(result, dict):
             continue
         content = result.get("content")
-        if isinstance(content, str) and content.strip():
-            contents.append(content)
+        if not (isinstance(content, str) and content.strip()):
+            continue
+        url = result.get("url")
+        title = result.get("title")
+        results.append(
+            {
+                "content": content,
+                "url": url.strip() if isinstance(url, str) else "",
+                "title": title.strip() if isinstance(title, str) else "",
+            }
+        )
 
-    return contents
+    return results
 
 
 def web_search(state: GraphState):
@@ -55,9 +69,10 @@ def web_search(state: GraphState):
     External web content is less trusted than the curated knowledge base, so
     each search result is graded for relevance against the question (reusing
     the same retrieval grader the internal chunks pass through) before it is
-    used. Only relevant results are merged into a Document and appended; if
-    nothing relevant (or nothing usable) comes back, the documents are
-    returned unchanged and the workflow continues safely.
+    used. Only relevant results are merged into a Document and appended, with
+    each contributing page's title/URL preserved in web_sources metadata for
+    page-level provenance; if nothing relevant (or nothing usable) comes back,
+    the documents are returned unchanged and the workflow continues safely.
 
     External failures must not crash the run:
     - A Tavily failure (timeout / API error) continues with the local
@@ -116,9 +131,9 @@ def web_search(state: GraphState):
         }
     web_search_count += 1
 
-    contents = _extract_result_contents(search_results)
+    results = _extract_results(search_results)
 
-    if not contents:
+    if not results:
         print("---WEB SEARCH RETURNED NO USABLE RESULTS---")
         return {
             "question": question,
@@ -127,11 +142,11 @@ def web_search(state: GraphState):
         }
 
     grader = get_retrieval_grader()
-    relevant_contents = []
+    relevant_results = []
     grading_budget = max_web_results_to_grade()
     grading_error = False
 
-    for content in contents:
+    for result in results:
         # Conservative budget behavior: once the grading budget is spent,
         # remaining results are dropped — ungraded web content never reaches
         # generation. The run itself continues with what was vetted.
@@ -146,7 +161,7 @@ def web_search(state: GraphState):
             score = grader.invoke(
                 {
                     "question": question,
-                    "document": content,
+                    "document": result["content"],
                 }
             )
         except Exception as exc:
@@ -158,21 +173,35 @@ def web_search(state: GraphState):
 
         if score.is_relevant:
             print("---WEB RESULT RELEVANT---")
-            relevant_contents.append(content)
+            relevant_results.append(result)
         else:
             print("---WEB RESULT NOT RELEVANT, DROPPED---")
 
-    if relevant_contents:
+    if relevant_results:
+        # Page-level provenance: one {"title", "url"} entry per relevant
+        # result with a usable URL, deduplicated by URL order-preservingly.
+        # Only vetted (relevant) results are cited — the Sources section must
+        # never name a page whose content was dropped.
+        web_sources = []
+        seen_urls = set()
+        for result in relevant_results:
+            if result["url"] and result["url"] not in seen_urls:
+                seen_urls.add(result["url"])
+                web_sources.append({"title": result["title"], "url": result["url"]})
+
         documents.append(
             Document(
-                page_content="\n\n".join(relevant_contents),
+                page_content="\n\n".join(r["content"] for r in relevant_results),
                 # Provenance metadata: source marks the doc as the web
-                # supplement, search_query records the query that produced it
-                # (shown in the user-facing Sources section).
+                # supplement, search_query records the query that produced it,
+                # web_sources lists the actual pages used (both shown in the
+                # user-facing Sources section; the query is the fallback when
+                # no result carried a URL).
                 metadata={
                     "source": WEB_SEARCH_SOURCE,
                     "source_type": "web",
                     "search_query": search_query,
+                    "web_sources": web_sources,
                 },
             )
         )

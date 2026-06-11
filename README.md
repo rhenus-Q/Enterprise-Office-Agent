@@ -23,7 +23,7 @@ The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp 
 - **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
 - **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
 - **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
-- **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement (by the query that produced it). Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
+- **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement. Web provenance is **page-level**: each relevant result's title and URL are preserved and cited (`Web search: <title> — <url>`), falling back to the query-level citation when Tavily returns no URLs. Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
 - **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
 - **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
 
@@ -57,7 +57,7 @@ flowchart TD
 1. **`route_question`** (conditional entry point) — a structured-output router (`datasource: "retrieve" | "websearch"`) decides whether the question is covered by the ingested knowledge base or needs external/current information.
 2. **`retrieve`** — top-3 similarity search against a persisted Chroma vector store.
 3. **`grade_documents`** — each chunk is graded individually (`is_relevant: bool`); irrelevant chunks are dropped, and if any chunk failed, a `web_search` flag routes the flow through Tavily before generating.
-4. **`websearch`** — searches with the rewritten `search_query` on retry rounds (original question otherwise). Each Tavily result is individually graded for relevance against the *original* question (reusing the retrieval grader, so external content faces the same gate as internal chunks); only relevant results are merged into a single `Document` (tagged `source: web_search`), which **replaces** any previous web supplement instead of stacking duplicates. Malformed responses and irrelevant results are dropped defensively — if nothing usable comes back, the workflow continues with the existing documents.
+4. **`websearch`** — searches with the rewritten `search_query` on retry rounds (original question otherwise). Each Tavily result is individually graded for relevance against the *original* question (reusing the retrieval grader, so external content faces the same gate as internal chunks); only relevant results are merged into a single `Document` (tagged `source: web_search`, with each contributing page's title/URL kept in `web_sources` metadata for the Sources section), which **replaces** any previous web supplement instead of stacking duplicates. Malformed responses and irrelevant results are dropped defensively — if nothing usable comes back, the workflow continues with the existing documents.
 5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM and flags it via `insufficient_context` in state. Each pass increments `retries`.
 6. **`grade_generation`** (conditional edge) — two-layer check with ten explicit outcomes:
    - `insufficient_context` → the generation is the deterministic insufficient-context answer (no usable documents); both graders are skipped — there is nothing to verify and regenerating from the same empty context cannot help — and the run ends honestly on the first pass (in privacy mode via the `web_search_disabled` notice, so the caveat explains why no information could be added),
@@ -80,7 +80,7 @@ State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the wor
 | LLM | OpenAI `gpt-5-mini` (router, graders, generation — all structured output via Pydantic) |
 | Embeddings | `OpenAIEmbeddings` |
 | Vector store | Chroma (local persistence) |
-| Web search | Tavily |
+| Web search | Tavily (`langchain-tavily`) |
 | Chains | LangChain LCEL |
 | Package management | uv (`pyproject.toml` + committed `uv.lock`) |
 | Testing | pytest (mocked unit tests + key-gated integration tests) |
@@ -293,18 +293,22 @@ approves it, and IT Security provisions access within 2 business days ...
 
 Sources:
 - Local corpus: AcmeCorp VPN Access Policy
-- Web search: "AcmeCorp VPN client setup"
+- Web search: AcmeCorp VPN Client Setup Guide — https://example.com/vpn-setup
 ```
 
 Local corpus documents are cited by their ingestion metadata (page title,
-falling back to the source URL); the web supplement by the search query that
-produced it. Repeated sources are listed once, missing metadata falls back to
-safe generic labels (`Local corpus document` / `Web search result`), and runs
-that used no documents show no Sources section at all. Citations are pure
-post-run formatting of `Document` metadata — the LLM is not asked to generate
-them, so prompts and model behavior are unchanged. When a run ends with a
-caveat, the caveat is printed *before* the sources, so a sources list never
-implies a failed answer was verified.
+falling back to the source URL). The web supplement is cited **page-level**:
+one line per relevant result, `<title> — <url>` (the bare URL when the title
+is missing), deduplicated by URL. When Tavily returns no usable URLs the
+citation falls back to the search query that produced the supplement
+(`Web search: "<query>"`). Only results that passed the relevance gate are
+cited — a dropped page is never named. Repeated sources are listed once,
+missing metadata falls back to safe generic labels (`Local corpus document` /
+`Web search result`), and runs that used no documents show no Sources section
+at all. Citations are pure post-run formatting of `Document` metadata — the
+LLM is not asked to generate them, so prompts and model behavior are
+unchanged. When a run ends with a caveat, the caveat is printed *before* the
+sources, so a sources list never implies a failed answer was verified.
 
 ## Run the tests
 
@@ -374,7 +378,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 185 tests passing (58 node + 111 graph + 16 evals) | 38 tests passing |
+| Status | 198 tests passing (64 node + 118 graph + 16 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
@@ -384,14 +388,12 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 - **Observability is `print()`-based** — no structured logging, timing, or token/cost tracking out of the box (LangSmith tracing can be enabled via env vars).
 - **Aggressive web fallback** — a single irrelevant retrieved chunk triggers a web-search detour, even when relevant chunks remain.
 - **Per-document sequential grading** — relevance grading makes one LLM call per chunk.
-- Web search still uses the sunset `langchain-community` Tavily integration.
 
 ## Future Improvements
 
 - Structured logging and documented LangSmith tracing setup.
 - Grader-scored (LLM-as-judge) eval metrics on top of the deterministic harness in `evals/`.
 - Batched relevance grading.
-- Migration from `langchain-community` to the maintained standalone integrations (e.g. `langchain-tavily`).
 
 ## What This Project Demonstrates
 
