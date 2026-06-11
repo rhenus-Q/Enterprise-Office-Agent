@@ -1,8 +1,12 @@
 from dotenv import load_dotenv
 
-# Load .env before importing app.
-# Importing graph.graph triggers module-level init of nodes / chains
-# (constructing ChatOpenAI / OpenAIEmbeddings / retriever), which needs the env vars.
+# Load .env up front.
+# Imports are intentionally side-effect-free: every external client
+# (ChatOpenAI / OpenAIEmbeddings / Chroma retriever / Tavily) lives behind a
+# lazy @lru_cache factory, so importing graph.graph needs no API keys and no
+# network — that is what lets the mocked test suites and CI run without
+# secrets. The clients still read env vars (OPENAI_API_KEY, etc.) when first
+# constructed at runtime, so .env must be loaded before the graph runs.
 load_dotenv()
 
 from graph.config import web_search_enabled  # noqa: E402
