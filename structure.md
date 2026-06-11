@@ -71,6 +71,7 @@ defaults.
 | `web_search_enabled` | `bool` | Privacy toggle, seeded from `WEB_SEARCH_ENABLED`. `False` = never call external search. |
 | `retries` | `int` | Number of generations so far; caps the quality-check loops. |
 | `stop_reason` | `str` | Why the run ended early (`""` = normal finish); drives user-facing caveats. |
+| `insufficient_context` | `bool` | Set by `generate` when the latest generation is the deterministic insufficient-context answer (no usable documents); `grade_generation` then skips the graders, which have nothing to verify. |
 | `retry_feedback` | `str` | Corrective instruction for the next generation after a failed grounding check (`""` = none). |
 | `search_query` | `str` | Rewritten web-search query for retry rounds (`""` = use the original question). |
 | `llm_call_count` | `int` | Counted LLM calls this run (generations, query rewrites, web-result grades). |
@@ -84,7 +85,7 @@ defaults.
 | `retrieve` | `RETRIEVE` | Top-3 similarity search against the persisted Chroma collection. |
 | `grade_documents` | `GRADE_DOCUMENTS` | Grade each chunk (`retrieval_grader`); keep relevant ones, set `web_search=True` if any failed. |
 | `websearch` | `WEBSEARCH` | Tavily search + relevance gate on results (see §7); appends/replaces the web supplement. |
-| `generate` | `GENERATE` | Generate the answer from question + documents (+ `retry_feedback`); increments `retries`. Empty context → deterministic insufficient-context answer, no LLM call. |
+| `generate` | `GENERATE` | Generate the answer from question + documents (+ `retry_feedback`); increments `retries`. Empty context → deterministic insufficient-context answer, no LLM call, `insufficient_context=True` (skips the graders downstream). |
 | `add_grounding_feedback` | `ADD_GROUNDING_FEEDBACK` | Pass-through: writes the corrective instruction into `retry_feedback`. |
 | `rewrite_query` | `REWRITE_QUERY` | Pass-through: rewrites the question into a more specific search query (`query_rewriter` chain) using the previous not-useful answer; writes `search_query`. |
 | `web_search_disabled_notice` | `WEB_SEARCH_DISABLED_NOTICE` | Terminal: records `stop_reason = "web_search_disabled"`. |
@@ -109,11 +110,12 @@ Three pure decision functions in `graph/graph.py`:
   `generate` proceeds with whatever relevant chunks remain (possibly none, which
   yields the deterministic insufficient-context answer).
 
-**`grade_generation`** (after generation; eight explicit outcomes, each mapped
+**`grade_generation`** (after generation; ten explicit outcomes, each mapped
 one-to-one to an edge)
 
 | Outcome | Condition | Next |
 |---|---|---|
+| `insufficient_context` | the generation is the deterministic insufficient-context answer (no usable documents) — nothing to verify, nothing to improve; the graders are skipped | `END` (privacy mode with no earlier `stop_reason`: `web_search_disabled` notice → `END`, so the caveat explains the limitation) |
 | `useful` | grounded + answers the question | `END` |
 | `not_grounded` | failed grounding, retries remain | `add_grounding_feedback` → `generate` |
 | `not_useful` | grounded but off-target, web search enabled, retries remain | `rewrite_query` → `websearch` → `generate` |
@@ -127,9 +129,13 @@ one-to-one to an edge)
 Ordering details that matter:
 - A **`generation_error` is checked before everything else** — a failed
   generation must never be graded, retried, or presented as a normal answer.
-- The **LLM-call budget is checked first, before the graders run** — a spent
-  budget must not spend more, so the final answer goes out ungraded with a
-  caveat saying exactly that.
+- The **insufficient-context bypass is checked next, before the budget** — a
+  clean honest decline must not be tagged `budget_exhausted`, and an earlier,
+  more specific `stop_reason` (e.g. `retrieval_error`) survives because the
+  bypass routes straight to `END` instead of through a notice node.
+- The **LLM-call budget is checked first among the grading paths, before the
+  graders run** — a spent budget must not spend more, so the final answer
+  goes out ungraded with a caveat saying exactly that.
 - Otherwise, **grade first, then check the retry limit** — even the final
   allowed generation is fully graded; the cap only fires when the answer would
   otherwise loop.
@@ -167,6 +173,8 @@ flowchart TD
     GEN -. "cost budget spent<br/>(checked before grading)" .-> N4[budget_exhausted_notice]
     AG -. "not useful,<br/>web budget spent" .-> N4
     GEN -. "generation LLM failed<br/>(never graded)" .-> E
+    GEN -. "insufficient context<br/>(deterministic decline, never graded)" .-> E
+    GEN -. "insufficient context,<br/>privacy mode" .-> N3
     HG -. "grader call failed" .-> N5[tool_error_notice]
     AG -. "grader call failed" .-> N5
 
@@ -235,11 +243,16 @@ into state by `main.py`. When disabled:
   with the remaining relevant chunks (or the insufficient-context answer).
 - `grade_generation` ends a grounded-but-not-useful run via the
   `web_search_disabled` notice instead of searching; the `rewrite_query` chain
-  is never invoked.
+  is never invoked. The deterministic insufficient-context answer ends the
+  same way (without grading), unless an earlier, more specific `stop_reason`
+  is already recorded.
 - The `websearch` node is unreachable (verified by end-to-end tests asserting
   zero web-tool calls in worst-case scenarios).
 
-All grounding and usefulness gates remain active in privacy mode.
+All grounding and usefulness gates remain active in privacy mode, with one
+principled exception in both modes: the deterministic insufficient-context
+answer skips the graders — it contains no claims to verify, and regenerating
+from the same empty context cannot improve it (see §5).
 
 ## 10. stop_reason and user-facing caveats
 

@@ -195,6 +195,7 @@ def main():
                 "web_search_enabled": allow_web_search,
                 "retries": 0,
                 "stop_reason": "",
+                "insufficient_context": False,
                 "retry_feedback": "",
                 "search_query": "",
                 "llm_call_count": 0,
