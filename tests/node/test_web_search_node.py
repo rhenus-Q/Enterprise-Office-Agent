@@ -110,6 +110,29 @@ def test_web_search_preserves_question(monkeypatch):
     assert result["question"] == "keep me"
 
 
+def test_web_search_document_carries_provenance_metadata(monkeypatch):
+    # The web supplement records which query produced it, so main.py can show
+    # it in the user-facing Sources section.
+    _patch_tool(monkeypatch, [{"content": "web"}])
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "search_query": "rewritten query", "documents": []})
+
+    metadata = result["documents"][0].metadata
+    assert metadata["source"] == "web_search"
+    assert metadata["source_type"] == "web"
+    assert metadata["search_query"] == "rewritten query"
+
+
+def test_web_search_metadata_records_question_when_no_rewrite(monkeypatch):
+    _patch_tool(monkeypatch, [{"content": "web"}])
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"][0].metadata["search_query"] == "Q"
+
+
 # ---------------------------------------------------------------------------
 # Rewritten search query + replacement of stale web supplements
 # ---------------------------------------------------------------------------
