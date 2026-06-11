@@ -51,6 +51,16 @@ Console banners log **only the exception type** (`---WEB SEARCH FAILED
 URLs. Nodes write `stop_reason` only on failure, so a clean step never
 clobbers an earlier recorded reason.
 
+One refinement on persistence: the degrade-and-continue `tool_error` is
+**transient** — the run is built to recover from it. When the final answer
+subsequently passes both quality gates, the stale warning no longer describes
+the terminal outcome, so the success path runs through a
+`clear_transient_tool_error` pass-through that resets it to `""` (a fully
+successful answer never ships with an error caveat). The asymmetry is
+deliberate: `retrieval_error` / `web_search_error` persist even on success
+because an entire evidence source was unavailable, and the stop-immediately
+`tool_error` (verification failed) never reaches the cleanup node.
+
 ## Consequences
 
 - The graph cannot crash on dependency failure; every path ends at `END`

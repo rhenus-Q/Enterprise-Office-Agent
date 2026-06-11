@@ -11,6 +11,7 @@ from graph.nodes.add_grounding_feedback import add_grounding_feedback
 from graph.nodes.rewrite_query import rewrite_query
 from graph.nodes.budget_exhausted_notice import budget_exhausted_notice
 from graph.nodes.tool_error_notice import tool_error_notice
+from graph.nodes.clear_transient_tool_error import clear_transient_tool_error
 from graph.nodes.generate import generate
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "rewrite_query",
     "budget_exhausted_notice",
     "tool_error_notice",
+    "clear_transient_tool_error",
     "generate",
 ]

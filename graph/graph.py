@@ -90,6 +90,7 @@ from graph.consts import (  # noqa: E402
     REWRITE_QUERY,
     BUDGET_EXHAUSTED_NOTICE,
     TOOL_ERROR_NOTICE,
+    CLEAR_TRANSIENT_TOOL_ERROR,
     STOP_REASON_GENERATION_ERROR,
 )
 
@@ -114,6 +115,7 @@ from graph.nodes import (  # noqa: E402
     rewrite_query,
     budget_exhausted_notice,
     tool_error_notice,
+    clear_transient_tool_error,
 )
 
 from graph.chains.question_router import get_question_router  # noqa: E402
@@ -226,7 +228,12 @@ def grade_generation(state: GraphState) -> str:
     - "not_grounded": answer not supported by documents
                              -> ADD_GROUNDING_FEEDBACK, then GENERATE (the retry
                                 receives corrective feedback in its input).
-    - "useful":       grounded and answers the question    -> END.
+    - "useful":       grounded and answers the question
+                             -> clear-transient-tool-error pass-through, then
+                                END (a stale mid-run tool_error is cleared:
+                                the answer passed both gates, so the warning
+                                no longer describes the terminal outcome;
+                                retrieval_error / web_search_error persist).
     - "not_useful":   grounded but doesn't answer it
                              -> REWRITE_QUERY, then WEBSEARCH (the retry searches
                                 with a more specific rewritten query).
@@ -397,6 +404,7 @@ workflow.add_node(ADD_GROUNDING_FEEDBACK, add_grounding_feedback)
 workflow.add_node(REWRITE_QUERY, rewrite_query)
 workflow.add_node(BUDGET_EXHAUSTED_NOTICE, budget_exhausted_notice)
 workflow.add_node(TOOL_ERROR_NOTICE, tool_error_notice)
+workflow.add_node(CLEAR_TRANSIENT_TOOL_ERROR, clear_transient_tool_error)
 
 # 2. Entry: route_question decides the first step
 workflow.set_conditional_entry_point(
@@ -430,7 +438,10 @@ workflow.add_conditional_edges(
     {
         # not grounded -> inject corrective feedback, then regenerate
         "not_grounded": ADD_GROUNDING_FEEDBACK,
-        "useful": END,                  # grounded and useful -> end
+        # grounded and useful -> clear any stale transient tool_error
+        # (an answer that passed both gates must not ship with an error
+        # caveat), then end
+        "useful": CLEAR_TRANSIENT_TOOL_ERROR,
         # grounded but off-target -> rewrite the search query, then web search
         "not_useful": REWRITE_QUERY,
         # off-target but privacy mode -> record the stop reason, then stop
@@ -470,6 +481,11 @@ workflow.add_edge(MAX_RETRIES_NOT_GROUNDED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_USEFUL_NOTICE, END)
 workflow.add_edge(BUDGET_EXHAUSTED_NOTICE, END)
 workflow.add_edge(TOOL_ERROR_NOTICE, END)
+
+# 8b. Successful endings pass through the transient-tool-error cleanup: a
+#     mid-run tool_error (dropped chunk/result, failed rewrite) is stale once
+#     the answer passed both gates. Terminal degradations keep their reasons.
+workflow.add_edge(CLEAR_TRANSIENT_TOOL_ERROR, END)
 
 # 9. Compile into a callable app
 app = workflow.compile()

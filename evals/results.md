@@ -1,6 +1,6 @@
 # Eval results
 
-- Generated: 2026-06-11 19:10 UTC
+- Generated: 2026-06-11 22:46 UTC
 - Dataset: `C:\Agentic AI\LangGraph\Agentic_RAG_Claude\evals\questions.jsonl`
 - Rows evaluated: 15
 
@@ -16,9 +16,9 @@
 | stop_reason matches | 7 / 7 |
 | source_type matches | 11 / 11 |
 | expected_contains matches | 6 / 6 |
-| Average retries | 1.0 |
-| Average tracked LLM calls | 1.93 |
-| Total web searches | 6 |
+| Average retries | 1.2 |
+| Average tracked LLM calls | 2.47 |
+| Total web searches | 7 |
 
 Tracked LLM calls are the graph's budgeted operational counter (generations, query rewrites, web-result grades). Router and grader calls are not individually tracked, so this is not total LLM usage and not billing-accurate cost accounting.
 
@@ -28,14 +28,14 @@ Tracked LLM calls are the graph's budgeted operational counter (generations, que
 |---|---|---|---|---|---|---|---|
 | local-vpn-access | local_corpus | PASS | — | 1 | 1 | 0 | — |
 | local-expense-approval | local_corpus | PASS | — | 1 | 1 | 0 | — |
-| local-sev1-escalation | local_corpus | PASS | — | 1 | 4 | 1 | — |
+| local-sev1-escalation | local_corpus | PASS | — | 1 | 1 | 0 | — |
 | local-after-hours-paging | local_corpus | PASS | — | 1 | 1 | 0 | — |
 | local-audit-log-retention | local_corpus | PASS | — | 1 | 1 | 0 | — |
-| web-python-version | web_fallback | PASS | — | 1 | 4 | 1 | — |
+| web-python-version | web_fallback | PASS | — | 2 | 9 | 2 | — |
 | web-msft-ceo | web_fallback | PASS | — | 1 | 4 | 1 | — |
 | web-cyber-news | web_fallback | PASS | — | 1 | 4 | 1 | — |
-| web-sre-salary | web_fallback | PASS | — | 1 | 4 | 1 | — |
-| web-nist-guidelines | web_fallback | PASS | — | 1 | 4 | 1 | — |
+| web-sre-salary | web_fallback | PASS | — | 2 | 5 | 1 | — |
+| web-nist-guidelines | web_fallback | PASS | — | 2 | 9 | 2 | — |
 | insuf-parental-leave | insufficient_context | PASS | web_search_disabled | 1 | 0 | 0 | — |
 | insuf-wifi-password | insufficient_context | PASS | web_search_disabled | 1 | 0 | 0 | — |
 | insuf-ai-tools | insufficient_context | PASS | web_search_disabled | 1 | 0 | 0 | — |
@@ -48,61 +48,61 @@ Tracked LLM calls are the graph's budgeted operational counter (generations, que
 
 **Q:** How do I request VPN access?
 
-**A:** Submit the "VPN Access Request" form in the IT Service Portal: - ServiceNow → Service Catalog → Network Access. - Your direct manager must approve the request in the portal; requests without manager approval are automatically rejected after 5 business days. - IT Security provisions approved requests within 2 business days. - Complete MFA enrollment in Okta Verify before first use (VPN sign‑in with…
+**A:** - Submit the "VPN Access Request" form in the IT Service Portal (ServiceNow → Service Catalog → Network Access). - Your direct manager must approve the request in the portal; requests without manager approval are automatically rejected after 5 business days. - IT Security will provision approved requests within 2 business days. - Complete multi-factor authentication (MFA) enrollment in Okta Verify…
 
 ### local-expense-approval
 
 **Q:** What expenses require manager approval?
 
-**A:** - Single-item expenses of $100.01–$1,000 require approval by your direct manager. - Premium-economy airfare on flights longer than 6 hours is permitted only with manager approval. Note: the policy also says expenses over $500 should be approved before purchase whenever practical, and splitting purchases to avoid thresholds is prohibited. Sources: - Local corpus: AcmeCorp Expense Reimbursement Poli…
+**A:** Direct manager approval is required for single-item expenses of $100.01–$1,000. Note: expenses over $500 should be approved before purchase whenever practical, and splitting purchases to avoid thresholds is prohibited. Sources: - Local corpus: AcmeCorp Expense Reimbursement Policy
 
 ### local-sev1-escalation
 
 **Q:** When should a security incident be escalated to Sev-1?
 
-**A:** Escalate immediately to Sev-1 if any of the following is true: - Confirmed unauthorized access to customer data or employee PII. - Ransomware or destructive malware on any production system. - An active attacker with privileged (admin/root) access. - A customer-facing outage caused by a security event that has lasted >30 minutes or affects >10% of customers. - Any incident likely to trigger regula…
+**A:** Escalate immediately to Sev-1 if any of the following are true: - Confirmed unauthorized access to customer data or employee PII (confirmed data breach). - Ransomware or destructive malware on any production system. - An active attacker with privileged (admin/root) access. - A customer-facing outage caused by a security event that lasts more than 30 minutes or affects more than 10% of customers. -…
 
 ### local-after-hours-paging
 
 **Q:** Who gets paged for after-hours production incidents?
 
-**A:** - Primary on-call engineer for the service that owns the failing component — pages are routed via the PagerDuty service mapping. - If the owning service is unclear, the SRE platform on-call is paged and will re-route the incident. Escalation (if pages go unacknowledged) - Primary on-call: Ack target 5 min (Sev‑1) / 15 min (Sev‑2) after the initial page. - Secondary on-call: Automatically paged if …
+**A:** - Primary on-call engineer for the service that owns the failing component (pages are routed via the PagerDuty service mapping). - If the owning service is unclear, the SRE platform on-call is paged and will re-route the incident. Escalation (if the page is not acknowledged): - Secondary on-call — auto-paged if no ack after 10 minutes. - Engineering manager — paged if no ack from secondary after a…
 
 ### local-audit-log-retention
 
 **Q:** How long are security audit logs retained?
 
-**A:** Security audit logs are retained for 18 months. They remain in hot storage for the first 90 days, then move to cold archive. Note: contract- or jurisdiction-specific retention requirements can override this schedule (recorded in the data-processing register), and legal holds temporarily override retention/deletion. Sources: - Local corpus: AcmeCorp Data Retention Policy
+**A:** Security audit logs are retained for 18 months. The first 90 days are kept in hot storage, then they move to cold archive. Note that contract- or jurisdiction-specific retention requirements take precedence, and legal holds override this schedule. Sources: - Local corpus: AcmeCorp Data Retention Policy
 
 ### web-python-version
 
 **Q:** What is the latest stable version of Python right now?
 
-**A:** According to the provided documents, the latest stable Python release is Python 3.14, released on October 7, 2025. Sources: - Web search: "What is the latest stable version of Python right now?"
+**A:** According to the provided documents, the latest stable release is Python 3.14.6 (released June 10, 2026). Sources: - Web search: Python Source Releases — https://www.python.org/downloads/source - Web search: Python Release Python 3.13.0 — https://www.python.org/downloads/release/python-3130 - Web search: Python Release Python 3.12.0 — https://www.python.org/downloads/release/python-3120
 
 ### web-msft-ceo
 
 **Q:** Who is the current CEO of Microsoft?
 
-**A:** The current CEO of Microsoft is Satya Narayana Nadella. Sources: - Web search: "Who is the current CEO of Microsoft?"
+**A:** According to the provided documents, the current CEO of Microsoft is Satya Nadella (CEO since 2014). Sources: - Web search: Why Does Microsoft Now Have a New, Extra CEO? — https://technologymagazine.com/news/why-is-microsoft-ceo-satya-nadella-shifting-his-focus-to-ai - Web search: Who is the CEO of Microsoft in 2026? Satya Nadella's Bio - Clay — https://www.clay.com/dossier/microsoft-ceo - Web sea…
 
 ### web-cyber-news
 
 **Q:** What are the biggest cybersecurity news stories this week?
 
-**A:** Based on the provided documents, the biggest cybersecurity stories this week are: - Chrome V8 zero‑day (CVE‑2026‑11645) exploited in the wild — users/administrators urged to patch. - New FROST attack: websites can track what sites/apps you open via SSD timing. - One‑character Linux kernel flaw enables local root access; public exploits available. - CISA adds Cisco, Chrome, and Arista flaws to its …
+**A:** Based only on the provided documents, the prominent cybersecurity items shown this week are: - Microsoft patches an exploited Exchange Server vulnerability (link slug: microsoft-patches-exploited-exchange-server-vulnerability). - Google addresses Vertex security issues after researchers weaponized an AI agent (link slug: google-addresses-vertex-security-issues-after-researchers-weaponize-ai-agent)…
 
 ### web-sre-salary
 
 **Q:** What is the average salary for a site reliability engineer in the United States in 2026?
 
-**A:** The documents do not give a single, definitive 2026 figure. Reported averages in the provided sources include: - Built In: average salary $131,477 (additional cash $15,684; average total compensation $147,161); median $120,000. - Another Built In/Career summary: average base ≈ $130,214 and total compensation ≈ $144,134. - Glassdoor (cited in the 2026 salary guide): average SRE salary $166,123. So …
+**A:** The documents provide conflicting figures, so I cannot state a single definitive average. - One document explicitly says: "As of Jun 9, 2026, the average annual pay for a Site Reliability Engineer in the United States is $132,583 a year." - Another document reports an average of $157,839 per year (based on 2.6k salaries from job postings on Indeed). - a third document lists an average of $171,745 …
 
 ### web-nist-guidelines
 
 **Q:** What does the latest NIST incident response guidance recommend?
 
-**A:** Summary of the latest NIST incident response guidance (SP 800-61 Revision 3, April 2025): - Purpose and scope - SP 800-61r3 (April 2025) supersedes Revision 2 and shifts focus from static procedures to embedding incident response into cybersecurity risk management using the NIST Cybersecurity Framework (CSF) 2.0. - It aims to provide a common language and guidance to improve preparedness, reduce i…
+**A:** According to the provided materials, NIST recommends enhancing threat detection and incident response by following a four-stage incident‑response lifecycle: - Preparation (establish policies, tools, and response teams before an incident occurs) - Detection and analysis - Containment, eradication, and recovery - Post‑incident activity Sources: - Web search: NIST Best Practices for Cyber Resilience …
 
 ### insuf-parental-leave
 
@@ -126,7 +126,7 @@ Tracked LLM calls are the graph's budgeted operational counter (generations, que
 
 **Q:** How long are security audit logs retained?
 
-**A:** Security audit logs are retained for 18 months. They remain in hot storage for the first 90 days, then move to cold archive. Notes from the policy: - Customer- or regulation-specific contract terms may require longer retention and take precedence. - Legal holds override retention/deletion rules. - For questions or access: privacy@acmecorp.example or security-eng@acmecorp.example. Sources: - Local …
+**A:** Security audit logs are retained for 18 months. - Storage breakdown: hot storage for the first 90 days, then moved to cold archive. - Notes/overrides: contract- or jurisdiction-specific retention requirements recorded in the data‑processing register take precedence; legal holds override the retention schedule. - For questions or exceptions: privacy@acmecorp.example (retention questions), legal@acm…
 
 ### privacy-web-question
 

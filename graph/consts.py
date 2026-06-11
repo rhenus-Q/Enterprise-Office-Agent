@@ -10,6 +10,7 @@ ADD_GROUNDING_FEEDBACK = "add_grounding_feedback"
 REWRITE_QUERY = "rewrite_query"
 BUDGET_EXHAUSTED_NOTICE = "budget_exhausted_notice"
 TOOL_ERROR_NOTICE = "tool_error_notice"
+CLEAR_TRANSIENT_TOOL_ERROR = "clear_transient_tool_error"
 
 # Metadata "source" marker identifying the merged web-search supplement
 # Document. Shared by the web_search node (which writes it) and main.py
