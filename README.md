@@ -312,6 +312,31 @@ mocked suites on every push and pull request — no API keys are configured in
 CI, which doubles as a regression test that imports stay side-effect-free.
 The key-gated integration suite is deliberately excluded.
 
+## Behavioral evals
+
+Beyond code-path tests, [`evals/`](evals/) contains a lightweight behavioral
+evaluation harness: 15 realistic questions
+([`evals/questions.jsonl`](evals/questions.jsonl)) across four categories —
+answerable from the AcmeCorp corpus (5), requiring web fallback (5),
+unanswerable without fabricating (3), and privacy-mode guarantees (2). The
+runner drives the real graph and applies **deterministic** checks (stop
+reasons, source provenance, run counters, expected substrings — no
+LLM-as-judge), then writes a Markdown report to
+[`evals/results.md`](evals/results.md):
+
+```powershell
+# Validate the dataset format only — no API calls
+uv run python evals/run_eval.py --validate-only
+
+# Full eval — real OpenAI/Tavily calls, requires keys (not part of CI)
+uv run python evals/run_eval.py
+uv run python evals/run_eval.py --limit 3
+```
+
+The harness's pure helpers (loading, validation, checks, metrics, rendering)
+are unit-tested without API calls in `tests/evals/`. See
+[`evals/README.md`](evals/README.md) for the dataset schema and check rules.
+
 ### Mocked unit tests vs. API-based chain tests
 
 | | `tests/node/` + `tests/graph/` (unit) | `tests/chains/` (integration) |
@@ -335,7 +360,7 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 ## Future Improvements
 
 - Structured logging and documented LangSmith tracing setup.
-- A small offline evaluation harness (golden Q&A set scored with the existing graders).
+- Grader-scored (LLM-as-judge) eval metrics on top of the deterministic harness in `evals/`.
 - Batched relevance grading.
 - Migration from `langchain-community` to the maintained standalone integrations (e.g. `langchain-tavily`).
 
