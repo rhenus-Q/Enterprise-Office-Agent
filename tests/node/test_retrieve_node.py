@@ -9,6 +9,7 @@ from langchain_core.documents import Document
 
 import importlib
 
+from graph.consts import STOP_REASON_RETRIEVAL_ERROR
 from graph.nodes.retrieve import retrieve
 
 # graph/nodes/__init__.py re-exports the `retrieve` function under the same name
@@ -54,3 +55,44 @@ def test_retrieve_preserves_question(monkeypatch):
     result = retrieve({"question": "keep me"})
 
     assert result["question"] == "keep me"
+
+
+# ---------------------------------------------------------------------------
+# Graceful degradation: retriever / Chroma failure
+# ---------------------------------------------------------------------------
+
+
+def _patch_failing_retriever(monkeypatch):
+    class ExplodingRetriever:
+        def invoke(self, question):
+            raise RuntimeError("chroma is down")
+
+    monkeypatch.setattr(retrieve_module, "get_node_retriever", lambda: ExplodingRetriever())
+
+
+def test_retrieve_handles_retriever_failure_without_crashing(monkeypatch):
+    _patch_failing_retriever(monkeypatch)
+
+    result = retrieve({"question": "Q"})  # must not raise
+
+    assert result["documents"] == []
+    assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
+
+
+def test_retrieve_failure_requests_web_search_fallback(monkeypatch):
+    # Degradation mirrors the "irrelevant documents" path: ask for web search
+    # (privacy mode downstream ignores the flag and generates locally).
+    _patch_failing_retriever(monkeypatch)
+
+    result = retrieve({"question": "Q"})
+
+    assert result["web_search"] is True
+
+
+def test_retrieve_success_does_not_write_stop_reason(monkeypatch):
+    # A normal pass must not clobber stop reasons recorded by other nodes.
+    _patch_retriever(monkeypatch, [Document(page_content="d")])
+
+    result = retrieve({"question": "Q"})
+
+    assert "stop_reason" not in result

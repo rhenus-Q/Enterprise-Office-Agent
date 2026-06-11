@@ -11,6 +11,7 @@ import importlib
 
 from langchain_core.documents import Document
 
+from graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
 from graph.nodes.web_search import web_search
 
 # graph/nodes/__init__.py re-exports the `web_search` function under the same name
@@ -283,3 +284,94 @@ def test_web_search_skips_malformed_entries_and_keeps_usable_ones(monkeypatch):
     assert [c["document"] for c in grader_calls] == ["good result"]
     assert len(result["documents"]) == 1
     assert result["documents"][0].page_content == "good result"
+
+
+# ---------------------------------------------------------------------------
+# Graceful degradation: Tavily failures and grader failures
+# ---------------------------------------------------------------------------
+
+
+def _patch_failing_tool(monkeypatch):
+    class ExplodingTool:
+        def invoke(self, payload):
+            raise TimeoutError("tavily timed out")
+
+    monkeypatch.setattr(web_search_module, "get_web_search_tool", lambda: ExplodingTool())
+
+
+def test_tavily_failure_preserves_local_documents(monkeypatch):
+    _patch_failing_tool(monkeypatch)
+    grader_calls = _patch_grader(monkeypatch)
+
+    local = Document(page_content="local chunk")
+    result = web_search({"question": "Q", "documents": [local]})  # must not raise
+
+    assert result["documents"] == [local]           # local docs survive, nothing appended
+    assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_ERROR
+    assert grader_calls == []                       # nothing to grade
+
+
+def test_tavily_failure_with_no_documents_returns_empty_context(monkeypatch):
+    # Downstream, generate's empty-context short-circuit produces the safe
+    # insufficient-context answer; the node just degrades cleanly.
+    _patch_failing_tool(monkeypatch)
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"] == []
+    assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_ERROR
+
+
+def test_tavily_failure_counts_the_attempt_against_the_budget(monkeypatch):
+    # A persistently failing search API must not enable unbounded retries.
+    _patch_failing_tool(monkeypatch)
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": [], "web_search_count": 2})
+
+    assert result["web_search_count"] == 3
+
+
+def test_grader_failure_drops_only_the_ungraded_result(monkeypatch):
+    _patch_tool(monkeypatch, [{"content": "boom"}, {"content": "good"}])
+
+    class FlakyGrader:
+        def invoke(self, payload):
+            if payload["document"] == "boom":
+                raise RuntimeError("grader is down")
+            return _FakeGrade(True)
+
+    monkeypatch.setattr(web_search_module, "get_retrieval_grader", lambda: FlakyGrader())
+
+    result = web_search({"question": "Q", "documents": []})  # must not raise
+
+    assert len(result["documents"]) == 1
+    assert result["documents"][0].page_content == "good"     # ungraded content never appended
+    assert result["stop_reason"] == STOP_REASON_TOOL_ERROR
+
+
+def test_grader_failure_on_all_results_appends_nothing(monkeypatch):
+    _patch_tool(monkeypatch, [{"content": "a"}, {"content": "b"}])
+
+    class ExplodingGrader:
+        def invoke(self, payload):
+            raise RuntimeError("grader is down")
+
+    monkeypatch.setattr(web_search_module, "get_retrieval_grader", lambda: ExplodingGrader())
+
+    local = Document(page_content="local chunk")
+    result = web_search({"question": "Q", "documents": [local]})
+
+    assert result["documents"] == [local]
+    assert result["stop_reason"] == STOP_REASON_TOOL_ERROR
+
+
+def test_web_search_success_does_not_write_stop_reason(monkeypatch):
+    # A normal pass must not clobber stop reasons recorded by other nodes.
+    _patch_tool(monkeypatch, [{"content": "web"}])
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert "stop_reason" not in result
