@@ -36,9 +36,9 @@ module imports side-effect-free (no API keys, no network at import time):
 | Chains | `graph/chains/` | Six LCEL chains on `gpt-5-mini` (`temperature=0`): `question_router`, `retrieval_grader`, `generation`, `hallucination_grader`, `answer_grader`, `query_rewriter` |
 
 Supporting modules: `graph/state.py` (the state schema), `graph/consts.py`
-(node names + `stop_reason` values), `graph/config.py` (env-driven flags),
-`ingestion.py` (offline Chroma build), `main.py` (CLI, state seeding, caveat
-presentation).
+(node names, `stop_reason` values, the `WEB_SEARCH_SOURCE` metadata marker),
+`graph/config.py` (env-driven flags), `ingestion.py` (offline Chroma build),
+`main.py` (CLI, state seeding, caveat + Sources presentation).
 
 **Design grammar** (applied consistently):
 - Conditional edge functions are **pure** — they read state and chains, never write.
@@ -259,6 +259,26 @@ that later passes every gate carries an honest caveat. Terminal notice nodes
 overwrite an earlier reason when a later failure ends the run — the reason
 that actually stopped the run wins. Nodes only write `stop_reason` on
 failure, so a successful step never clobbers an earlier recorded reason.
+
+### Answer provenance (Sources section)
+
+After the caveat (if any), `main.py` appends a deterministic `Sources:`
+section built by `format_sources(result["documents"])` — pure post-run
+formatting of `Document` metadata, never an LLM call, never document content:
+
+- **Local corpus documents** (anything not marked as the web supplement) are
+  cited as `- Local corpus: <title>` (falling back to the `source` URL, then
+  to the safe label `Local corpus document`). Titles/URLs come from the
+  `WebBaseLoader` metadata persisted by `ingestion.py`.
+- **The web supplement** is detected via `metadata["source"] ==
+  WEB_SEARCH_SOURCE` (a constant in `consts.py` shared with the `websearch`
+  node, which also records `source_type: "web"` and the `search_query` that
+  produced the supplement) and cited as `- Web search: "<query>"` (fallback:
+  `Web search result`).
+- Duplicate lines are collapsed order-preservingly (several chunks of one
+  page cite it once); an empty document list produces no section at all.
+- Caveat ordering: the stop-reason caveat is printed *before* the sources,
+  so a sources list next to an error never implies the answer was verified.
 
 ## 11. Retry exhaustion
 

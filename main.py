@@ -15,6 +15,7 @@ from graph.consts import (  # noqa: E402
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_DISABLED,
     STOP_REASON_WEB_SEARCH_ERROR,
+    WEB_SEARCH_SOURCE,
 )
 from graph.graph import app  # noqa: E402
 
@@ -90,21 +91,73 @@ STOP_REASON_NOTES = {
 }
 
 
+# Sources section formatting. Deterministic, metadata-only (no LLM, no
+# document content): keeps provenance testable and the prompts untouched.
+SOURCES_HEADER = "Sources:"
+LOCAL_SOURCE_FALLBACK_LABEL = "Local corpus document"
+WEB_SOURCE_FALLBACK_LABEL = "Web search result"
+
+
+def format_sources(documents) -> str:
+    """
+    Build the "Sources:" section from the final working documents.
+
+    Local corpus documents are labeled by their ingestion metadata (title,
+    falling back to the source URL); the web supplement by the search query
+    that produced it. Missing metadata falls back to safe generic labels,
+    duplicate lines are collapsed (several chunks of one page cite it once),
+    and document content is never exposed. Returns "" when there is nothing
+    to cite, so no misleading Sources section is shown.
+    """
+
+    lines = []
+    seen = set()
+
+    for doc in documents or []:
+        metadata = getattr(doc, "metadata", None) or {}
+
+        if metadata.get("source") == WEB_SEARCH_SOURCE:
+            query = str(metadata.get("search_query") or "").strip()
+            line = f'- Web search: "{query}"' if query else f"- {WEB_SOURCE_FALLBACK_LABEL}"
+        else:
+            label = str(metadata.get("title") or metadata.get("source") or "").strip()
+            line = f"- Local corpus: {label}" if label else f"- {LOCAL_SOURCE_FALLBACK_LABEL}"
+
+        if line not in seen:
+            seen.add(line)
+            lines.append(line)
+
+    if not lines:
+        return ""
+
+    return SOURCES_HEADER + "\n" + "\n".join(lines)
+
+
 def format_answer(result) -> str:
     """
     Format the final graph state for display.
 
-    Appends a caveat only when the graph recorded a stop reason (privacy mode
-    or retry exhaustion); normal successful answers are returned unchanged.
+    Appends a caveat when the graph recorded a stop reason, then a "Sources"
+    section listing the provenance of the documents the answer was built
+    from. The caveat is printed first, directly under the answer, so sources
+    shown next to an error never imply the answer was fully verified. With
+    no recorded stop reason and no documents the answer is returned
+    unchanged.
     """
 
     answer = result.get("generation", "")
 
+    parts = [answer]
+
     note = STOP_REASON_NOTES.get(result.get("stop_reason", ""))
     if note:
-        return f"{answer}\n\n{note}"
+        parts.append(note)
 
-    return answer
+    sources = format_sources(result.get("documents", []))
+    if sources:
+        parts.append(sources)
+
+    return "\n\n".join(part for part in parts if part)
 
 
 def main():

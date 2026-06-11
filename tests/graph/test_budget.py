@@ -301,4 +301,6 @@ def test_app_normal_success_tracks_counters_without_warnings(monkeypatch):
     assert result["web_search_count"] == 0
     assert result["web_result_grading_count"] == 0
     assert web_calls == []
-    assert format_answer(result) == "FINAL ANSWER"
+    # No caveat of any kind; the documents (metadata-less mock chunks) only
+    # add the Sources section with the safe fallback label.
+    assert format_answer(result) == "FINAL ANSWER\n\nSources:\n- Local corpus document"

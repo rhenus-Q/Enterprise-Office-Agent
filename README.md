@@ -19,6 +19,7 @@ This project implements an internal-document Q&A assistant as an **agentic RAG w
 - **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
 - **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
 - **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
+- **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement (by the query that produced it). Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
 - **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
 - **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
 
@@ -244,6 +245,30 @@ Enter your question:
 ```
 
 Node-by-node progress banners (`---RETRIEVE---`, `---CHECK HALLUCINATIONS---`, …) show the graph's path, including any correction loops.
+
+### Source citations
+
+Answers built from documents end with a `Sources:` section showing where the
+context came from:
+
+```
+Answer:
+Documents are split into chunks because ...
+
+Sources:
+- Local corpus: Text splitters | LangChain
+- Web search: "document chunking strategies 2026"
+```
+
+Local corpus documents are cited by their ingestion metadata (page title,
+falling back to the source URL); the web supplement by the search query that
+produced it. Repeated sources are listed once, missing metadata falls back to
+safe generic labels (`Local corpus document` / `Web search result`), and runs
+that used no documents show no Sources section at all. Citations are pure
+post-run formatting of `Document` metadata — the LLM is not asked to generate
+them, so prompts and model behavior are unchanged. When a run ends with a
+caveat, the caveat is printed *before* the sources, so a sources list never
+implies a failed answer was verified.
 
 ## Run the tests
 

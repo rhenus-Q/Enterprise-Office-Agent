@@ -10,6 +10,11 @@ REWRITE_QUERY = "rewrite_query"
 BUDGET_EXHAUSTED_NOTICE = "budget_exhausted_notice"
 TOOL_ERROR_NOTICE = "tool_error_notice"
 
+# Metadata "source" marker identifying the merged web-search supplement
+# Document. Shared by the web_search node (which writes it) and main.py
+# (which reads it for the Sources section), so the two can never drift.
+WEB_SEARCH_SOURCE = "web_search"
+
 # Values for GraphState["stop_reason"] ("" = normal finish).
 STOP_REASON_WEB_SEARCH_DISABLED = "web_search_disabled"
 STOP_REASON_MAX_RETRIES_NOT_GROUNDED = "max_retries_not_grounded"

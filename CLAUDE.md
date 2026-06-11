@@ -42,7 +42,7 @@ type, never the message.
 
 | Path | Purpose |
 |------|---------|
-| `main.py` | CLI entry point. Loads `.env`, then imports the compiled `app` and runs an interactive Q&A loop. Seeds the full `GraphState`. |
+| `main.py` | CLI entry point. Loads `.env`, then imports the compiled `app` and runs an interactive Q&A loop. Seeds the full `GraphState`. Formats the final answer: `stop_reason` caveats plus a deterministic `Sources:` section built from `Document` metadata (`format_sources`; local corpus vs. `web_search` supplement). |
 | `ingestion.py` | Builds the knowledge base: loads URLs, splits, embeds, persists to Chroma. Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
 | `graph/graph.py` | Assembles the LangGraph `StateGraph`, wires nodes + conditional edges, exports compiled `app`. Holds `MAX_RETRIES` and the routing decision functions. |
 | `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `retries`, `stop_reason`, `retry_feedback`, `search_query`, plus budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). |

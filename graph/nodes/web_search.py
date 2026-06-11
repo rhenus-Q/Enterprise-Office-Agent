@@ -5,7 +5,11 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 
 from graph.chains.retrieval_grader import get_retrieval_grader
 from graph.config import max_web_results_to_grade, max_web_searches_per_run
-from graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
+from graph.consts import (
+    STOP_REASON_TOOL_ERROR,
+    STOP_REASON_WEB_SEARCH_ERROR,
+    WEB_SEARCH_SOURCE,
+)
 from graph.state import GraphState
 
 
@@ -94,7 +98,7 @@ def web_search(state: GraphState):
     documents = [
         doc
         for doc in state.get("documents", [])
-        if doc.metadata.get("source") != "web_search"
+        if doc.metadata.get("source") != WEB_SEARCH_SOURCE
     ]
 
     try:
@@ -162,7 +166,14 @@ def web_search(state: GraphState):
         documents.append(
             Document(
                 page_content="\n\n".join(relevant_contents),
-                metadata={"source": "web_search"},
+                # Provenance metadata: source marks the doc as the web
+                # supplement, search_query records the query that produced it
+                # (shown in the user-facing Sources section).
+                metadata={
+                    "source": WEB_SEARCH_SOURCE,
+                    "source_type": "web",
+                    "search_query": search_query,
+                },
             )
         )
     else:
