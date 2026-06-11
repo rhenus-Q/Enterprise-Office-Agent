@@ -371,6 +371,10 @@ Limitations (deliberate scope):
 - Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 
 Future improvements (rough priority): LangSmith tracing evidence + structured
-logging; CI running the mocked suites; an offline eval harness scored with the
-existing graders; rationale-bearing grounding feedback; batched grading;
-migration off `langchain-community` for Tavily.
+logging; an offline eval harness scored with the existing graders;
+rationale-bearing grounding feedback; batched grading; migration off
+`langchain-community` for Tavily.
+
+GitHub Actions CI (`.github/workflows/ci.yml`) runs the mocked suites
+(`tests/node/` + `tests/graph/`) on every push and pull request with no API
+keys configured; the key-gated `tests/chains/` suite is excluded.

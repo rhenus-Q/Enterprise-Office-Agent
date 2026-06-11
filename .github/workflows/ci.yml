@@ -1,0 +1,32 @@
+# CI: run the fully mocked test suites (tests/node/ + tests/graph/) on every
+# push and pull request. These suites mock every external dependency at its
+# lazy factory seam, so the job needs NO API keys (OpenAI / Tavily / LangSmith).
+# The integration suite (tests/chains/) calls the real model and is deliberately
+# excluded from CI.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  mocked-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv (with Python 3.12 and dependency cache)
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies from the committed lockfile
+        run: uv sync --locked --group dev
+
+      - name: Run mocked test suites (no API keys required)
+        run: uv run pytest tests/node/ tests/graph/ -q

@@ -1,5 +1,7 @@
 # Agentic RAG Assistant
 
+[![CI](https://github.com/rhenusbeichenGit/Agentic_RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/rhenusbeichenGit/Agentic_RAG/actions/workflows/ci.yml)
+
 **A self-correcting, enterprise-style document Q&A assistant built with LangGraph (CRAG pattern).**
 
 ## Overview
@@ -305,6 +307,11 @@ uv run pytest tests/chains/ -v
 uv run pytest -v
 ```
 
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the two
+mocked suites on every push and pull request — no API keys are configured in
+CI, which doubles as a regression test that imports stay side-effect-free.
+The key-gated integration suite is deliberately excluded.
+
 ### Mocked unit tests vs. API-based chain tests
 
 | | `tests/node/` + `tests/graph/` (unit) | `tests/chains/` (integration) |
@@ -330,7 +337,6 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 - Structured logging and documented LangSmith tracing setup.
 - A small offline evaluation harness (golden Q&A set scored with the existing graders).
 - Batched relevance grading.
-- CI (GitHub Actions) running the mocked unit suite on every push.
 - Migration from `langchain-community` to the maintained standalone integrations (e.g. `langchain-tavily`).
 
 ## What This Project Demonstrates
