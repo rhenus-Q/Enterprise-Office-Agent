@@ -26,4 +26,8 @@ def rewrite_query(state: GraphState):
 
     print(f"---NEW SEARCH QUERY: {new_query}---")
 
-    return {"search_query": new_query}
+    return {
+        "search_query": new_query,
+        # The rewrite is a real LLM call; count it against the run budget.
+        "llm_call_count": state.get("llm_call_count", 0) + 1,
+    }

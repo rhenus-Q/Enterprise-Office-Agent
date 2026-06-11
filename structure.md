@@ -63,6 +63,9 @@ defaults.
 | `stop_reason` | `str` | Why the run ended early (`""` = normal finish); drives user-facing caveats. |
 | `retry_feedback` | `str` | Corrective instruction for the next generation after a failed grounding check (`""` = none). |
 | `search_query` | `str` | Rewritten web-search query for retry rounds (`""` = use the original question). |
+| `llm_call_count` | `int` | Counted LLM calls this run (generations, query rewrites, web-result grades). |
+| `web_search_count` | `int` | Tavily searches this run. |
+| `web_result_grading_count` | `int` | Individual web results sent to the relevance grader this run. |
 
 ## 4. Nodes
 
@@ -77,6 +80,7 @@ defaults.
 | `web_search_disabled_notice` | `WEB_SEARCH_DISABLED_NOTICE` | Terminal: records `stop_reason = "web_search_disabled"`. |
 | `max_retries_not_grounded_notice` | `MAX_RETRIES_NOT_GROUNDED_NOTICE` | Terminal: records `stop_reason = "max_retries_not_grounded"`. |
 | `max_retries_not_useful_notice` | `MAX_RETRIES_NOT_USEFUL_NOTICE` | Terminal: records `stop_reason = "max_retries_not_useful"`. |
+| `budget_exhausted_notice` | `BUDGET_EXHAUSTED_NOTICE` | Terminal: records `stop_reason = "budget_exhausted"`. |
 
 ## 5. Conditional routing
 
@@ -105,13 +109,19 @@ one-to-one to an edge)
 | `web_search_disabled` | grounded but off-target, privacy mode | notice node → `END` |
 | `max_retries_not_grounded` | failed grounding at the retry limit | notice node → `END` |
 | `max_retries_not_useful` | grounded but off-target at the retry limit | notice node → `END` |
+| `budget_exhausted` | per-run cost budget spent (LLM-call budget, checked before grading; or web-search budget when another search round would be needed) | notice node → `END` |
 
 Ordering details that matter:
-- **Grade first, then check the limit** — even the final allowed generation is
-  fully graded; the cap only fires when the answer would otherwise loop.
-- In the not-useful branch, the **privacy check precedes the retry-limit
-  check**: with web search disabled, improvement was impossible regardless of
-  retries, so the privacy caveat is the accurate one.
+- The **LLM-call budget is checked first, before the graders run** — a spent
+  budget must not spend more, so the final answer goes out ungraded with a
+  caveat saying exactly that.
+- Otherwise, **grade first, then check the retry limit** — even the final
+  allowed generation is fully graded; the cap only fires when the answer would
+  otherwise loop.
+- In the not-useful branch the order is **privacy → retry limit → web-search
+  budget**: with web search disabled, improvement was impossible regardless of
+  retries, so the privacy caveat is the accurate one; the web budget stops the
+  loop when another (unaffordable) search round would be required.
 
 ## 6. Full workflow
 
@@ -139,10 +149,13 @@ flowchart TD
     RW --> WS
     AG -- "not useful,<br/>privacy mode" --> N3[web_search_disabled_notice]
     AG -- "not useful,<br/>retries exhausted" --> N2[max_retries_not_useful_notice]
+    GEN -. "cost budget spent<br/>(checked before grading)" .-> N4[budget_exhausted_notice]
+    AG -. "not useful,<br/>web budget spent" .-> N4
 
     N1 --> E
     N2 --> E
     N3 --> E
+    N4 --> E
 ```
 
 Step by step:
@@ -222,6 +235,7 @@ both modes.
 | `web_search_disabled` | Grounded but off-target; web search unavailable | "Web search is disabled… answer limited to the local knowledge base." |
 | `max_retries_not_grounded` | Retry limit hit; answer still failed grounding | "Did not pass the anti-hallucination check… do not treat as fully reliable." |
 | `max_retries_not_useful` | Retry limit hit; grounded but still off-target | "Grounded but may not fully answer your question." |
+| `budget_exhausted` | Per-run cost budget spent before the gates passed | "Stopped because the per-run cost/latency budget was reached… may be incomplete or not fully verified." |
 
 ## 11. Retry exhaustion
 
@@ -232,18 +246,39 @@ exhaustion outcomes are distinguished (`max_retries_not_grounded` vs.
 `max_retries_not_useful`) because they require different user warnings: the
 former may contain unsupported content; the latter is grounded but incomplete.
 
-## 12. Testing overview
+## 12. Per-run cost / latency budget
+
+Three counters in state track spend; three env-configurable budgets
+(`graph/config.py`) cap it. Increments happen only in nodes (where state
+writes are legal); checks are pure reads:
+
+| Budget (env var) | Default | Counts | Checked where | On exhaustion |
+|---|---|---|---|---|
+| `MAX_LLM_CALLS_PER_RUN` | 30 | generations (not the empty-context short-circuit), query rewrites, web-result grades | top of `grade_generation`, **before** the graders run | `budget_exhausted` → notice → `END` |
+| `MAX_WEB_SEARCHES_PER_RUN` | 5 | actual Tavily calls | `grade_generation` not-useful branch (stops pointless loops) + a defensive guard inside `websearch` (skips the search, documents unchanged) | `budget_exhausted` / skip |
+| `MAX_WEB_RESULTS_TO_GRADE` | 15 | individual results sent to the relevance grader | inside `websearch`'s grading loop | remaining results dropped ungraded and unused; run continues |
+
+Deliberate accounting tradeoff: hallucination/answer-grader calls run inside a
+conditional *edge* (which cannot write state) and are bounded at two per
+generation, so they are not individually counted — capping counted calls
+transitively caps them. `grade_documents`' per-chunk grades (≤ k = 3, once per
+run, outside every loop) are likewise uncounted. Defaults sit above the worst
+case the `MAX_RETRIES` loop can produce, so the budgets never bind unless
+explicitly tightened; invalid or non-positive env values fall back to the
+defaults so a budget can never be accidentally disabled.
+
+## 13. Testing overview
 
 | Suite | What it covers | External calls |
 |---|---|---|
 | `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing | None — every dependency mocked at its lazy `get_*()` factory seam |
-| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, caveat formatting, and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode) | None — fully mocked |
+| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
 | `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
 
 Run the mocked suites with `uv run pytest tests/node/ tests/graph/ -v` (no API
 keys required).
 
-## 13. Known limitations & future improvements
+## 14. Known limitations & future improvements
 
 Limitations (deliberate scope):
 - Single-turn CLI; no conversation memory or API surface.

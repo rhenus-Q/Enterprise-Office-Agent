@@ -21,6 +21,12 @@ def generate(state: GraphState):
     # makes the retry input meaningfully different from the previous attempt.
     retry_feedback = state.get("retry_feedback", "")
 
+    # Budget accounting: generate_answer only calls the LLM when context
+    # exists; the empty-context short-circuit costs nothing.
+    llm_call_count = state.get("llm_call_count", 0)
+    if documents:
+        llm_call_count += 1
+
     generation = generate_answer(question, documents, retry_feedback)
 
     return {
@@ -29,4 +35,5 @@ def generate(state: GraphState):
         "generation": generation,
         "web_search": state.get("web_search", False),
         "retries": retries,
+        "llm_call_count": llm_call_count,
     }

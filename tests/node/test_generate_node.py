@@ -95,6 +95,27 @@ def test_generate_defaults_to_empty_retry_feedback(monkeypatch):
     assert calls["retry_feedback"] == ""
 
 
+def test_generate_increments_llm_call_count_when_documents_present(monkeypatch):
+    _patch_generate_answer(monkeypatch)
+
+    docs = [Document(page_content="chunk")]
+    state = {"question": "Q", "documents": docs, "retries": 0, "llm_call_count": 2}
+    result = generate(state)
+
+    assert result["llm_call_count"] == 3
+
+
+def test_generate_does_not_count_empty_context_short_circuit(monkeypatch):
+    # With no documents, generate_answer returns the canned answer without an
+    # LLM call -- the budget counter must not move.
+    _patch_generate_answer(monkeypatch)
+
+    state = {"question": "Q", "documents": [], "retries": 0, "llm_call_count": 2}
+    result = generate(state)
+
+    assert result["llm_call_count"] == 2
+
+
 def test_generate_uses_safe_defaults_for_missing_keys(monkeypatch):
     calls = _patch_generate_answer(monkeypatch)
 

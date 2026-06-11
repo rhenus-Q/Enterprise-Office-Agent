@@ -17,6 +17,7 @@ This project implements an internal-document Q&A assistant as an **agentic RAG w
 - **Privacy mode** — a `WEB_SEARCH_ENABLED=false` toggle disables every web-search path (routing, fallback, and supplement), so user questions never leave the local environment.
 - **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
 - **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
+- **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
 - **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
 - **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
 
@@ -124,6 +125,7 @@ See [`.env.example`](.env.example) for the full template:
 | `OPENAI_API_KEY` | Yes | Chat models (router, graders, generation) and embeddings |
 | `TAVILY_API_KEY` | Yes | Web-search fallback node |
 | `WEB_SEARCH_ENABLED` | Optional (default `true`) | Set to `false` to disable all external web search (privacy mode) |
+| `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE` | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below) |
 | `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` | Optional | LangSmith tracing of the correction loops |
 | `USER_AGENT` | Optional | Polite user agent for ingestion's web loader |
 
@@ -165,6 +167,33 @@ successful:
   > *Warning: This answer did not pass the usefulness check after the retry limit was reached. It is grounded in the source documents but may not fully answer your question.*
 
 Answers that pass both gates are printed without any warning, exactly as before.
+
+### Per-run cost / latency budget
+
+Each graph run tracks its spend in state: `llm_call_count` (generations, query
+rewrites, web-result grading calls), `web_search_count` (Tavily searches), and
+`web_result_grading_count`. Three env-configurable budgets cap them:
+
+- `MAX_LLM_CALLS_PER_RUN` (default 30) — checked *before* each post-generation
+  grading round; once spent, the run stops immediately through a
+  `budget_exhausted` stop reason rather than spending more.
+- `MAX_WEB_SEARCHES_PER_RUN` (default 5) — a spent search budget stops the
+  "not useful" retry loop (looping toward a search that can't run is waste)
+  and defensively skips any search the node is still asked to perform.
+- `MAX_WEB_RESULTS_TO_GRADE` (default 15) — once spent, remaining web results
+  are dropped *ungraded and unused* (conservative: unvetted content never
+  reaches generation); the run itself continues.
+
+When a budget ends the run, the CLI appends:
+
+> *Note: This answer stopped because the per-run cost/latency budget was reached. The answer may be incomplete or not fully verified.*
+
+The defaults are deliberately sized above the worst case the `MAX_RETRIES`
+loop can produce, so default behavior is unchanged — the budgets exist as a
+hard cost backstop and for tightening in cost-sensitive deployments.
+(Hallucination/answer-grader calls are not individually counted: they are
+bounded at two per generation, so capping counted calls transitively caps
+them.)
 
 ## Build the knowledge base (ingestion)
 
@@ -216,7 +245,7 @@ uv run pytest -v
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 85 tests passing (28 node + 57 graph) | 37 tests passing |
+| Status | 105 tests passing (33 node + 72 graph) | 37 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 

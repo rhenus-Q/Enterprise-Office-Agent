@@ -154,7 +154,8 @@ def test_rewrite_query_calls_rewriter_with_question_and_previous_answer(monkeypa
     result = rewrite_query({"question": "Q", "generation": "bad answer"})
 
     assert calls == [{"question": "Q", "previous_answer": "bad answer"}]
-    assert result == {"search_query": "new query"}  # output is stripped
+    assert result["search_query"] == "new query"  # output is stripped
+    assert result["llm_call_count"] == 1          # the rewrite is a counted LLM call
 
 
 # ---------------------------------------------------------------------------
