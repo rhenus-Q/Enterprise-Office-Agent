@@ -54,6 +54,8 @@ type, never the message.
 | `tests/node/` | Unit tests for node functions. Fully mocked — no API keys needed. |
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
 | `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
+| `tests/evals/` | Mocked unit tests for the eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
+| `evals/` | Behavioral eval harness: `questions.jsonl` (15-row dataset), `run_eval.py` (runs the real graph — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Not part of CI. |
 | `tests/conftest.py` | Loads `.env` before collection; provides the `requires_openai` skip marker. |
 | `pyproject.toml` | uv project config: deps, `[dependency-groups] dev`, and `[tool.pytest.ini_options]` (`pythonpath = ["."]`, `testpaths = ["tests"]`). |
 

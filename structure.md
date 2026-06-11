@@ -356,6 +356,17 @@ in privacy mode still never calls the router, Tavily, or the rewriter).
 | `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
 | `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
 | `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
+| `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
+
+Separate from the test suites, `evals/` holds a **behavioral eval harness**:
+a 15-question JSONL dataset (local-corpus / web-fallback /
+insufficient-context / privacy-mode categories) run through the real compiled
+graph by `evals/run_eval.py`, scored with deterministic checks (stop reasons,
+source provenance, counters, expected substrings) and reported to
+`evals/results.md`. Privacy-mode rows seed `web_search_enabled=False` through
+graph state (the same seam `main.py` uses) and hard-assert
+`web_search_count == 0`. The full run needs real API keys and is deliberately
+excluded from CI; `--validate-only` checks the dataset with no API calls.
 
 Run the mocked suites with `uv run pytest tests/node/ tests/graph/ -v` (no API
 keys required).
@@ -371,9 +382,9 @@ Limitations (deliberate scope):
 - Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 
 Future improvements (rough priority): LangSmith tracing evidence + structured
-logging; an offline eval harness scored with the existing graders;
-rationale-bearing grounding feedback; batched grading; migration off
-`langchain-community` for Tavily.
+logging; grader-scored (LLM-as-judge) metrics on top of the deterministic
+eval harness; rationale-bearing grounding feedback; batched grading;
+migration off `langchain-community` for Tavily.
 
 GitHub Actions CI (`.github/workflows/ci.yml`) runs the mocked suites
 (`tests/node/` + `tests/graph/`) on every push and pull request with no API
