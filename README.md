@@ -215,9 +215,15 @@ When a budget ends the run, the CLI appends:
 The defaults are deliberately sized above the worst case the `MAX_RETRIES`
 loop can produce, so default behavior is unchanged — the budgets exist as a
 hard cost backstop and for tightening in cost-sensitive deployments.
-(Hallucination/answer-grader calls are not individually counted: they are
-bounded at two per generation, so capping counted calls transitively caps
-them.)
+
+**`llm_call_count` is a tracked operational counter, not total LLM usage.**
+Router calls, local-chunk relevance grading, and the hallucination/answer
+graders are not individually counted (the graders run inside a pure
+conditional edge and are bounded at two per generation, so capping counted
+calls transitively caps them). The counter therefore understates real API
+usage by a bounded factor — fine for a budget backstop and relative
+observability, **not** billing-accurate cost accounting. True cost accounting
+would use tracing/token usage (e.g. LangSmith) rather than manual counters.
 
 ### External dependency failure handling
 
@@ -379,7 +385,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 205 tests passing (71 node + 118 graph + 16 evals) | 38 tests passing |
+| Status | 207 tests passing (71 node + 118 graph + 18 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 

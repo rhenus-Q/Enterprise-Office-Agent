@@ -13,6 +13,6 @@ class GraphState(TypedDict):
     insufficient_context: bool  # True = the latest generation is the deterministic insufficient-context answer (no usable documents); skips the graders, which have nothing to verify
     retry_feedback: str  # corrective instruction for the next generation attempt ("" = none)
     search_query: str  # rewritten web search query for retry rounds ("" = use the original question)
-    llm_call_count: int  # counted LLM calls this run (generation, query rewrite, web-result grading)
+    llm_call_count: int  # tracked LLM calls this run (generation, query rewrite, web-result grading) — a budgeted operational counter, NOT total LLM usage: router and grader calls are not individually tracked
     web_search_count: int  # Tavily searches this run
     web_result_grading_count: int  # individual web results sent to the relevance grader this run

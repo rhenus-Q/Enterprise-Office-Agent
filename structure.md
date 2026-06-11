@@ -74,7 +74,7 @@ defaults.
 | `insufficient_context` | `bool` | Set by `generate` when the latest generation is the deterministic insufficient-context answer (no usable documents); `grade_generation` then skips the graders, which have nothing to verify. |
 | `retry_feedback` | `str` | Corrective instruction for the next generation after a failed grounding check (`""` = none). |
 | `search_query` | `str` | Rewritten web-search query for retry rounds (`""` = use the original question). |
-| `llm_call_count` | `int` | Counted LLM calls this run (generations, query rewrites, web-result grades). |
+| `llm_call_count` | `int` | Tracked LLM calls this run (generations, query rewrites, web-result grades). A budgeted operational counter, not total LLM usage — router and grader calls are not individually tracked (see §12). |
 | `web_search_count` | `int` | Tavily searches this run. |
 | `web_result_grading_count` | `int` | Individual web results sent to the relevance grader this run. |
 
@@ -338,7 +338,12 @@ Deliberate accounting tradeoff: hallucination/answer-grader calls run inside a
 conditional *edge* (which cannot write state) and are bounded at two per
 generation, so they are not individually counted — capping counted calls
 transitively caps them. `grade_documents`' per-chunk grades (≤ k = 3, once per
-run, outside every loop) are likewise uncounted. Defaults sit above the worst
+run, outside every loop) and the router call are likewise uncounted. In other
+words, **`llm_call_count` is a tracked operational counter, not total LLM
+usage**: it understates real API calls by a bounded factor — adequate as a
+budget backstop and for relative observability (the eval report labels it
+"tracked LLM calls"), inadequate for billing. True cost accounting would use
+tracing/token usage rather than manual counters. Defaults sit above the worst
 case the `MAX_RETRIES` loop can produce, so the budgets never bind unless
 explicitly tightened; invalid or non-positive env values fall back to the
 defaults so a budget can never be accidentally disabled.

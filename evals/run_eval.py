@@ -258,12 +258,17 @@ def render_markdown(evaluated, metrics, dataset_path):
         f"| source_type matches | {metrics['source_type_matches'][0]} / {metrics['source_type_matches'][1]} |",
         f"| expected_contains matches | {metrics['expected_contains_matches'][0]} / {metrics['expected_contains_matches'][1]} |",
         f"| Average retries | {metrics['average_retries']} |",
-        f"| Average LLM calls | {metrics['average_llm_calls']} |",
+        f"| Average tracked LLM calls | {metrics['average_llm_calls']} |",
         f"| Total web searches | {metrics['total_web_searches']} |",
+        "",
+        "Tracked LLM calls are the graph's budgeted operational counter "
+        "(generations, query rewrites, web-result grades). Router and grader "
+        "calls are not individually tracked, so this is not total LLM usage "
+        "and not billing-accurate cost accounting.",
         "",
         "## Per-question results",
         "",
-        "| id | category | passed | stop_reason | retries | llm | web | failed checks |",
+        "| id | category | passed | stop_reason | retries | tracked llm | web | failed checks |",
         "|---|---|---|---|---|---|---|---|",
     ]
 
@@ -347,7 +352,7 @@ def run_eval(rows, output_path, dataset_path):
         passed, total = metrics[key]
         print(f"  {key}: {passed}/{total}")
     print(f"  average retries: {metrics['average_retries']}, "
-          f"average LLM calls: {metrics['average_llm_calls']}, "
+          f"average tracked LLM calls: {metrics['average_llm_calls']}, "
           f"total web searches: {metrics['total_web_searches']}")
     print(f"Report written to {output_path}")
     return metrics

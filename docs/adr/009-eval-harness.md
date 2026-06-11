@@ -37,8 +37,9 @@ A small harness under `evals/`:
   ≥ 1 search; insufficient-context rows must decline or end with a caveat).
   No LLM-as-judge in this version.
 - Output: per-category pass counts, check match rates, average retries and
-  LLM calls, total web searches — printed to stdout and written to
-  `evals/results.md` as Markdown.
+  tracked LLM calls (labeled "tracked" because the counter omits router and
+  grader calls — an operational counter, not billing), total web searches —
+  printed to stdout and written to `evals/results.md` as Markdown.
 - The insufficient-context rows run with web search disabled **on purpose**:
   with web enabled the graph would correctly answer them via fallback, which
   would test routing rather than fabrication resistance.
