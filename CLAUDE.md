@@ -43,7 +43,8 @@ type, never the message.
 | Path | Purpose |
 |------|---------|
 | `main.py` | CLI entry point. Loads `.env`, then imports the compiled `app` and runs an interactive Q&A loop. Seeds the full `GraphState`. Formats the final answer: `stop_reason` caveats plus a deterministic `Sources:` section built from `Document` metadata (`format_sources`; local corpus vs. `web_search` supplement). |
-| `ingestion.py` | Builds the knowledge base: loads URLs, splits, embeds, persists to Chroma. Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
+| `ingestion.py` | Builds the knowledge base: loads the local Markdown corpus from `data/acmecorp_internal_docs/`, splits, embeds, persists to Chroma (idempotent: collection reset + deterministic chunk ids; provenance metadata `source`/`title`/`source_type`/`document_category`). Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
+| `data/acmecorp_internal_docs/` | Synthetic AcmeCorp enterprise corpus: 6 fictional internal Markdown documents (VPN, expenses, incident response, on-call, data retention, onboarding). No real company data — safe to edit/extend. |
 | `graph/graph.py` | Assembles the LangGraph `StateGraph`, wires nodes + conditional edges, exports compiled `app`. Holds `MAX_RETRIES` and the routing decision functions. |
 | `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `retries`, `stop_reason`, `retry_feedback`, `search_query`, plus budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). |
 | `graph/config.py` | Env-driven runtime flags: `web_search_enabled()` (privacy mode) and the per-run budgets `max_llm_calls_per_run()` / `max_web_searches_per_run()` / `max_web_results_to_grade()`. |

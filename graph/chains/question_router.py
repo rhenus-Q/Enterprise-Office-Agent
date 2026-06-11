@@ -4,7 +4,8 @@ question_router.py
 Purpose:
 - Decide where a user question should go first.
 - Route to the vector store ("retrieve") when the question is about the
-  ingested enterprise / LangChain knowledge base.
+  ingested AcmeCorp internal-document knowledge base (company policies,
+  playbooks, and guides).
 - Route to "websearch" when the question is outside that knowledge base
   (e.g. current events, general web knowledge).
 
@@ -33,8 +34,9 @@ class RouteQuery(BaseModel):
         description=(
             "Given a user question, choose the best datasource. "
             "Use 'retrieve' if the question can be answered from the internal "
-            "vector store (enterprise docs, LangChain RAG / vector store / "
-            "text splitter concepts). "
+            "vector store (AcmeCorp internal documents: VPN access, expense "
+            "reimbursement, security incident response, on-call escalation, "
+            "data retention, employee onboarding). "
             "Use 'websearch' if the question needs up-to-date or external "
             "information not covered by the internal documents."
         )
@@ -42,16 +44,18 @@ class RouteQuery(BaseModel):
 
 
 system_prompt = """
-You are a routing expert for an enterprise RAG system.
+You are a routing expert for AcmeCorp's internal knowledge assistant.
 
-The internal vector store contains documents about:
-- Retrieval-Augmented Generation (RAG)
-- Vector stores
-- Text splitters
+The internal vector store contains AcmeCorp internal company documents:
+- IT & security: VPN access policy, security incident response playbook
+- Operations: on-call and escalation policy
+- Finance: expense reimbursement policy
+- Compliance: data retention policy
+- HR: employee onboarding guide
 
 Routing rules:
-- If the question is about these topics (or related LangChain concepts),
-  route to 'retrieve'.
+- If the question is about AcmeCorp policies, procedures, internal tools,
+  or any topic these documents plausibly cover, route to 'retrieve'.
 - If the question is about current events, real-time data, or general
   knowledge clearly outside the indexed documents, route to 'websearch'.
 - When in doubt and the topic is plausibly in the knowledge base,
