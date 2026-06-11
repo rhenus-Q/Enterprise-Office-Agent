@@ -17,12 +17,14 @@
 | source_type matches | 11 / 11 |
 | expected_contains matches | 6 / 6 |
 | Average retries | 1.0 |
-| Average LLM calls | 1.93 |
+| Average tracked LLM calls | 1.93 |
 | Total web searches | 6 |
+
+Tracked LLM calls are the graph's budgeted operational counter (generations, query rewrites, web-result grades). Router and grader calls are not individually tracked, so this is not total LLM usage and not billing-accurate cost accounting.
 
 ## Per-question results
 
-| id | category | passed | stop_reason | retries | llm | web | failed checks |
+| id | category | passed | stop_reason | retries | tracked llm | web | failed checks |
 |---|---|---|---|---|---|---|---|
 | local-vpn-access | local_corpus | PASS | — | 1 | 1 | 0 | — |
 | local-expense-approval | local_corpus | PASS | — | 1 | 1 | 0 | — |

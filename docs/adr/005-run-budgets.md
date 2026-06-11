@@ -52,8 +52,10 @@ drive an unbounded retry loop (ADR 006).
   failures; defaults sit above the retry loop's worst case, so default
   behavior is unchanged and the budgets act purely as a backstop.
 - Cost-sensitive deployments tighten three env vars without code changes.
-- Counters double as observability: the eval harness reports average LLM
-  calls and total web searches per run.
+- Counters double as observability: the eval harness reports average
+  *tracked* LLM calls and total web searches per run — labeled "tracked"
+  precisely because the counter is partial (see Trade-offs), and the report
+  carries a note saying it is not total usage or billing.
 
 ## Trade-offs
 

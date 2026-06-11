@@ -271,3 +271,26 @@ def test_render_markdown_includes_metrics_and_every_row():
     assert "Overall passed | 3 / 3" in report
     for entry in evaluated:
         assert entry["row"]["id"] in report
+
+
+def test_render_markdown_labels_llm_calls_as_tracked():
+    # The counter is a budgeted operational counter, not total LLM usage;
+    # the report label must not overstate it.
+    evaluated = _evaluated_fixture()
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+
+    assert "Average tracked LLM calls" in report
+    assert "| Average LLM calls |" not in report
+    assert "| tracked llm |" in report  # per-question column header
+
+
+def test_render_markdown_includes_partial_counter_note():
+    evaluated = _evaluated_fixture()
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+
+    assert "Router and grader calls are not individually tracked" in report
+    assert "not billing-accurate" in report
