@@ -10,7 +10,8 @@ from langchain_core.documents import Document
 
 import importlib
 
-from graph.nodes.generate import generate
+from graph.consts import STOP_REASON_GENERATION_ERROR
+from graph.nodes.generate import GENERATION_FAILED_ANSWER, generate
 
 # graph/nodes/__init__.py re-exports the `generate` function under the same name
 # as its submodule, so `import graph.nodes.generate as ...` would bind the
@@ -127,3 +128,45 @@ def test_generate_uses_safe_defaults_for_missing_keys(monkeypatch):
     assert calls["documents"] == []         # default [] is what gets passed onward
     assert result["retries"] == 1           # 0 + 1
     assert result["web_search"] is False    # default False
+
+
+# ---------------------------------------------------------------------------
+# Graceful degradation: generation LLM failure
+# ---------------------------------------------------------------------------
+
+
+def _patch_failing_generate_answer(monkeypatch):
+    def exploding_generate_answer(question, documents, retry_feedback=""):
+        raise RuntimeError("openai is down")
+
+    monkeypatch.setattr(generate_module, "generate_answer", exploding_generate_answer)
+
+
+def test_generation_failure_returns_safe_answer_and_stop_reason(monkeypatch):
+    _patch_failing_generate_answer(monkeypatch)
+
+    docs = [Document(page_content="chunk")]
+    result = generate({"question": "Q", "documents": docs, "retries": 0})  # must not raise
+
+    # The failed call is never presented as a normal answer: the generation is
+    # a deterministic placeholder and the stop reason routes the run to END.
+    assert result["generation"] == GENERATION_FAILED_ANSWER
+    assert result["stop_reason"] == STOP_REASON_GENERATION_ERROR
+
+
+def test_generation_failure_still_counts_retry_and_llm_call(monkeypatch):
+    _patch_failing_generate_answer(monkeypatch)
+
+    docs = [Document(page_content="chunk")]
+    result = generate({"question": "Q", "documents": docs, "retries": 1, "llm_call_count": 4})
+
+    assert result["retries"] == 2           # the attempt happened
+    assert result["llm_call_count"] == 5    # the failed API call still counts
+
+
+def test_generation_success_does_not_write_stop_reason(monkeypatch):
+    _patch_generate_answer(monkeypatch)
+
+    result = generate({"question": "Q", "documents": [], "retries": 0})
+
+    assert "stop_reason" not in result

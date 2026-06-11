@@ -20,6 +20,9 @@ LangGraph workflow:
   attempts, bounded by a retry budget.
 - Runs that cannot end with a passing answer record a machine-readable
   `stop_reason`, and the CLI attaches an explicit user-facing caveat.
+- External dependency failures (retriever, web search, generation LLM,
+  graders, query rewriter) never crash the graph: they degrade or stop
+  safely with their own `stop_reason` values (see §13).
 
 ## 2. High-level architecture
 
@@ -81,6 +84,7 @@ defaults.
 | `max_retries_not_grounded_notice` | `MAX_RETRIES_NOT_GROUNDED_NOTICE` | Terminal: records `stop_reason = "max_retries_not_grounded"`. |
 | `max_retries_not_useful_notice` | `MAX_RETRIES_NOT_USEFUL_NOTICE` | Terminal: records `stop_reason = "max_retries_not_useful"`. |
 | `budget_exhausted_notice` | `BUDGET_EXHAUSTED_NOTICE` | Terminal: records `stop_reason = "budget_exhausted"`. |
+| `tool_error_notice` | `TOOL_ERROR_NOTICE` | Terminal: records `stop_reason = "tool_error"` (a grader call failed; the answer is delivered explicitly unverified). |
 
 ## 5. Conditional routing
 
@@ -98,7 +102,7 @@ Three pure decision functions in `graph/graph.py`:
   `generate` proceeds with whatever relevant chunks remain (possibly none, which
   yields the deterministic insufficient-context answer).
 
-**`grade_generation`** (after generation; six explicit outcomes, each mapped
+**`grade_generation`** (after generation; eight explicit outcomes, each mapped
 one-to-one to an edge)
 
 | Outcome | Condition | Next |
@@ -110,8 +114,12 @@ one-to-one to an edge)
 | `max_retries_not_grounded` | failed grounding at the retry limit | notice node → `END` |
 | `max_retries_not_useful` | grounded but off-target at the retry limit | notice node → `END` |
 | `budget_exhausted` | per-run cost budget spent (LLM-call budget, checked before grading; or web-search budget when another search round would be needed) | notice node → `END` |
+| `generation_error` | the generation LLM call itself failed (the generate node recorded the stop reason and a safe placeholder answer) | `END` directly, never graded |
+| `tool_error` | a hallucination/answer grader call failed — the answer cannot be verified | notice node → `END` |
 
 Ordering details that matter:
+- A **`generation_error` is checked before everything else** — a failed
+  generation must never be graded, retried, or presented as a normal answer.
 - The **LLM-call budget is checked first, before the graders run** — a spent
   budget must not spend more, so the final answer goes out ungraded with a
   caveat saying exactly that.
@@ -151,11 +159,15 @@ flowchart TD
     AG -- "not useful,<br/>retries exhausted" --> N2[max_retries_not_useful_notice]
     GEN -. "cost budget spent<br/>(checked before grading)" .-> N4[budget_exhausted_notice]
     AG -. "not useful,<br/>web budget spent" .-> N4
+    GEN -. "generation LLM failed<br/>(never graded)" .-> E
+    HG -. "grader call failed" .-> N5[tool_error_notice]
+    AG -. "grader call failed" .-> N5
 
     N1 --> E
     N2 --> E
     N3 --> E
     N4 --> E
+    N5 --> E
 ```
 
 Step by step:
@@ -236,6 +248,17 @@ both modes.
 | `max_retries_not_grounded` | Retry limit hit; answer still failed grounding | "Did not pass the anti-hallucination check… do not treat as fully reliable." |
 | `max_retries_not_useful` | Retry limit hit; grounded but still off-target | "Grounded but may not fully answer your question." |
 | `budget_exhausted` | Per-run cost budget spent before the gates passed | "Stopped because the per-run cost/latency budget was reached… may be incomplete or not fully verified." |
+| `retrieval_error` | Chroma / retriever failed; run degraded (web fallback or insufficient-context answer) | "Local document retrieval failed… answer may be incomplete or unavailable." |
+| `web_search_error` | Tavily search failed; run continued with local documents only | "Web search failed, so I answered only from the local knowledge base…" |
+| `generation_error` | The generation LLM call failed; a safe placeholder answer was returned, never graded | "The language model call failed before a reliable answer could be generated." |
+| `tool_error` | A grader or the query rewriter failed; content was dropped ungraded or verification was skipped | "An internal step failed… answer may be incomplete or not fully verified." |
+
+Degraded-run reasons (`retrieval_error`, `web_search_error`, `tool_error`
+written by mid-run nodes) persist to the end of the run, so even an answer
+that later passes every gate carries an honest caveat. Terminal notice nodes
+overwrite an earlier reason when a later failure ends the run — the reason
+that actually stopped the run wins. Nodes only write `stop_reason` on
+failure, so a successful step never clobbers an earlier recorded reason.
 
 ## 11. Retry exhaustion
 
@@ -267,18 +290,51 @@ case the `MAX_RETRIES` loop can produce, so the budgets never bind unless
 explicitly tightened; invalid or non-positive env values fall back to the
 defaults so a budget can never be accidentally disabled.
 
-## 13. Testing overview
+## 13. External dependency failure handling
+
+Every external call is wrapped in a `try/except Exception` at its existing
+seam. The design rules:
+
+- **Failures in nodes write `stop_reason` directly** (nodes are the only
+  legal state writers). Failures inside the pure `grade_generation` edge
+  return a dedicated outcome routed to the `tool_error_notice` node instead.
+- **Console banners log only the exception type** (e.g.
+  `---WEB SEARCH FAILED (TimeoutError): ...---`) — never the message, which
+  could carry secrets, keys, or paths.
+- **Ungraded content is never trusted**: a relevance-grader failure drops the
+  affected chunk/result; a hallucination/answer-grader failure ends the run
+  with the answer explicitly flagged unverified.
+- **Failed attempts still count against budgets** (a failed Tavily call
+  increments `web_search_count`; failed LLM calls increment
+  `llm_call_count`), so a persistently failing dependency cannot drive an
+  unbounded retry loop.
+
+Per dependency:
+
+| Failure | Reaction | Continues? |
+|---|---|---|
+| Retriever / Chroma (`retrieve`) | Empty documents + `web_search=True` → degrade to web fallback (privacy mode: deterministic insufficient-context answer); `grade_documents` preserves the incoming flag | yes |
+| Tavily (`websearch`) | Local documents only (stale web supplement already dropped); attempt budgeted | yes |
+| Generation LLM (`generate`) | Safe placeholder answer + `generation_error`; `grade_generation` routes straight to `END` — never graded | no |
+| Query rewriter (`rewrite_query`) | `search_query=""` → next search uses the original question; loop stays fully gated | yes |
+| Retrieval grader (`grade_documents` / `websearch`) | Ungraded chunk/result dropped; remaining items still graded; web fallback requested for dropped local chunks | yes |
+| Hallucination / answer grader (`grade_generation`) | `tool_error` → notice node → `END`; answer delivered explicitly unverified | no |
+
+All privacy-mode guarantees hold on every failure path (a retrieval failure
+in privacy mode still never calls the router, Tavily, or the rewriter).
+
+## 14. Testing overview
 
 | Suite | What it covers | External calls |
 |---|---|---|
-| `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing | None — every dependency mocked at its lazy `get_*()` factory seam |
-| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
+| `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
+| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
 | `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
 
 Run the mocked suites with `uv run pytest tests/node/ tests/graph/ -v` (no API
 keys required).
 
-## 14. Known limitations & future improvements
+## 15. Known limitations & future improvements
 
 Limitations (deliberate scope):
 - Single-turn CLI; no conversation memory or API surface.

@@ -9,6 +9,7 @@ from langchain_core.documents import Document
 
 import importlib
 
+from graph.consts import STOP_REASON_TOOL_ERROR
 from graph.nodes.grade_documents import grade_documents
 
 # graph/nodes/__init__.py re-exports the `grade_documents` function under the same
@@ -86,3 +87,64 @@ def test_preserves_question_and_filtered_documents(monkeypatch):
 
     assert result["question"] == "my question"
     assert result["documents"] == [keep]
+
+
+# ---------------------------------------------------------------------------
+# Graceful degradation: grader failures and incoming fallback flags
+# ---------------------------------------------------------------------------
+
+
+def _patch_grader_with_failures(monkeypatch, relevance_by_content):
+    """Like _patch_grader, but a content mapped to 'raise' makes the grader explode."""
+
+    class FlakyGrader:
+        def invoke(self, payload):
+            outcome = relevance_by_content[payload["document"]]
+            if outcome == "raise":
+                raise RuntimeError("grader is down")
+            return _FakeGrade(outcome)
+
+    monkeypatch.setattr(grade_module, "get_retrieval_grader", lambda: FlakyGrader())
+
+
+def test_grader_failure_drops_ungraded_document_and_requests_web_search(monkeypatch):
+    keep = Document(page_content="good")
+    ungraded = Document(page_content="boom")
+    _patch_grader_with_failures(monkeypatch, {"good": True, "boom": "raise"})
+
+    result = grade_documents({"question": "Q", "documents": [keep, ungraded]})  # must not raise
+
+    assert result["documents"] == [keep]            # ungraded content is never trusted
+    assert result["web_search"] is True
+    assert result["stop_reason"] == STOP_REASON_TOOL_ERROR
+
+
+def test_grader_failure_keeps_grading_remaining_documents(monkeypatch):
+    first = Document(page_content="boom")
+    second = Document(page_content="good")
+    _patch_grader_with_failures(monkeypatch, {"boom": "raise", "good": True})
+
+    result = grade_documents({"question": "Q", "documents": [first, second]})
+
+    assert result["documents"] == [second]
+
+
+def test_success_does_not_write_stop_reason(monkeypatch):
+    docs = [Document(page_content="a")]
+    _patch_grader(monkeypatch, {"a": True})
+
+    result = grade_documents({"question": "Q", "documents": docs})
+
+    assert "stop_reason" not in result
+
+
+def test_preserves_incoming_web_search_fallback_request(monkeypatch):
+    # retrieve sets web_search=True when the retriever failed; grading all
+    # remaining documents as relevant must not cancel that fallback.
+    _patch_grader(monkeypatch, {"a": True})
+
+    result = grade_documents(
+        {"question": "Q", "documents": [Document(page_content="a")], "web_search": True}
+    )
+
+    assert result["web_search"] is True

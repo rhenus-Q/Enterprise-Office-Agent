@@ -18,6 +18,7 @@ This project implements an internal-document Q&A assistant as an **agentic RAG w
 - **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
 - **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
 - **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
+- **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
 - **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
 - **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
 
@@ -53,12 +54,14 @@ flowchart TD
 3. **`grade_documents`** — each chunk is graded individually (`is_relevant: bool`); irrelevant chunks are dropped, and if any chunk failed, a `web_search` flag routes the flow through Tavily before generating.
 4. **`websearch`** — searches with the rewritten `search_query` on retry rounds (original question otherwise). Each Tavily result is individually graded for relevance against the *original* question (reusing the retrieval grader, so external content faces the same gate as internal chunks); only relevant results are merged into a single `Document` (tagged `source: web_search`), which **replaces** any previous web supplement instead of stacking duplicates. Malformed responses and irrelevant results are dropped defensively — if nothing usable comes back, the workflow continues with the existing documents.
 5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM. Each pass increments `retries`.
-6. **`grade_generation`** (conditional edge) — two-layer check with six explicit outcomes:
+6. **`grade_generation`** (conditional edge) — two-layer check with eight explicit outcomes:
    - `not_grounded` → `add_grounding_feedback` injects a corrective instruction into the next generation, then regenerate,
    - `useful` → END,
    - `not_useful` → `rewrite_query` produces a more specific search query, then web search and regenerate,
    - `web_search_disabled` → terminal notice node (privacy mode; see below),
-   - `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one).
+   - `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one),
+   - `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
+   - `tool_error` → a grader call failed; the run ends through a terminal notice node with the answer explicitly flagged as unverified.
 
 State is a minimal `TypedDict` (`question`, `documents`, `generation`, `web_search`, `retries`) defined in `graph/state.py`.
 
@@ -194,6 +197,27 @@ hard cost backstop and for tightening in cost-sensitive deployments.
 (Hallucination/answer-grader calls are not individually counted: they are
 bounded at two per generation, so capping counted calls transitively caps
 them.)
+
+### External dependency failure handling
+
+A failing external dependency never crashes the graph. Each failure is caught
+at its call site, logged by category only (exception type, never messages that
+could carry secrets), recorded as a `stop_reason`, and surfaced to the user as
+a caveat appended by the CLI:
+
+| Failure | Behavior | `stop_reason` |
+|---|---|---|
+| Chroma retriever | Degrade to web-search fallback (or the deterministic insufficient-context answer in privacy mode) | `retrieval_error` |
+| Tavily search | Continue with local documents only; the failed attempt still counts against the web-search budget | `web_search_error` |
+| Generation LLM | Stop immediately with a safe placeholder answer — the failed generation is never graded or presented as normal | `generation_error` |
+| Query rewriter | Fall back to searching with the original question; the retry loop continues fully gated | `tool_error` |
+| Relevance grader (local chunk or web result) | Drop the ungraded content — unvetted content never reaches generation; the rest continues | `tool_error` |
+| Hallucination / answer grader | Stop and deliver the answer explicitly flagged as unverified | `tool_error` |
+
+Degraded runs keep their `stop_reason` to the end, so even an answer that
+later passes every gate carries an honest note about what failed along the
+way. All privacy-mode guarantees, budgets, and retry limits remain in force
+on every failure path.
 
 ## Build the knowledge base (ingestion)
 

@@ -40,6 +40,15 @@ Failure surfacing: runs that cannot end with a passing answer (web search
 disabled, or MAX_RETRIES exhausted while a quality gate still fails) terminate
 through small notice nodes that record state["stop_reason"], so main.py can
 attach a user-facing caveat instead of presenting the answer as successful.
+
+Graceful degradation: external dependency failures (Chroma retriever, Tavily,
+the generation LLM, the graders, the query rewriter) never crash the graph.
+Nodes catch the failure at the call site, degrade or stop safely, and record a
+stop_reason (retrieval_error / web_search_error / generation_error /
+tool_error). Grader failures inside the pure grade_generation edge route to
+the tool_error notice node; a failed generation routes straight to END,
+ungraded. Console banners log only the exception type, never messages that
+could carry secrets.
 """
 
 from dotenv import load_dotenv
@@ -64,6 +73,8 @@ from graph.consts import (  # noqa: E402
     ADD_GROUNDING_FEEDBACK,
     REWRITE_QUERY,
     BUDGET_EXHAUSTED_NOTICE,
+    TOOL_ERROR_NOTICE,
+    STOP_REASON_GENERATION_ERROR,
 )
 
 from graph.config import max_llm_calls_per_run, max_web_searches_per_run  # noqa: E402
@@ -79,6 +90,7 @@ from graph.nodes import (  # noqa: E402
     add_grounding_feedback,
     rewrite_query,
     budget_exhausted_notice,
+    tool_error_notice,
 )
 
 from graph.chains.question_router import get_question_router  # noqa: E402
@@ -149,7 +161,7 @@ def decide_to_generate(state: GraphState) -> str:
 
 def grade_generation(state: GraphState) -> str:
     """
-    Two-layer quality check after generation, returning six explicit outcomes
+    Two-layer quality check after generation, returning eight explicit outcomes
     (each maps one-to-one to the conditional edges below):
 
     - "not_grounded": answer not supported by documents
@@ -169,6 +181,13 @@ def grade_generation(state: GraphState) -> str:
     - "budget_exhausted": the per-run cost budget is spent (checked BEFORE the
                              graders run, so no further spend occurs)
                              -> notice node recording a stop reason, then END.
+    - "generation_error": the generation LLM call itself failed (the generate
+                             node recorded the stop reason and substituted a
+                             safe answer) -> END directly, never graded.
+    - "tool_error":       a grader call failed, so the answer cannot be
+                             verified -> notice node recording a stop reason,
+                             then END (the answer is delivered with a caveat,
+                             never presented as verified).
     """
 
     print("---CHECK HALLUCINATIONS---")
@@ -177,6 +196,13 @@ def grade_generation(state: GraphState) -> str:
     documents = state["documents"]
     generation = state["generation"]
     retries = state.get("retries", 0)
+
+    # A failed generation must never be graded or presented as normal. The
+    # generate node already recorded the stop reason and substituted a safe
+    # answer; end the run immediately (main.py attaches the caveat).
+    if state.get("stop_reason") == STOP_REASON_GENERATION_ERROR:
+        print("---GENERATION FAILED, STOP---")
+        return "generation_error"
 
     # Per-run cost budget: checked before invoking the graders so an exhausted
     # run spends nothing more. The final answer is returned unverified, and
@@ -191,22 +217,34 @@ def grade_generation(state: GraphState) -> str:
     # This way even the MAX_RETRIES-th (final) generation is fully graded;
     # only when it fails and would otherwise loop do we stop via "max_retries".
 
-    grounded = get_hallucination_grader().invoke(
-        {
-            "documents": documents,
-            "generation": generation,
-        }
-    )
+    # Grader failures are conservative: an answer whose verification failed
+    # is never presented as verified. The tool_error notice node records the
+    # stop reason (this edge is pure and cannot write state).
+    try:
+        grounded = get_hallucination_grader().invoke(
+            {
+                "documents": documents,
+                "generation": generation,
+            }
+        )
+    except Exception as exc:
+        # Log only the exception type: messages may carry secrets.
+        print(f"---GROUNDING CHECK FAILED ({type(exc).__name__}), STOP WITH UNVERIFIED ANSWER---")
+        return "tool_error"
 
     if grounded.is_grounded:
         print("---DECISION: GROUNDED, GRADE ANSWER USEFULNESS---")
 
-        useful = get_answer_grader().invoke(
-            {
-                "question": question,
-                "generation": generation,
-            }
-        )
+        try:
+            useful = get_answer_grader().invoke(
+                {
+                    "question": question,
+                    "generation": generation,
+                }
+            )
+        except Exception as exc:
+            print(f"---USEFULNESS CHECK FAILED ({type(exc).__name__}), STOP WITH UNVERIFIED ANSWER---")
+            return "tool_error"
 
         if useful.answers_question:
             # Answer passes: end directly, regardless of how many generations occurred.
@@ -265,6 +303,7 @@ workflow.add_node(MAX_RETRIES_NOT_USEFUL_NOTICE, max_retries_not_useful_notice)
 workflow.add_node(ADD_GROUNDING_FEEDBACK, add_grounding_feedback)
 workflow.add_node(REWRITE_QUERY, rewrite_query)
 workflow.add_node(BUDGET_EXHAUSTED_NOTICE, budget_exhausted_notice)
+workflow.add_node(TOOL_ERROR_NOTICE, tool_error_notice)
 
 # 2. Entry: route_question decides the first step
 workflow.set_conditional_entry_point(
@@ -310,6 +349,12 @@ workflow.add_conditional_edges(
         "max_retries_not_useful": MAX_RETRIES_NOT_USEFUL_NOTICE,
         # per-run cost budget spent -> record the stop reason, then stop
         "budget_exhausted": BUDGET_EXHAUSTED_NOTICE,
+        # the generation call itself failed -> the generate node already
+        # recorded the stop reason and a safe answer; end directly
+        "generation_error": END,
+        # a grader call failed -> record the stop reason, then stop with an
+        # explicitly unverified answer
+        "tool_error": TOOL_ERROR_NOTICE,
     },
 )
 
@@ -323,6 +368,7 @@ workflow.add_edge(WEB_SEARCH_DISABLED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_GROUNDED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_USEFUL_NOTICE, END)
 workflow.add_edge(BUDGET_EXHAUSTED_NOTICE, END)
+workflow.add_edge(TOOL_ERROR_NOTICE, END)
 
 # 9. Compile into a callable app
 app = workflow.compile()

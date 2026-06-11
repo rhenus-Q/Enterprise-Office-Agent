@@ -8,9 +8,13 @@ load_dotenv()
 from graph.config import web_search_enabled  # noqa: E402
 from graph.consts import (  # noqa: E402
     STOP_REASON_BUDGET_EXHAUSTED,
+    STOP_REASON_GENERATION_ERROR,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL,
+    STOP_REASON_RETRIEVAL_ERROR,
+    STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_DISABLED,
+    STOP_REASON_WEB_SEARCH_ERROR,
 )
 from graph.graph import app  # noqa: E402
 
@@ -45,12 +49,44 @@ BUDGET_EXHAUSTED_NOTE = (
     "reached. The answer may be incomplete or not fully verified."
 )
 
+# Caveat shown when the local retriever (Chroma) failed; the run degraded to
+# web search (or the insufficient-context answer in privacy mode).
+RETRIEVAL_ERROR_NOTE = (
+    "Note: Local document retrieval failed, so the answer may be incomplete "
+    "or unavailable."
+)
+
+# Caveat shown when the web search call (Tavily) failed; the run continued
+# with the local knowledge base only.
+WEB_SEARCH_ERROR_NOTE = (
+    "Note: Web search failed, so I answered only from the local knowledge "
+    "base. The answer may be incomplete."
+)
+
+# Caveat shown when the generation LLM call itself failed; the answer above
+# is a safe placeholder, not a real generated answer.
+GENERATION_ERROR_NOTE = (
+    "Note: The language model call failed before a reliable answer could be "
+    "generated. Please try again."
+)
+
+# Caveat shown when an internal tool call (a grader or the query rewriter)
+# failed; the answer may be missing dropped content or skipped verification.
+TOOL_ERROR_NOTE = (
+    "Note: An internal step failed during processing, so this answer may be "
+    "incomplete or not fully verified."
+)
+
 # Maps a recorded stop reason to the caveat appended to the final answer.
 STOP_REASON_NOTES = {
     STOP_REASON_WEB_SEARCH_DISABLED: WEB_SEARCH_DISABLED_NOTE,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED: MAX_RETRIES_NOT_GROUNDED_NOTE,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL: MAX_RETRIES_NOT_USEFUL_NOTE,
     STOP_REASON_BUDGET_EXHAUSTED: BUDGET_EXHAUSTED_NOTE,
+    STOP_REASON_RETRIEVAL_ERROR: RETRIEVAL_ERROR_NOTE,
+    STOP_REASON_WEB_SEARCH_ERROR: WEB_SEARCH_ERROR_NOTE,
+    STOP_REASON_GENERATION_ERROR: GENERATION_ERROR_NOTE,
+    STOP_REASON_TOOL_ERROR: TOOL_ERROR_NOTE,
 }
 
 
