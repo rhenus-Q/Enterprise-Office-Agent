@@ -214,6 +214,113 @@ def test_web_search_mixed_results_appends_only_relevant_content(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Page-level provenance (web_sources metadata) + dict-shaped Tavily responses
+# ---------------------------------------------------------------------------
+
+
+def test_web_search_stores_url_and_title_for_relevant_results(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            {"content": "alpha", "url": "https://a.example", "title": "Page A"},
+            {"content": "beta", "url": "https://b.example", "title": "Page B"},
+        ],
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"][0].metadata["web_sources"] == [
+        {"title": "Page A", "url": "https://a.example"},
+        {"title": "Page B", "url": "https://b.example"},
+    ]
+
+
+def test_web_search_excludes_irrelevant_results_from_web_sources(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            {"content": "useful", "url": "https://keep.example", "title": "Keep"},
+            {"content": "noise", "url": "https://drop.example", "title": "Drop"},
+        ],
+    )
+    _patch_grader(monkeypatch, {"useful": True, "noise": False})
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"][0].metadata["web_sources"] == [
+        {"title": "Keep", "url": "https://keep.example"}
+    ]
+
+
+def test_web_search_deduplicates_web_source_urls(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            {"content": "part one", "url": "https://same.example", "title": "Same Page"},
+            {"content": "part two", "url": "https://same.example", "title": "Same Page (cached)"},
+        ],
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    web_doc = result["documents"][0]
+    # Both relevant contents are kept; the page is cited once (first title wins).
+    assert "part one" in web_doc.page_content
+    assert "part two" in web_doc.page_content
+    assert web_doc.metadata["web_sources"] == [
+        {"title": "Same Page", "url": "https://same.example"}
+    ]
+
+
+def test_web_search_results_without_urls_yield_empty_web_sources(monkeypatch):
+    # Provenance falls back to the query-level citation downstream.
+    _patch_tool(monkeypatch, [{"content": "no url here"}])
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"][0].metadata["web_sources"] == []
+    assert result["documents"][0].metadata["search_query"] == "Q"
+
+
+def test_web_search_parses_dict_shaped_tavily_response(monkeypatch):
+    # langchain-tavily's TavilySearch returns {"results": [...]} rather than a
+    # bare list; both shapes must work.
+    _patch_tool(
+        monkeypatch,
+        {
+            "query": "Q",
+            "results": [
+                {"content": "alpha", "url": "https://a.example", "title": "Page A"}
+            ],
+            "response_time": 0.5,
+        },
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert len(result["documents"]) == 1
+    assert result["documents"][0].page_content == "alpha"
+    assert result["documents"][0].metadata["web_sources"] == [
+        {"title": "Page A", "url": "https://a.example"}
+    ]
+
+
+def test_web_search_handles_error_dict_response_without_crashing(monkeypatch):
+    # langchain-tavily returns {"error": ...} on wrapped failures.
+    _patch_tool(monkeypatch, {"error": "rate limited"})
+    grader_calls = _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"] == []
+    assert grader_calls == []
+
+
+# ---------------------------------------------------------------------------
 # Per-run budgets: search guard, search counter, grading cap
 # ---------------------------------------------------------------------------
 

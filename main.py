@@ -102,16 +102,47 @@ LOCAL_SOURCE_FALLBACK_LABEL = "Local corpus document"
 WEB_SOURCE_FALLBACK_LABEL = "Web search result"
 
 
+def _web_source_lines(metadata) -> list:
+    """
+    Citation lines for the web supplement, best provenance first.
+
+    Page-level when the websearch node recorded result URLs (web_sources):
+    one line per page, "title — url" or the bare URL without a title. Falls
+    back to the query-level citation ('Web search: "<query>"'), then to the
+    generic safe label. Only metadata is read — never page content.
+    """
+
+    lines = []
+    for entry in metadata.get("web_sources") or []:
+        if not isinstance(entry, dict):
+            continue
+        url = str(entry.get("url") or "").strip()
+        if not url:
+            continue
+        title = str(entry.get("title") or "").strip()
+        lines.append(f"- Web search: {title} — {url}" if title else f"- Web search: {url}")
+
+    if lines:
+        return lines
+
+    query = str(metadata.get("search_query") or "").strip()
+    if query:
+        return [f'- Web search: "{query}"']
+
+    return [f"- {WEB_SOURCE_FALLBACK_LABEL}"]
+
+
 def format_sources(documents) -> str:
     """
     Build the "Sources:" section from the final working documents.
 
     Local corpus documents are labeled by their ingestion metadata (title,
-    falling back to the source URL); the web supplement by the search query
-    that produced it. Missing metadata falls back to safe generic labels,
-    duplicate lines are collapsed (several chunks of one page cite it once),
-    and document content is never exposed. Returns "" when there is nothing
-    to cite, so no misleading Sources section is shown.
+    falling back to the source URL); the web supplement by the actual pages
+    used (title — URL, recorded by the websearch node), falling back to the
+    search query that produced it. Missing metadata falls back to safe
+    generic labels, duplicate lines are collapsed (several chunks of one page
+    cite it once), and document content is never exposed. Returns "" when
+    there is nothing to cite, so no misleading Sources section is shown.
     """
 
     lines = []
@@ -121,15 +152,15 @@ def format_sources(documents) -> str:
         metadata = getattr(doc, "metadata", None) or {}
 
         if metadata.get("source") == WEB_SEARCH_SOURCE:
-            query = str(metadata.get("search_query") or "").strip()
-            line = f'- Web search: "{query}"' if query else f"- {WEB_SOURCE_FALLBACK_LABEL}"
+            doc_lines = _web_source_lines(metadata)
         else:
             label = str(metadata.get("title") or metadata.get("source") or "").strip()
-            line = f"- Local corpus: {label}" if label else f"- {LOCAL_SOURCE_FALLBACK_LABEL}"
+            doc_lines = [f"- Local corpus: {label}" if label else f"- {LOCAL_SOURCE_FALLBACK_LABEL}"]
 
-        if line not in seen:
-            seen.add(line)
-            lines.append(line)
+        for line in doc_lines:
+            if line not in seen:
+                seen.add(line)
+                lines.append(line)
 
     if not lines:
         return ""

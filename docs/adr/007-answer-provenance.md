@@ -30,8 +30,14 @@ Provenance is **pure post-run formatting of `Document` metadata**, done in
 - **The web supplement** is detected by the shared `WEB_SEARCH_SOURCE`
   metadata marker (a constant in `graph/consts.py` used by both the
   `websearch` node that writes it and `main.py` that reads it, so they cannot
-  drift) and cited as `Web search: "<query>"` using the `search_query` the
-  node recorded — falling back to `Web search result`.
+  drift). Citation is **page-level** when result URLs are known: the node
+  records `web_sources` (one `{"title", "url"}` entry per relevant result
+  with a usable URL, deduplicated by URL), and each page is cited as
+  `Web search: <title> — <url>` (bare URL when the title is missing). Only
+  results that passed the relevance gate are recorded — a dropped page is
+  never cited. The fallback chain when no URLs are available is the original
+  query-level citation `Web search: "<query>"` using the `search_query` the
+  node recorded, then `Web search result`.
 - Duplicate lines are collapsed order-preservingly (several chunks of one
   policy cite it once); document *content* is never exposed; an empty
   document list produces no section at all, so there is never a misleading

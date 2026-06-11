@@ -83,6 +83,88 @@ def test_web_doc_without_query_uses_safe_label():
     assert sources == f"{SOURCES_HEADER}\n- {WEB_SOURCE_FALLBACK_LABEL}"
 
 
+def _web_doc_with_pages(*entries, content="web content", search_query="some query"):
+    return Document(
+        page_content=content,
+        metadata={
+            "source": WEB_SEARCH_SOURCE,
+            "source_type": "web",
+            "search_query": search_query,
+            "web_sources": list(entries),
+        },
+    )
+
+
+def test_web_doc_with_pages_shows_title_and_url():
+    sources = format_sources(
+        [_web_doc_with_pages({"title": "Page A", "url": "https://a.example"})]
+    )
+
+    assert sources == f"{SOURCES_HEADER}\n- Web search: Page A — https://a.example"
+
+
+def test_web_doc_with_pages_lists_each_page_once():
+    sources = format_sources(
+        [
+            _web_doc_with_pages(
+                {"title": "Page A", "url": "https://a.example"},
+                {"title": "Page B", "url": "https://b.example"},
+            )
+        ]
+    )
+
+    assert sources == (
+        f"{SOURCES_HEADER}\n"
+        "- Web search: Page A — https://a.example\n"
+        "- Web search: Page B — https://b.example"
+    )
+
+
+def test_web_page_without_title_falls_back_to_url():
+    sources = format_sources(
+        [_web_doc_with_pages({"title": "", "url": "https://a.example"})]
+    )
+
+    assert sources == f"{SOURCES_HEADER}\n- Web search: https://a.example"
+
+
+def test_web_doc_with_empty_web_sources_falls_back_to_query():
+    # No usable URLs -> the existing query-level citation.
+    sources = format_sources(
+        [_web_doc_with_pages(search_query="fallback query")]
+    )
+
+    assert sources == f'{SOURCES_HEADER}\n- Web search: "fallback query"'
+
+
+def test_malformed_web_source_entries_are_skipped():
+    sources = format_sources(
+        [
+            _web_doc_with_pages(
+                "not-a-dict",
+                {"title": "No URL"},
+                {"title": "Good", "url": "https://good.example"},
+            )
+        ]
+    )
+
+    assert sources == f"{SOURCES_HEADER}\n- Web search: Good — https://good.example"
+
+
+def test_web_page_sources_never_expose_document_content():
+    secret_content = "SECRET-WEB-CONTENT"
+    sources = format_sources(
+        [
+            _web_doc_with_pages(
+                {"title": "Page A", "url": "https://a.example"},
+                content=secret_content,
+            )
+        ]
+    )
+
+    assert secret_content not in sources
+
+
 def test_local_and_web_sources_are_distinguished():
     sources = format_sources(
         [_local_doc(title="RAG Concepts"), _web_doc(search_query="latest news")]
@@ -248,6 +330,8 @@ def test_app_local_answer_cites_retrieved_sources(monkeypatch):
 
 
 def test_app_web_routed_answer_cites_the_search(monkeypatch):
+    # The mocked tool returns no URLs, so provenance falls back to the
+    # query-level citation.
     monkeypatch.setattr(
         graph_module,
         "get_question_router",
@@ -260,4 +344,36 @@ def test_app_web_routed_answer_cites_the_search(monkeypatch):
 
     assert formatted.startswith("FINAL ANSWER")
     assert '- Web search: "current events"' in formatted
+    assert "Local corpus" not in formatted
+
+
+def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch):
+    # With URL-bearing Tavily results (langchain-tavily dict shape), the
+    # Sources section cites the actual pages instead of the query.
+    monkeypatch.setattr(
+        graph_module,
+        "get_question_router",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(datasource=WEBSEARCH)),
+    )
+    _patch_seams(monkeypatch, retrieved_docs=[])
+
+    web_module = importlib.import_module("graph.nodes.web_search")
+    monkeypatch.setattr(
+        web_module,
+        "get_web_search_tool",
+        lambda: SimpleNamespace(
+            invoke=lambda p: {
+                "results": [
+                    {"content": "web result", "url": "https://news.example/story", "title": "Big Story"}
+                ]
+            }
+        ),
+    )
+
+    result = graph_module.app.invoke(_initial_state(question="current events"))
+    formatted = format_answer(result)
+
+    assert formatted.startswith("FINAL ANSWER")
+    assert "- Web search: Big Story — https://news.example/story" in formatted
+    assert '"current events"' not in formatted  # page-level beats query-level
     assert "Local corpus" not in formatted
