@@ -30,6 +30,14 @@ temperature=0. Both extra nodes are linear pass-throughs inside the existing
 retry cycles; every cycle still passes through generate, which increments
 the retries counter that MAX_RETRIES caps.
 
+Web-fallback policy: WEB_FALLBACK_POLICY (graph/config.py) tunes when document
+grading triggers web fallback while web search is otherwise allowed.
+"conservative" (default) generates from the remaining relevant local documents
+and uses the web only when none remain; "aggressive" restores the legacy
+any-irrelevant-doc-triggers-web behavior; "disabled" keeps local retrieval
+paths local entirely — including the post-generation not-useful retry, which
+ends through the web_fallback_disabled notice on local-only runs.
+
 Privacy mode: when state["web_search_enabled"] is False (seeded from the
 WEB_SEARCH_ENABLED env var by main.py), every websearch route above is disabled —
 questions are never sent to an external search service. Routing falls back to
@@ -75,6 +83,7 @@ from graph.consts import (  # noqa: E402
     GENERATE,
     WEBSEARCH,
     WEB_SEARCH_DISABLED_NOTICE,
+    WEB_FALLBACK_DISABLED_NOTICE,
     MAX_RETRIES_NOT_GROUNDED_NOTICE,
     MAX_RETRIES_NOT_USEFUL_NOTICE,
     ADD_GROUNDING_FEEDBACK,
@@ -84,7 +93,13 @@ from graph.consts import (  # noqa: E402
     STOP_REASON_GENERATION_ERROR,
 )
 
-from graph.config import max_llm_calls_per_run, max_web_searches_per_run  # noqa: E402
+from graph.config import (  # noqa: E402
+    WEB_FALLBACK_AGGRESSIVE,
+    WEB_FALLBACK_DISABLED,
+    max_llm_calls_per_run,
+    max_web_searches_per_run,
+    web_fallback_policy,
+)
 
 from graph.nodes import (  # noqa: E402
     retrieve,
@@ -92,6 +107,7 @@ from graph.nodes import (  # noqa: E402
     generate,
     web_search,
     web_search_disabled_notice,
+    web_fallback_disabled_notice,
     max_retries_not_grounded_notice,
     max_retries_not_useful_notice,
     add_grounding_feedback,
@@ -144,9 +160,21 @@ def route_question(state: GraphState) -> str:
 
 def decide_to_generate(state: GraphState) -> str:
     """
-    Decision after document grading:
-    - If any document was flagged as not relevant (web_search=True), go to web search first.
-    - Otherwise, generate the answer directly.
+    Decision after document grading. web_search=True means grading filtered
+    something out (or retrieval itself failed); what happens next depends on
+    the privacy switch first, then the WEB_FALLBACK_POLICY:
+
+    - Privacy mode (web_search_enabled=False): always generate from whatever
+      relevant documents remain — never web search.
+    - "conservative" (default): generate when at least one relevant local
+      document remains; web fallback only with zero relevant docs left. The
+      curated corpus is answered from first; the not-useful gate can still
+      escalate to the web later.
+    - "aggressive" (legacy CRAG): any filtered document triggers web fallback
+      before generation.
+    - "disabled": local retrieval paths never fall back to the web; with no
+      relevant docs left, generation returns the deterministic
+      insufficient-context answer instead.
     """
 
     print("---ASSESS GRADED DOCUMENTS---")
@@ -159,7 +187,22 @@ def decide_to_generate(state: GraphState) -> str:
             print("---DECISION: SOME DOCS NOT RELEVANT, WEB SEARCH DISABLED, GENERATE---")
             return GENERATE
 
-        print("---DECISION: SOME DOCS NOT RELEVANT, GO TO WEB SEARCH---")
+        policy = web_fallback_policy()
+
+        if policy == WEB_FALLBACK_AGGRESSIVE:
+            print("---DECISION: SOME DOCS NOT RELEVANT, GO TO WEB SEARCH (AGGRESSIVE POLICY)---")
+            return WEBSEARCH
+
+        if policy == WEB_FALLBACK_DISABLED:
+            print("---DECISION: WEB FALLBACK DISABLED BY POLICY, GENERATE---")
+            return GENERATE
+
+        # Conservative (default): trust the curated corpus first.
+        if state.get("documents"):
+            print("---DECISION: RELEVANT LOCAL DOCS REMAIN, GENERATE (CONSERVATIVE POLICY)---")
+            return GENERATE
+
+        print("---DECISION: NO RELEVANT LOCAL DOCS REMAIN, GO TO WEB SEARCH---")
         return WEBSEARCH
 
     print("---DECISION: GENERATE---")
@@ -168,8 +211,8 @@ def decide_to_generate(state: GraphState) -> str:
 
 def grade_generation(state: GraphState) -> str:
     """
-    Two-layer quality check after generation, returning ten explicit outcomes
-    (each maps one-to-one to the conditional edges below):
+    Two-layer quality check after generation, returning eleven explicit
+    outcomes (each maps one-to-one to the conditional edges below):
 
     - "insufficient_context": the generation is the deterministic
                              insufficient-context answer (no usable documents,
@@ -190,6 +233,10 @@ def grade_generation(state: GraphState) -> str:
     - "web_search_disabled": grounded but off-target with web search disabled
                              -> notice node recording a stop reason, then END
                                 (no way to add information; main.py shows a caveat).
+    - "web_fallback_disabled": grounded but off-target on a local-only run with
+                             WEB_FALLBACK_POLICY=disabled -> notice node
+                             recording a stop reason, then END (the policy
+                             forbids escalating a local run to the web).
     - "max_retries_not_grounded": retry limit reached, answer still not grounded
                              -> notice node recording a stop reason, then END.
     - "max_retries_not_useful":   retry limit reached, answer grounded but off-target
@@ -291,6 +338,19 @@ def grade_generation(state: GraphState) -> str:
             print("---DECISION: ANSWER NOT USEFUL, WEB SEARCH DISABLED, STOP---")
             return "web_search_disabled"
 
+        # WEB_FALLBACK_POLICY=disabled: a run that has stayed on the local
+        # retrieval path (no web search so far) must not escalate to the web
+        # post-generation either — the safer enterprise interpretation.
+        # Web-originated runs (web_search_count > 0) may still retry their
+        # own search. Checked before the retry limit because, like privacy
+        # mode, improvement was impossible regardless of retries.
+        if (
+            web_fallback_policy() == WEB_FALLBACK_DISABLED
+            and state.get("web_search_count", 0) == 0
+        ):
+            print("---DECISION: ANSWER NOT USEFUL, WEB FALLBACK DISABLED BY POLICY, STOP---")
+            return "web_fallback_disabled"
+
         # But if the limit is reached, stop protectively and record that the
         # final answer is grounded yet still off-target.
         if retries >= MAX_RETRIES:
@@ -330,6 +390,7 @@ workflow.add_node(GRADE_DOCUMENTS, grade_documents)
 workflow.add_node(GENERATE, generate)
 workflow.add_node(WEBSEARCH, web_search)
 workflow.add_node(WEB_SEARCH_DISABLED_NOTICE, web_search_disabled_notice)
+workflow.add_node(WEB_FALLBACK_DISABLED_NOTICE, web_fallback_disabled_notice)
 workflow.add_node(MAX_RETRIES_NOT_GROUNDED_NOTICE, max_retries_not_grounded_notice)
 workflow.add_node(MAX_RETRIES_NOT_USEFUL_NOTICE, max_retries_not_useful_notice)
 workflow.add_node(ADD_GROUNDING_FEEDBACK, add_grounding_feedback)
@@ -375,6 +436,9 @@ workflow.add_conditional_edges(
         # off-target but privacy mode -> record the stop reason, then stop
         # with the grounded answer (main.py attaches a user-facing caveat)
         "web_search_disabled": WEB_SEARCH_DISABLED_NOTICE,
+        # off-target on a local-only run with WEB_FALLBACK_POLICY=disabled ->
+        # record the stop reason, then stop with the grounded answer
+        "web_fallback_disabled": WEB_FALLBACK_DISABLED_NOTICE,
         # retry limit reached with a still-failing answer -> record which
         # quality gate failed, then stop (main.py attaches a warning)
         "max_retries_not_grounded": MAX_RETRIES_NOT_GROUNDED_NOTICE,
@@ -401,6 +465,7 @@ workflow.add_edge(REWRITE_QUERY, WEBSEARCH)
 
 # 8. The notice nodes are terminal: they only record a stop reason.
 workflow.add_edge(WEB_SEARCH_DISABLED_NOTICE, END)
+workflow.add_edge(WEB_FALLBACK_DISABLED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_GROUNDED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_USEFUL_NOTICE, END)
 workflow.add_edge(BUDGET_EXHAUSTED_NOTICE, END)

@@ -28,6 +28,34 @@ def web_search_enabled() -> bool:
     return os.getenv("WEB_SEARCH_ENABLED", "true").strip().lower() not in _FALSY_VALUES
 
 
+# Web-fallback policy values (WEB_FALLBACK_POLICY). Distinct from the
+# WEB_SEARCH_ENABLED privacy switch: the switch decides whether external web
+# search is allowed at all; the policy decides WHEN the system chooses
+# retrieval-triggered web fallback while web search is otherwise allowed.
+WEB_FALLBACK_CONSERVATIVE = "conservative"  # web only when zero relevant local docs remain (default)
+WEB_FALLBACK_AGGRESSIVE = "aggressive"      # legacy CRAG behavior: any irrelevant doc triggers web fallback
+WEB_FALLBACK_DISABLED = "disabled"          # local retrieval paths never fall back to the web
+
+_WEB_FALLBACK_POLICIES = {
+    WEB_FALLBACK_CONSERVATIVE,
+    WEB_FALLBACK_AGGRESSIVE,
+    WEB_FALLBACK_DISABLED,
+}
+
+
+def web_fallback_policy() -> str:
+    """
+    Read the WEB_FALLBACK_POLICY from the environment (case-insensitive,
+    whitespace-stripped). Unknown or missing values fall back to
+    "conservative" — for an enterprise internal-document assistant the safe
+    default is to answer from the curated local corpus first and use the web
+    only when nothing relevant remains.
+    """
+
+    raw = os.getenv("WEB_FALLBACK_POLICY", WEB_FALLBACK_CONSERVATIVE).strip().lower()
+    return raw if raw in _WEB_FALLBACK_POLICIES else WEB_FALLBACK_CONSERVATIVE
+
+
 # Per-run budget defaults. Sized above the worst case the MAX_RETRIES loop can
 # produce today (5 generations + 4 query rewrites + 15 web-result grades = 24
 # counted LLM calls, 5 searches, 15 grades), so the budgets never bind before

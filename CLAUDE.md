@@ -47,16 +47,16 @@ type, never the message.
 | `data/acmecorp_internal_docs/` | Synthetic AcmeCorp enterprise corpus: 6 fictional internal Markdown documents (VPN, expenses, incident response, on-call, data retention, onboarding). No real company data — safe to edit/extend. |
 | `graph/graph.py` | Assembles the LangGraph `StateGraph`, wires nodes + conditional edges, exports compiled `app`. Holds `MAX_RETRIES` and the routing decision functions. |
 | `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `retries`, `stop_reason`, `insufficient_context`, `retry_feedback`, `search_query`, plus budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). |
-| `graph/config.py` | Env-driven runtime flags: `web_search_enabled()` (privacy mode) and the per-run budgets `max_llm_calls_per_run()` / `max_web_searches_per_run()` / `max_web_results_to_grade()`. |
+| `graph/config.py` | Env-driven runtime flags: `web_search_enabled()` (privacy mode), `web_fallback_policy()` (conservative/aggressive/disabled, default conservative), and the per-run budgets `max_llm_calls_per_run()` / `max_web_searches_per_run()` / `max_web_results_to_grade()`. |
 | `graph/consts.py` | Node-name string constants (`RETRIEVE`, `GRADE_DOCUMENTS`, `GENERATE`, `WEBSEARCH`, `WEB_SEARCH_DISABLED_NOTICE`) and `stop_reason` values. |
-| `graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`, `budget_exhausted_notice`, `tool_error_notice`) that record `stop_reason`. |
+| `graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `web_fallback_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`, `budget_exhausted_notice`, `tool_error_notice`) that record `stop_reason`. |
 | `graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. |
 | `tests/node/` | Unit tests for node functions. Fully mocked — no API keys needed. |
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
 | `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
 | `tests/evals/` | Mocked unit tests for the eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
 | `evals/` | Behavioral eval harness: `questions.jsonl` (15-row dataset), `run_eval.py` (runs the real graph — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Not part of CI. |
-| `docs/adr/` | Architecture Decision Records (001–010) with an index in `docs/adr/README.md`. When a documented decision changes, update or supersede the matching ADR. |
+| `docs/adr/` | Architecture Decision Records (001–011) with an index in `docs/adr/README.md`. When a documented decision changes, update or supersede the matching ADR. |
 | `tests/conftest.py` | Loads `.env` before collection; provides the `requires_openai` skip marker. |
 | `pyproject.toml` | uv project config: deps, `[dependency-groups] dev`, and `[tool.pytest.ini_options]` (`pythonpath = ["."]`, `testpaths = ["tests"]`). |
 

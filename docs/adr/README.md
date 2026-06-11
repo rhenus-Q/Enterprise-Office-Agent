@@ -25,6 +25,7 @@ architecture.
 | [008](008-synthetic-enterprise-corpus.md) | Synthetic AcmeCorp corpus | A fictional internal-policy corpus replaces tutorial pages so the enterprise features operate on enterprise-shaped content. |
 | [009](009-eval-harness.md) | Deterministic eval harness | Behavioral evals with deterministic checks (stop reasons, provenance, counters, substrings); not run in CI. |
 | [010](010-prompt-injection-defense.md) | Prompt-injection defense | The generation prompt explicitly treats retrieved content as untrusted evidence, never as instructions — a first-line mitigation, not a complete solution. |
+| [011](011-web-fallback-policy.md) | Configurable web-fallback policy | `WEB_FALLBACK_POLICY` (conservative/aggressive/disabled, default conservative): answer from remaining relevant local docs first; web fallback only when none remain. |
 
 ## Conventions
 
