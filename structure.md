@@ -211,6 +211,13 @@ creating a new, ungoverned loop):
   `content`) are skipped defensively — the node never crashes, and a fully
   unusable response simply leaves the documents unchanged.
 
+Note that this gate checks **topical relevance, not safety**: an on-topic web
+page can still carry prompt-injection text ("ignore previous instructions",
+"reveal secrets", …) and pass the gate correctly. The generation prompt
+therefore explicitly treats all retrieved context as untrusted evidence,
+never as instructions — a first-line, prompt-level defense documented in
+[ADR 010](docs/adr/010-prompt-injection-defense.md).
+
 ## 8. Meaningful retries
 
 A retry is only worth its cost if something changes between attempts —
@@ -399,6 +406,7 @@ Limitations (deliberate scope):
 - Sequential per-chunk / per-result grading (latency and cost scale with k).
 - A single irrelevant chunk triggers the web fallback even when relevant chunks remain.
 - Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
+- Prompt-injection defense is prompt-level only (ADR 010): no injection detection, content sanitization, or domain allowlisting; generation has no tools to call, which limits but does not eliminate the impact of injected instructions.
 
 Future improvements (rough priority): LangSmith tracing evidence + structured
 logging; grader-scored (LLM-as-judge) metrics on top of the deterministic

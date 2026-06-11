@@ -95,7 +95,7 @@ State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the wor
 │   └── acmecorp_internal_docs/  # Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 ├── structure.md             # Architecture deep-dive: full workflow, state machine, design decisions
 ├── docs/
-│   └── adr/                 # Architecture Decision Records 001–009 (with index in README.md)
+│   └── adr/                 # Architecture Decision Records 001–010 (with index in README.md)
 ├── evals/
 │   ├── questions.jsonl      # Behavioral eval dataset (15 rows, 4 categories)
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
@@ -364,8 +364,9 @@ are unit-tested without API calls in `tests/evals/`. See
 
 The major design decisions — `stop_reason` semantics, privacy mode,
 meaningful retries, the web-result relevance gate, run budgets, graceful
-degradation, deterministic provenance, the synthetic corpus, and the eval
-harness — are documented as short ADRs in [`docs/adr/`](docs/adr/), each
+degradation, deterministic provenance, the synthetic corpus, the eval
+harness, and the prompt-injection defense — are documented as short ADRs in
+[`docs/adr/`](docs/adr/), each
 covering the context, the decision, its consequences, the trade-offs
 accepted, and the alternatives deliberately not chosen. Start with the
 [index](docs/adr/README.md).
@@ -378,7 +379,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 198 tests passing (64 node + 118 graph + 16 evals) | 38 tests passing |
+| Status | 205 tests passing (71 node + 118 graph + 16 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
@@ -388,6 +389,7 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 - **Observability is `print()`-based** — no structured logging, timing, or token/cost tracking out of the box (LangSmith tracing can be enabled via env vars).
 - **Aggressive web fallback** — a single irrelevant retrieved chunk triggers a web-search detour, even when relevant chunks remain.
 - **Per-document sequential grading** — relevance grading makes one LLM call per chunk.
+- **Prompt-injection defense is prompt-level only** — the generation prompt explicitly treats retrieved content (especially web results) as untrusted evidence, never as instructions ([ADR 010](docs/adr/010-prompt-injection-defense.md)). This is a first-line mitigation, not a complete solution: the relevance gate checks topicality, not safety, and there is no injection detection, content sanitization, or domain allowlisting. Generation has no tools to call, which limits — but does not eliminate — the impact of injected instructions.
 
 ## Future Improvements
 
