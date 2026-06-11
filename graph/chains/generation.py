@@ -107,21 +107,34 @@ def get_generation_chain():
     )
 
 
-def generate_answer(question: str, documents: list[Document]) -> str:
+def generate_answer(
+    question: str, documents: list[Document], retry_feedback: str = ""
+) -> str:
     """
     Generate an answer from a question + documents.
 
     This function is the single mockable seam used by the generate node.
     If no documents are available, return a deterministic insufficient-context
     answer without calling the LLM.
+
+    retry_feedback (set after a failed grounding check) is folded into the
+    question input so a retry differs meaningfully from the previous attempt —
+    without changing the prompt template or the chain's input variables.
     """
 
     if not documents:
         return INSUFFICIENT_CONTEXT_ANSWER
 
+    effective_question = question
+    if retry_feedback:
+        effective_question = (
+            f"{question}\n\n"
+            f"Important instruction for this attempt:\n{retry_feedback}"
+        )
+
     return get_generation_chain().invoke(
         {
-            "question": question,
+            "question": effective_question,
             "documents": documents,
         }
     )

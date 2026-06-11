@@ -72,7 +72,7 @@ def _generation_state(**overrides):
     return state
 
 
-def _patch_all_node_seams(monkeypatch, *, docs_relevant):
+def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
     """Mock every external seam; returns the recorded web-search invocations."""
 
     retrieve_module = importlib.import_module("graph.nodes.retrieve")
@@ -91,7 +91,9 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant):
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=docs_relevant)),
     )
     monkeypatch.setattr(
-        generate_module, "generate_answer", lambda question, documents: "FINAL ANSWER"
+        generate_module,
+        "generate_answer",
+        lambda question, documents, retry_feedback="": "FINAL ANSWER",
     )
 
     web_calls = []
@@ -102,6 +104,18 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant):
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
+    monkeypatch.setattr(
+        web_module,
+        "get_retrieval_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=web_relevant)),
+    )
+
+    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    monkeypatch.setattr(
+        rewrite_module,
+        "get_query_rewriter",
+        lambda: SimpleNamespace(invoke=lambda p: "rewritten query"),
+    )
     return web_calls
 
 
@@ -114,6 +128,8 @@ def _initial_state(enabled=True):
         "web_search_enabled": enabled,
         "retries": 0,
         "stop_reason": "",
+        "retry_feedback": "",
+        "search_query": "",
     }
 
 

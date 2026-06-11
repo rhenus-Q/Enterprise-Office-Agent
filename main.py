@@ -93,6 +93,8 @@ def main():
                 "web_search_enabled": allow_web_search,
                 "retries": 0,
                 "stop_reason": "",
+                "retry_feedback": "",
+                "search_query": "",
             }
         )
 

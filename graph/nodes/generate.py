@@ -17,7 +17,11 @@ def generate(state: GraphState):
     # state has no retries yet, so fall back to 0 via get.
     retries = state.get("retries", 0) + 1
 
-    generation = generate_answer(question, documents)
+    # Corrective feedback from a failed grounding check (empty on first pass)
+    # makes the retry input meaningfully different from the previous attempt.
+    retry_feedback = state.get("retry_feedback", "")
+
+    generation = generate_answer(question, documents, retry_feedback)
 
     return {
         "question": question,

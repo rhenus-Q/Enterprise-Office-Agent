@@ -237,10 +237,11 @@ def test_grade_not_grounded_at_retry_limit_stops(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _patch_all_node_seams(monkeypatch, *, docs_relevant):
+def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
     """
     Mock every external seam used by the compiled graph and return the list of
-    web-search invocations for assertions.
+    web-search invocations for assertions. `web_relevant` drives the relevance
+    gate the web_search node applies to external results.
     """
 
     retrieve_module = importlib.import_module("graph.nodes.retrieve")
@@ -259,7 +260,9 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant):
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=docs_relevant)),
     )
     monkeypatch.setattr(
-        generate_module, "generate_answer", lambda question, documents: "FINAL ANSWER"
+        generate_module,
+        "generate_answer",
+        lambda question, documents, retry_feedback="": "FINAL ANSWER",
     )
 
     web_calls = []
@@ -270,6 +273,18 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant):
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
+    monkeypatch.setattr(
+        web_module,
+        "get_retrieval_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=web_relevant)),
+    )
+
+    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    monkeypatch.setattr(
+        rewrite_module,
+        "get_query_rewriter",
+        lambda: SimpleNamespace(invoke=lambda p: "rewritten query"),
+    )
     return web_calls
 
 
@@ -282,6 +297,8 @@ def _initial_state(enabled):
         "web_search_enabled": enabled,
         "retries": 0,
         "stop_reason": "",
+        "retry_feedback": "",
+        "search_query": "",
     }
 
 
@@ -313,6 +330,22 @@ def test_app_disabled_never_calls_web_search_and_records_stop_reason(monkeypatch
     assert result["generation"] == "FINAL ANSWER"
     assert result["documents"] == []  # irrelevant docs filtered, nothing fetched from the web
     assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_DISABLED
+
+
+def test_app_enabled_continues_safely_when_web_results_irrelevant(monkeypatch):
+    # The router sends the question straight to web search, but every web
+    # result is graded irrelevant -> nothing is appended and the run still
+    # completes normally instead of crashing or polluting the context.
+    _patch_router(monkeypatch, WEBSEARCH)
+    _patch_graders(monkeypatch, grounded=True, useful=True)
+    web_calls = _patch_all_node_seams(monkeypatch, docs_relevant=True, web_relevant=False)
+
+    result = graph_module.app.invoke(_initial_state(enabled=True))
+
+    assert len(web_calls) == 1
+    assert result["documents"] == []  # irrelevant web content was dropped
+    assert result["generation"] == "FINAL ANSWER"
+    assert result["stop_reason"] == ""
 
 
 def test_app_disabled_successful_answer_has_no_stop_reason(monkeypatch):

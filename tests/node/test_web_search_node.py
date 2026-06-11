@@ -1,13 +1,15 @@
 """
 Unit tests for the web_search node (graph/nodes/web_search.py).
 
-The Tavily tool is mocked via monkeypatch (patching get_web_search_tool), so no real
-web search happens. Tests focus on node state input/output.
+The Tavily tool AND the retrieval grader are mocked via monkeypatch (patching
+get_web_search_tool / get_retrieval_grader), so no real web search or OpenAI
+call happens. Tests focus on node state input/output and on the relevance
+gate applied to external web results before they are appended.
 """
 
-from langchain_core.documents import Document
-
 import importlib
+
+from langchain_core.documents import Document
 
 from graph.nodes.web_search import web_search
 
@@ -31,16 +33,50 @@ def _patch_tool(monkeypatch, results):
     return calls
 
 
+class _FakeGrade:
+    """Stand-in for RetrievalGrade with just the .is_relevant field the node reads."""
+
+    def __init__(self, is_relevant):
+        self.is_relevant = is_relevant
+
+
+def _patch_grader(monkeypatch, relevance_by_content=None, default=True):
+    """
+    Patch the grader seam. Relevance comes from a content -> bool map (falling
+    back to `default`), and every grading payload is recorded for assertions.
+    """
+
+    grader_calls = []
+
+    class FakeGrader:
+        def invoke(self, payload):
+            grader_calls.append(payload)
+            content = payload["document"]
+            if relevance_by_content and content in relevance_by_content:
+                return _FakeGrade(relevance_by_content[content])
+            return _FakeGrade(default)
+
+    monkeypatch.setattr(web_search_module, "get_retrieval_grader", lambda: FakeGrader())
+    return grader_calls
+
+
+# ---------------------------------------------------------------------------
+# Baseline behavior (relevant results)
+# ---------------------------------------------------------------------------
+
+
 def test_web_search_reads_question_from_state(monkeypatch):
     calls = _patch_tool(monkeypatch, [{"content": "result"}])
+    _patch_grader(monkeypatch)
 
     web_search({"question": "What is RAG?", "documents": []})
 
     assert calls["payload"] == {"query": "What is RAG?"}
 
 
-def test_web_search_appends_document_built_from_results(monkeypatch):
+def test_web_search_appends_document_built_from_relevant_results(monkeypatch):
     _patch_tool(monkeypatch, [{"content": "alpha"}, {"content": "beta"}])
+    _patch_grader(monkeypatch)
 
     result = web_search({"question": "Q", "documents": []})
 
@@ -54,6 +90,7 @@ def test_web_search_appends_document_built_from_results(monkeypatch):
 
 def test_web_search_preserves_existing_documents_and_appends(monkeypatch):
     _patch_tool(monkeypatch, [{"content": "web"}])
+    _patch_grader(monkeypatch)
 
     existing = Document(page_content="existing")
     result = web_search({"question": "Q", "documents": [existing]})
@@ -65,7 +102,135 @@ def test_web_search_preserves_existing_documents_and_appends(monkeypatch):
 
 def test_web_search_preserves_question(monkeypatch):
     _patch_tool(monkeypatch, [{"content": "web"}])
+    _patch_grader(monkeypatch)
 
     result = web_search({"question": "keep me", "documents": []})
 
     assert result["question"] == "keep me"
+
+
+# ---------------------------------------------------------------------------
+# Rewritten search query + replacement of stale web supplements
+# ---------------------------------------------------------------------------
+
+
+def test_web_search_uses_search_query_when_present(monkeypatch):
+    calls = _patch_tool(monkeypatch, [{"content": "web"}])
+    grader_calls = _patch_grader(monkeypatch)
+
+    web_search({"question": "Q", "search_query": "rewritten query", "documents": []})
+
+    assert calls["payload"] == {"query": "rewritten query"}
+    # Relevance is still graded against the ORIGINAL question (the intent).
+    assert grader_calls[0]["question"] == "Q"
+
+
+def test_web_search_falls_back_to_question_when_search_query_empty(monkeypatch):
+    calls = _patch_tool(monkeypatch, [{"content": "web"}])
+    _patch_grader(monkeypatch)
+
+    web_search({"question": "Q", "search_query": "", "documents": []})
+
+    assert calls["payload"] == {"query": "Q"}
+
+
+def test_web_search_replaces_previous_web_supplement(monkeypatch):
+    # Retry rounds must not stack near-duplicate web documents: the stale
+    # web_search-sourced doc is dropped, other documents are preserved.
+    _patch_tool(monkeypatch, [{"content": "fresh web content"}])
+    _patch_grader(monkeypatch)
+
+    stale_web = Document(page_content="old web", metadata={"source": "web_search"})
+    internal = Document(page_content="internal chunk")
+
+    result = web_search({"question": "Q", "documents": [internal, stale_web]})
+
+    assert len(result["documents"]) == 2
+    assert result["documents"][0] is internal
+    assert result["documents"][1].page_content == "fresh web content"
+    assert "old web" not in [d.page_content for d in result["documents"]]
+
+
+# ---------------------------------------------------------------------------
+# Relevance gate on web results
+# ---------------------------------------------------------------------------
+
+
+def test_web_search_grades_each_result_against_the_question(monkeypatch):
+    _patch_tool(monkeypatch, [{"content": "alpha"}, {"content": "beta"}])
+    grader_calls = _patch_grader(monkeypatch)
+
+    web_search({"question": "What is RAG?", "documents": []})
+
+    assert [c["document"] for c in grader_calls] == ["alpha", "beta"]
+    assert all(c["question"] == "What is RAG?" for c in grader_calls)
+
+
+def test_web_search_drops_irrelevant_results(monkeypatch):
+    _patch_tool(monkeypatch, [{"content": "spam"}, {"content": "ads"}])
+    _patch_grader(monkeypatch, {"spam": False, "ads": False})
+
+    existing = Document(page_content="existing")
+    result = web_search({"question": "Q", "documents": [existing]})
+
+    assert result["documents"] == [existing]  # nothing appended
+
+
+def test_web_search_mixed_results_appends_only_relevant_content(monkeypatch):
+    _patch_tool(monkeypatch, [{"content": "useful"}, {"content": "noise"}])
+    _patch_grader(monkeypatch, {"useful": True, "noise": False})
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert len(result["documents"]) == 1
+    web_doc = result["documents"][0]
+    assert "useful" in web_doc.page_content
+    assert "noise" not in web_doc.page_content
+    assert web_doc.metadata["source"] == "web_search"
+
+
+# ---------------------------------------------------------------------------
+# Defensive handling of empty / malformed Tavily responses
+# ---------------------------------------------------------------------------
+
+
+def test_web_search_handles_string_error_response_without_crashing(monkeypatch):
+    # Tavily error responses can be a plain string instead of a result list.
+    _patch_tool(monkeypatch, "HTTPError: 502 Bad Gateway")
+    grader_calls = _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"] == []
+    assert grader_calls == []  # nothing usable, the grader LLM is never invoked
+
+
+def test_web_search_handles_empty_result_list(monkeypatch):
+    _patch_tool(monkeypatch, [])
+    grader_calls = _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"] == []
+    assert grader_calls == []
+
+
+def test_web_search_skips_malformed_entries_and_keeps_usable_ones(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            "not-a-dict",
+            {"url": "https://example.com"},   # missing "content"
+            {"content": ""},                   # empty content
+            {"content": "   "},                # whitespace-only content
+            {"content": 42},                   # non-string content
+            {"content": "good result"},
+        ],
+    )
+    grader_calls = _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert [c["document"] for c in grader_calls] == ["good result"]
+    assert len(result["documents"]) == 1
+    assert result["documents"][0].page_content == "good result"
