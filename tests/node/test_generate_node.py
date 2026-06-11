@@ -131,6 +131,28 @@ def test_generate_uses_safe_defaults_for_missing_keys(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# insufficient_context flag (drives the grading bypass in grade_generation)
+# ---------------------------------------------------------------------------
+
+
+def test_generate_flags_insufficient_context_when_documents_empty(monkeypatch):
+    _patch_generate_answer(monkeypatch)
+
+    result = generate({"question": "Q", "documents": [], "retries": 0})
+
+    assert result["insufficient_context"] is True
+
+
+def test_generate_does_not_flag_insufficient_context_with_documents(monkeypatch):
+    _patch_generate_answer(monkeypatch)
+
+    docs = [Document(page_content="chunk")]
+    result = generate({"question": "Q", "documents": docs, "retries": 0})
+
+    assert result["insufficient_context"] is False
+
+
+# ---------------------------------------------------------------------------
 # Graceful degradation: generation LLM failure
 # ---------------------------------------------------------------------------
 
@@ -152,6 +174,8 @@ def test_generation_failure_returns_safe_answer_and_stop_reason(monkeypatch):
     # a deterministic placeholder and the stop reason routes the run to END.
     assert result["generation"] == GENERATION_FAILED_ANSWER
     assert result["stop_reason"] == STOP_REASON_GENERATION_ERROR
+    # The placeholder is a failure artifact, not the deterministic decline.
+    assert result["insufficient_context"] is False
 
 
 def test_generation_failure_still_counts_retry_and_llm_call(monkeypatch):

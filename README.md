@@ -58,17 +58,19 @@ flowchart TD
 2. **`retrieve`** — top-3 similarity search against a persisted Chroma vector store.
 3. **`grade_documents`** — each chunk is graded individually (`is_relevant: bool`); irrelevant chunks are dropped, and if any chunk failed, a `web_search` flag routes the flow through Tavily before generating.
 4. **`websearch`** — searches with the rewritten `search_query` on retry rounds (original question otherwise). Each Tavily result is individually graded for relevance against the *original* question (reusing the retrieval grader, so external content faces the same gate as internal chunks); only relevant results are merged into a single `Document` (tagged `source: web_search`), which **replaces** any previous web supplement instead of stacking duplicates. Malformed responses and irrelevant results are dropped defensively — if nothing usable comes back, the workflow continues with the existing documents.
-5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM. Each pass increments `retries`.
-6. **`grade_generation`** (conditional edge) — two-layer check with eight explicit outcomes:
+5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM and flags it via `insufficient_context` in state. Each pass increments `retries`.
+6. **`grade_generation`** (conditional edge) — two-layer check with ten explicit outcomes:
+   - `insufficient_context` → the generation is the deterministic insufficient-context answer (no usable documents); both graders are skipped — there is nothing to verify and regenerating from the same empty context cannot help — and the run ends honestly on the first pass (in privacy mode via the `web_search_disabled` notice, so the caveat explains why no information could be added),
    - `not_grounded` → `add_grounding_feedback` injects a corrective instruction into the next generation, then regenerate,
    - `useful` → END,
    - `not_useful` → `rewrite_query` produces a more specific search query, then web search and regenerate,
    - `web_search_disabled` → terminal notice node (privacy mode; see below),
    - `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one),
+   - `budget_exhausted` → the per-run cost budget is spent; terminal notice node, the answer goes out with an explicit caveat,
    - `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
    - `tool_error` → a grader call failed; the run ends through a terminal notice node with the answer explicitly flagged as unverified.
 
-State is a `TypedDict` defined in `graph/state.py` with twelve fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](structure.md) §3 for the full field-by-field table.
+State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`, `insufficient_context`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](structure.md) §3 for the full field-by-field table.
 
 ## Tech Stack
 
@@ -165,9 +167,12 @@ transmits the question text to a third-party service. Setting
 
   The caveat appears **only** when web search is disabled *and* the workflow would otherwise have needed it — successful local answers are printed without any warning, in both modes.
 
-All grounding and usefulness quality gates remain active in privacy mode. The
-default (variable unset or any value other than `false`/`0`/`no`/`off`) preserves
-the full web-search behavior.
+All grounding and usefulness quality gates remain active in privacy mode, with
+one principled exception in both modes: the deterministic insufficient-context
+answer skips the graders entirely — it contains no claims to verify, and
+regenerating from the same empty context cannot improve it. The default
+(variable unset or any value other than `false`/`0`/`no`/`off`) preserves the
+full web-search behavior.
 
 ### Retry-exhaustion warnings
 
@@ -369,7 +374,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 174 tests passing (56 node + 102 graph + 16 evals) | 38 tests passing |
+| Status | 185 tests passing (58 node + 111 graph + 16 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 

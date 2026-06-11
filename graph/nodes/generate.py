@@ -20,6 +20,11 @@ def generate(state: GraphState):
     deterministic answer and records stop_reason=generation_error, which
     grade_generation routes straight to END — the failed generation is never
     graded or presented as a normal successful answer.
+
+    With no documents, generate_answer short-circuits to the deterministic
+    insufficient-context answer without an LLM call; the node flags this via
+    insufficient_context=True so grade_generation can skip the graders (there
+    are no claims to verify) instead of looping on an honest decline.
     """
 
     print("---GENERATE---")
@@ -42,6 +47,11 @@ def generate(state: GraphState):
     if documents:
         llm_call_count += 1
 
+    # Machine-readable signal for the empty-context short-circuit: the same
+    # condition that makes generate_answer return its deterministic
+    # insufficient-context answer (no string comparison needed).
+    insufficient_context = not documents
+
     try:
         generation = generate_answer(question, documents, retry_feedback)
     except Exception as exc:
@@ -55,6 +65,9 @@ def generate(state: GraphState):
             "retries": retries,
             # The failed attempt was still a real API call; count it.
             "llm_call_count": llm_call_count,
+            # The placeholder is a failure artifact, not the deterministic
+            # decline; generation_error takes precedence downstream anyway.
+            "insufficient_context": False,
             "stop_reason": STOP_REASON_GENERATION_ERROR,
         }
 
@@ -65,4 +78,5 @@ def generate(state: GraphState):
         "web_search": state.get("web_search", False),
         "retries": retries,
         "llm_call_count": llm_call_count,
+        "insufficient_context": insufficient_context,
     }

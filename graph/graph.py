@@ -41,6 +41,13 @@ disabled, or MAX_RETRIES exhausted while a quality gate still fails) terminate
 through small notice nodes that record state["stop_reason"], so main.py can
 attach a user-facing caveat instead of presenting the answer as successful.
 
+Insufficient-context bypass: when generation produced the deterministic
+insufficient-context answer (no usable documents; flagged by the generate node
+via state["insufficient_context"]), the graders are skipped — there is nothing
+to verify, and regenerating from the same empty context cannot improve the
+answer. The run ends honestly instead of looping toward a misleading
+max-retries warning.
+
 Graceful degradation: external dependency failures (Chroma retriever, Tavily,
 the generation LLM, the graders, the query rewriter) never crash the graph.
 Nodes catch the failure at the call site, degrade or stop safely, and record a
@@ -161,9 +168,18 @@ def decide_to_generate(state: GraphState) -> str:
 
 def grade_generation(state: GraphState) -> str:
     """
-    Two-layer quality check after generation, returning eight explicit outcomes
+    Two-layer quality check after generation, returning ten explicit outcomes
     (each maps one-to-one to the conditional edges below):
 
+    - "insufficient_context": the generation is the deterministic
+                             insufficient-context answer (no usable documents,
+                             produced without an LLM call). There is nothing to
+                             verify and regenerating from the same empty
+                             context cannot improve it, so the graders are
+                             skipped entirely -> END (in privacy mode with no
+                             earlier failure recorded, via the
+                             web_search_disabled notice so the caveat explains
+                             why no information could be added).
     - "not_grounded": answer not supported by documents
                              -> ADD_GROUNDING_FEEDBACK, then GENERATE (the retry
                                 receives corrective feedback in its input).
@@ -203,6 +219,22 @@ def grade_generation(state: GraphState) -> str:
     if state.get("stop_reason") == STOP_REASON_GENERATION_ERROR:
         print("---GENERATION FAILED, STOP---")
         return "generation_error"
+
+    # The deterministic insufficient-context answer carries no claims to
+    # verify, and regenerating from the same empty context cannot improve it:
+    # grading it wastes two grader calls per loop and can end an honest
+    # decline in a misleading max-retries warning. Stop before the budget
+    # check too — a clean decline must not be tagged budget_exhausted.
+    # Privacy mode records web_search_disabled (the caveat explains why no
+    # information could be added) unless an earlier, more specific failure
+    # reason (e.g. retrieval_error) is already recorded — that one survives
+    # by routing straight to END.
+    if state.get("insufficient_context", False):
+        if not state.get("web_search_enabled", True) and not state.get("stop_reason"):
+            print("---INSUFFICIENT CONTEXT, WEB SEARCH DISABLED, STOP WITHOUT GRADING---")
+            return "web_search_disabled"
+        print("---INSUFFICIENT CONTEXT, STOP WITHOUT GRADING---")
+        return "insufficient_context"
 
     # Per-run cost budget: checked before invoking the graders so an exhausted
     # run spends nothing more. The final answer is returned unverified, and
@@ -352,6 +384,10 @@ workflow.add_conditional_edges(
         # the generation call itself failed -> the generate node already
         # recorded the stop reason and a safe answer; end directly
         "generation_error": END,
+        # the deterministic insufficient-context answer -> nothing to verify,
+        # nothing to improve; end directly (an earlier stop_reason, if any,
+        # survives and keeps its caveat)
+        "insufficient_context": END,
         # a grader call failed -> record the stop reason, then stop with an
         # explicitly unverified answer
         "tool_error": TOOL_ERROR_NOTICE,

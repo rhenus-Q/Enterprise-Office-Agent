@@ -307,6 +307,7 @@ def _initial_state(question, web_search_enabled):
         "web_search_enabled": web_search_enabled,
         "retries": 0,
         "stop_reason": "",
+        "insufficient_context": False,
         "retry_feedback": "",
         "search_query": "",
         "llm_call_count": 0,

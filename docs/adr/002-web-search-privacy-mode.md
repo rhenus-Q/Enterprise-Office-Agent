@@ -38,7 +38,10 @@ full behavior) is seeded into graph state by `main.py` as
   that drive worst-case scenarios and verify zero web-tool calls.
 
 All grounding and usefulness quality gates remain active in privacy mode; the
-mode reduces capability, never rigor.
+mode reduces capability, never rigor. (One later, mode-independent exception:
+the deterministic insufficient-context answer skips the graders — it contains
+no claims to verify. In privacy mode it still ends through the
+`web_search_disabled` notice, so the caveat is preserved.)
 
 ## Consequences
 
