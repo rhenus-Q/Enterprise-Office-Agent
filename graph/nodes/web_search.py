@@ -4,6 +4,7 @@ from langchain_core.documents import Document
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 from graph.chains.retrieval_grader import get_retrieval_grader
+from graph.config import max_web_results_to_grade, max_web_searches_per_run
 from graph.state import GraphState
 
 
@@ -58,6 +59,20 @@ def web_search(state: GraphState):
 
     question = state["question"]
 
+    web_search_count = state.get("web_search_count", 0)
+    web_result_grading_count = state.get("web_result_grading_count", 0)
+    llm_call_count = state.get("llm_call_count", 0)
+
+    # Per-run budget guard: covers every path into this node, including
+    # pathological configurations. Documents (including any previous, already
+    # vetted web supplement) pass through unchanged.
+    if web_search_count >= max_web_searches_per_run():
+        print("---WEB SEARCH BUDGET EXHAUSTED, SKIPPING SEARCH---")
+        return {
+            "question": question,
+            "documents": list(state.get("documents", [])),
+        }
+
     # Retry rounds rewrite the query (search_query); first-pass searches use
     # the original question. Relevance below is always graded against the
     # original question, since that is the intent the results must serve.
@@ -73,6 +88,7 @@ def web_search(state: GraphState):
     ]
 
     search_results = get_web_search_tool().invoke({"query": search_query})
+    web_search_count += 1
 
     contents = _extract_result_contents(search_results)
 
@@ -81,12 +97,24 @@ def web_search(state: GraphState):
         return {
             "question": question,
             "documents": documents,
+            "web_search_count": web_search_count,
         }
 
     grader = get_retrieval_grader()
     relevant_contents = []
+    grading_budget = max_web_results_to_grade()
 
     for content in contents:
+        # Conservative budget behavior: once the grading budget is spent,
+        # remaining results are dropped — ungraded web content never reaches
+        # generation. The run itself continues with what was vetted.
+        if web_result_grading_count >= grading_budget:
+            print("---WEB RESULT GRADING BUDGET EXHAUSTED, DROPPING REMAINING RESULTS---")
+            break
+
+        web_result_grading_count += 1
+        llm_call_count += 1
+
         score = grader.invoke(
             {
                 "question": question,
@@ -100,21 +128,20 @@ def web_search(state: GraphState):
         else:
             print("---WEB RESULT NOT RELEVANT, DROPPED---")
 
-    if not relevant_contents:
+    if relevant_contents:
+        documents.append(
+            Document(
+                page_content="\n\n".join(relevant_contents),
+                metadata={"source": "web_search"},
+            )
+        )
+    else:
         print("---NO RELEVANT WEB RESULTS, NOTHING APPENDED---")
-        return {
-            "question": question,
-            "documents": documents,
-        }
-
-    web_document = Document(
-        page_content="\n\n".join(relevant_contents),
-        metadata={"source": "web_search"},
-    )
-
-    documents.append(web_document)
 
     return {
         "question": question,
         "documents": documents,
+        "web_search_count": web_search_count,
+        "web_result_grading_count": web_result_grading_count,
+        "llm_call_count": llm_call_count,
     }

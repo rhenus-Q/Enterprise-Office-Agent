@@ -12,3 +12,6 @@ class GraphState(TypedDict):
     stop_reason: str  # why the run ended early ("" = normal finish); lets the caller add user-facing caveats
     retry_feedback: str  # corrective instruction for the next generation attempt ("" = none)
     search_query: str  # rewritten web search query for retry rounds ("" = use the original question)
+    llm_call_count: int  # counted LLM calls this run (generation, query rewrite, web-result grading)
+    web_search_count: int  # Tavily searches this run
+    web_result_grading_count: int  # individual web results sent to the relevance grader this run

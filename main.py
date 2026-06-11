@@ -7,6 +7,7 @@ load_dotenv()
 
 from graph.config import web_search_enabled  # noqa: E402
 from graph.consts import (  # noqa: E402
+    STOP_REASON_BUDGET_EXHAUSTED,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL,
     STOP_REASON_WEB_SEARCH_DISABLED,
@@ -37,11 +38,19 @@ MAX_RETRIES_NOT_USEFUL_NOTE = (
     "fully answer your question."
 )
 
+# Caveat shown when the per-run cost/latency budget stopped the run before
+# the answer passed (or finished) the quality gates.
+BUDGET_EXHAUSTED_NOTE = (
+    "Note: This answer stopped because the per-run cost/latency budget was "
+    "reached. The answer may be incomplete or not fully verified."
+)
+
 # Maps a recorded stop reason to the caveat appended to the final answer.
 STOP_REASON_NOTES = {
     STOP_REASON_WEB_SEARCH_DISABLED: WEB_SEARCH_DISABLED_NOTE,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED: MAX_RETRIES_NOT_GROUNDED_NOTE,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL: MAX_RETRIES_NOT_USEFUL_NOTE,
+    STOP_REASON_BUDGET_EXHAUSTED: BUDGET_EXHAUSTED_NOTE,
 }
 
 
@@ -95,6 +104,9 @@ def main():
                 "stop_reason": "",
                 "retry_feedback": "",
                 "search_query": "",
+                "llm_call_count": 0,
+                "web_search_count": 0,
+                "web_result_grading_count": 0,
             }
         )
 

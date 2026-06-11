@@ -8,6 +8,7 @@ from graph.nodes.max_retries_notice import (
 )
 from graph.nodes.add_grounding_feedback import add_grounding_feedback
 from graph.nodes.rewrite_query import rewrite_query
+from graph.nodes.budget_exhausted_notice import budget_exhausted_notice
 from graph.nodes.generate import generate
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "max_retries_not_useful_notice",
     "add_grounding_feedback",
     "rewrite_query",
+    "budget_exhausted_notice",
     "generate",
 ]

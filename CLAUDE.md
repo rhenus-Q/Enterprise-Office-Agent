@@ -39,10 +39,10 @@ Three quality gates: **document relevance**, **answer grounding** (anti-hallucin
 | `main.py` | CLI entry point. Loads `.env`, then imports the compiled `app` and runs an interactive Q&A loop. Seeds the full `GraphState`. |
 | `ingestion.py` | Builds the knowledge base: loads URLs, splits, embeds, persists to Chroma. Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
 | `graph/graph.py` | Assembles the LangGraph `StateGraph`, wires nodes + conditional edges, exports compiled `app`. Holds `MAX_RETRIES` and the routing decision functions. |
-| `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `retries`, `stop_reason`, `retry_feedback`, `search_query`. |
-| `graph/config.py` | Env-driven runtime flags: `web_search_enabled()` reads `WEB_SEARCH_ENABLED` (privacy mode). |
+| `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `retries`, `stop_reason`, `retry_feedback`, `search_query`, plus budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). |
+| `graph/config.py` | Env-driven runtime flags: `web_search_enabled()` (privacy mode) and the per-run budgets `max_llm_calls_per_run()` / `max_web_searches_per_run()` / `max_web_results_to_grade()`. |
 | `graph/consts.py` | Node-name string constants (`RETRIEVE`, `GRADE_DOCUMENTS`, `GENERATE`, `WEBSEARCH`, `WEB_SEARCH_DISABLED_NOTICE`) and `stop_reason` values. |
-| `graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`) that record `stop_reason`. |
+| `graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`, `budget_exhausted_notice`) that record `stop_reason`. |
 | `graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. |
 | `tests/node/` | Unit tests for node functions. Fully mocked — no API keys needed. |
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |

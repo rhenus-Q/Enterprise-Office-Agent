@@ -190,6 +190,55 @@ def test_web_search_mixed_results_appends_only_relevant_content(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Per-run budgets: search guard, search counter, grading cap
+# ---------------------------------------------------------------------------
+
+
+def test_web_search_increments_counters(monkeypatch):
+    _patch_tool(monkeypatch, [{"content": "alpha"}, {"content": "beta"}])
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["web_search_count"] == 1
+    assert result["web_result_grading_count"] == 2  # one per graded result
+    assert result["llm_call_count"] == 2            # grading calls are LLM calls
+
+
+def test_web_search_skipped_when_search_budget_exhausted(monkeypatch):
+    # web_search_count already at the default budget (5): the tool must not be
+    # invoked, and existing documents (incl. a vetted web supplement) survive.
+    monkeypatch.delenv("MAX_WEB_SEARCHES_PER_RUN", raising=False)
+    calls = _patch_tool(monkeypatch, [{"content": "web"}])
+    grader_calls = _patch_grader(monkeypatch)
+
+    old_web = Document(page_content="old web", metadata={"source": "web_search"})
+    result = web_search(
+        {"question": "Q", "documents": [old_web], "web_search_count": 5}
+    )
+
+    assert "payload" not in calls          # Tavily never called
+    assert grader_calls == []              # no grading either
+    assert result["documents"] == [old_web]
+
+
+def test_web_search_grading_cap_drops_remaining_results(monkeypatch):
+    # With a grading budget of 1, only the first result is graded; the rest
+    # are dropped without reaching the grader or the context.
+    monkeypatch.setenv("MAX_WEB_RESULTS_TO_GRADE", "1")
+    _patch_tool(monkeypatch, [{"content": "first"}, {"content": "second"}, {"content": "third"}])
+    grader_calls = _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert [c["document"] for c in grader_calls] == ["first"]
+    assert result["web_result_grading_count"] == 1
+    assert len(result["documents"]) == 1
+    assert result["documents"][0].page_content == "first"
+    assert "second" not in result["documents"][0].page_content
+
+
+# ---------------------------------------------------------------------------
 # Defensive handling of empty / malformed Tavily responses
 # ---------------------------------------------------------------------------
 

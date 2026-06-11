@@ -63,7 +63,10 @@ from graph.consts import (  # noqa: E402
     MAX_RETRIES_NOT_USEFUL_NOTICE,
     ADD_GROUNDING_FEEDBACK,
     REWRITE_QUERY,
+    BUDGET_EXHAUSTED_NOTICE,
 )
+
+from graph.config import max_llm_calls_per_run, max_web_searches_per_run  # noqa: E402
 
 from graph.nodes import (  # noqa: E402
     retrieve,
@@ -75,6 +78,7 @@ from graph.nodes import (  # noqa: E402
     max_retries_not_useful_notice,
     add_grounding_feedback,
     rewrite_query,
+    budget_exhausted_notice,
 )
 
 from graph.chains.question_router import get_question_router  # noqa: E402
@@ -162,6 +166,9 @@ def grade_generation(state: GraphState) -> str:
                              -> notice node recording a stop reason, then END.
     - "max_retries_not_useful":   retry limit reached, answer grounded but off-target
                              -> notice node recording a stop reason, then END.
+    - "budget_exhausted": the per-run cost budget is spent (checked BEFORE the
+                             graders run, so no further spend occurs)
+                             -> notice node recording a stop reason, then END.
     """
 
     print("---CHECK HALLUCINATIONS---")
@@ -170,6 +177,15 @@ def grade_generation(state: GraphState) -> str:
     documents = state["documents"]
     generation = state["generation"]
     retries = state.get("retries", 0)
+
+    # Per-run cost budget: checked before invoking the graders so an exhausted
+    # run spends nothing more. The final answer is returned unverified, and
+    # main.py attaches a caveat saying exactly that. (Grader calls themselves
+    # are not individually counted — they are bounded at two per generation,
+    # so capping counted LLM calls transitively caps them.)
+    if state.get("llm_call_count", 0) >= max_llm_calls_per_run():
+        print("---LLM CALL BUDGET EXHAUSTED, STOP---")
+        return "budget_exhausted"
 
     # Key point: grade first, then check the retry limit.
     # This way even the MAX_RETRIES-th (final) generation is fully graded;
@@ -211,6 +227,13 @@ def grade_generation(state: GraphState) -> str:
             print(f"---MAX RETRIES ({MAX_RETRIES}) REACHED, ANSWER NOT USEFUL, STOP---")
             return "max_retries_not_useful"
 
+        # Improving a not-useful answer requires another web search; if the
+        # search budget is spent, looping toward a search that would be
+        # skipped is pure waste -- stop with the budget caveat instead.
+        if state.get("web_search_count", 0) >= max_web_searches_per_run():
+            print("---WEB SEARCH BUDGET EXHAUSTED, STOP---")
+            return "budget_exhausted"
+
         print("---DECISION: ANSWER NOT USEFUL, GO TO WEB SEARCH---")
         return "not_useful"
 
@@ -241,6 +264,7 @@ workflow.add_node(MAX_RETRIES_NOT_GROUNDED_NOTICE, max_retries_not_grounded_noti
 workflow.add_node(MAX_RETRIES_NOT_USEFUL_NOTICE, max_retries_not_useful_notice)
 workflow.add_node(ADD_GROUNDING_FEEDBACK, add_grounding_feedback)
 workflow.add_node(REWRITE_QUERY, rewrite_query)
+workflow.add_node(BUDGET_EXHAUSTED_NOTICE, budget_exhausted_notice)
 
 # 2. Entry: route_question decides the first step
 workflow.set_conditional_entry_point(
@@ -284,6 +308,8 @@ workflow.add_conditional_edges(
         # quality gate failed, then stop (main.py attaches a warning)
         "max_retries_not_grounded": MAX_RETRIES_NOT_GROUNDED_NOTICE,
         "max_retries_not_useful": MAX_RETRIES_NOT_USEFUL_NOTICE,
+        # per-run cost budget spent -> record the stop reason, then stop
+        "budget_exhausted": BUDGET_EXHAUSTED_NOTICE,
     },
 )
 
@@ -296,6 +322,7 @@ workflow.add_edge(REWRITE_QUERY, WEBSEARCH)
 workflow.add_edge(WEB_SEARCH_DISABLED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_GROUNDED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_USEFUL_NOTICE, END)
+workflow.add_edge(BUDGET_EXHAUSTED_NOTICE, END)
 
 # 9. Compile into a callable app
 app = workflow.compile()
