@@ -371,8 +371,8 @@ graph state (the same seam `main.py` uses) and hard-assert
 `web_search_count == 0`. The full run needs real API keys and is deliberately
 excluded from CI; `--validate-only` checks the dataset with no API calls.
 
-Run the mocked suites with `uv run pytest tests/node/ tests/graph/ -v` (no API
-keys required).
+Run the mocked suites with `uv run pytest tests/node/ tests/graph/ tests/evals/ -v`
+(no API keys required).
 
 ## 15. Known limitations & future improvements
 
@@ -389,6 +389,7 @@ logging; grader-scored (LLM-as-judge) metrics on top of the deterministic
 eval harness; rationale-bearing grounding feedback; batched grading;
 migration off `langchain-community` for Tavily.
 
-GitHub Actions CI (`.github/workflows/ci.yml`) runs the mocked suites
-(`tests/node/` + `tests/graph/`) on every push and pull request with no API
-keys configured; the key-gated `tests/chains/` suite is excluded.
+GitHub Actions CI (`.github/workflows/ci.yml`) runs the fully mocked suites
+(`tests/node/` + `tests/graph/` + `tests/evals/`) on every push and pull
+request with no API keys configured; the key-gated `tests/chains/` suite and
+the full eval run are excluded.

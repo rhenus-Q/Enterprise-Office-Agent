@@ -1,8 +1,10 @@
-# CI: run the fully mocked test suites (tests/node/ + tests/graph/) on every
-# push and pull request. These suites mock every external dependency at its
-# lazy factory seam, so the job needs NO API keys (OpenAI / Tavily / LangSmith).
-# The integration suite (tests/chains/) calls the real model and is deliberately
-# excluded from CI.
+# CI: run the fully mocked test suites (tests/node/ + tests/graph/ +
+# tests/evals/) on every push and pull request. These suites mock every
+# external dependency at its lazy factory seam (tests/evals/ covers only the
+# eval harness's pure helpers), so the job needs NO API keys (OpenAI / Tavily /
+# LangSmith). The integration suite (tests/chains/) calls the real model and
+# the full eval run (evals/run_eval.py) costs real API money; both are
+# deliberately excluded from CI.
 
 name: CI
 
@@ -29,4 +31,4 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run mocked test suites (no API keys required)
-        run: uv run pytest tests/node/ tests/graph/ -q
+        run: uv run pytest tests/node/ tests/graph/ tests/evals/ -q

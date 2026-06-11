@@ -68,7 +68,7 @@ flowchart TD
    - `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
    - `tool_error` → a grader call failed; the run ends through a terminal notice node with the answer explicitly flagged as unverified.
 
-State is a minimal `TypedDict` (`question`, `documents`, `generation`, `web_search`, `retries`) defined in `graph/state.py`.
+State is a `TypedDict` defined in `graph/state.py` with twelve fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](structure.md) §3 for the full field-by-field table.
 
 ## Tech Stack
 
@@ -91,12 +91,21 @@ State is a minimal `TypedDict` (`question`, `documents`, `generation`, `web_sear
 ├── ingestion.py             # KB build: load local Markdown corpus → split → embed → persist to Chroma (idempotent)
 ├── data/
 │   └── acmecorp_internal_docs/  # Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
-├── structure.md             # Prose description of the workflow design
+├── structure.md             # Architecture deep-dive: full workflow, state machine, design decisions
+├── docs/
+│   └── adr/                 # Architecture Decision Records 001–009 (with index in README.md)
+├── evals/
+│   ├── questions.jsonl      # Behavioral eval dataset (15 rows, 4 categories)
+│   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
+│   └── results.md           # Generated eval report
+├── .github/
+│   └── workflows/ci.yml     # CI: runs the fully mocked suites (node, graph, evals) — no API keys
 ├── graph/
 │   ├── graph.py             # StateGraph assembly, routing/decision functions, MAX_RETRIES, compiled `app`
 │   ├── state.py             # GraphState TypedDict
-│   ├── config.py            # Env-driven runtime flags (WEB_SEARCH_ENABLED)
-│   ├── consts.py            # Node-name constants
+│   ├── config.py            # Env-driven runtime flags: WEB_SEARCH_ENABLED + per-run budgets
+│   │                        #   (MAX_LLM_CALLS_PER_RUN, MAX_WEB_SEARCHES_PER_RUN, MAX_WEB_RESULTS_TO_GRADE)
+│   ├── consts.py            # Node-name constants and stop_reason values
 │   ├── nodes/               # retrieve, grade_documents, generate, web_search,
 │   │                        #   retry helpers (add_grounding_feedback, rewrite_query),
 │   │                        #   terminal notice nodes (stop_reason recorders)
@@ -107,6 +116,7 @@ State is a minimal `TypedDict` (`question`, `documents`, `generation`, `web_sear
     ├── conftest.py          # Loads .env; provides the `requires_openai` skip marker
     ├── node/                # Unit tests — all external dependencies mocked, no API keys needed
     ├── graph/               # Routing / privacy-toggle / compiled-graph tests — fully mocked
+    ├── evals/               # Unit tests for the eval harness's pure helpers — fully mocked
     └── chains/              # Integration tests — call the real gpt-5-mini, need OPENAI_API_KEY
 ```
 
@@ -300,6 +310,9 @@ uv run pytest tests/node/ -v
 # Graph routing / privacy-toggle tests — fully mocked, NO API keys required
 uv run pytest tests/graph/ -v
 
+# Eval-harness helper tests — fully mocked, NO API keys required
+uv run pytest tests/evals/ -v
+
 # Integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
 uv run pytest tests/chains/ -v
 
@@ -307,10 +320,11 @@ uv run pytest tests/chains/ -v
 uv run pytest -v
 ```
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the two
-mocked suites on every push and pull request — no API keys are configured in
-CI, which doubles as a regression test that imports stay side-effect-free.
-The key-gated integration suite is deliberately excluded.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the three
+fully mocked suites (`tests/node/`, `tests/graph/`, `tests/evals/`) on every
+push and pull request — no API keys are configured in CI, which doubles as a
+regression test that imports stay side-effect-free. The key-gated integration
+suite is deliberately excluded.
 
 ## Behavioral evals
 
@@ -349,13 +363,13 @@ accepted, and the alternatives deliberately not chosen. Start with the
 
 ### Mocked unit tests vs. API-based chain tests
 
-| | `tests/node/` + `tests/graph/` (unit) | `tests/chains/` (integration) |
+| | `tests/node/` + `tests/graph/` + `tests/evals/` (unit) | `tests/chains/` (integration) |
 |---|---|---|
-| What is tested | Node functions (state in/out), routing decisions, and the compiled graph with mocked chains | The LCEL chains: real prompts + structured output against the live model |
+| What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model |
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 105 tests passing (33 node + 72 graph) | 37 tests passing |
+| Status | 174 tests passing (56 node + 102 graph + 16 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
