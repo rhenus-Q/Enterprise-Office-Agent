@@ -1,122 +1,260 @@
 # Agentic RAG Architecture
 
-## Prerequisites
+This is the architecture deep-dive for the project. The [README](README.md)
+covers setup and usage; this document describes the full workflow, state
+machine, and design decisions, including the paths the README's simplified
+diagram omits (terminal notice nodes and retry helpers).
 
-Runtime entry point: `main.py` is responsible for receiving user questions and invoking the graph app.
+## 1. Goal
 
-Knowledge base preparation: `ingestion.py` is responsible for loading documents, splitting them into chunks, generating embeddings, and storing them in the vector database.
+An enterprise internal-document Q&A assistant that **never presents an
+unvetted answer as a success**. Built as a self-correcting (CRAG-style)
+LangGraph workflow:
 
-## Goal
+- Answers come from a curated local knowledge base (Chroma), with web search
+  (Tavily) as a fallback — and a privacy mode that disables web search
+  entirely.
+- Every answer passes explicit quality gates (document relevance, answer
+  grounding, answer usefulness).
+- Failed gates trigger **meaningful retries** that change the input between
+  attempts, bounded by a retry budget.
+- Runs that cannot end with a passing answer record a machine-readable
+  `stop_reason`, and the CLI attaches an explicit user-facing caveat.
 
-Design an enterprise internal document Q&A assistant.
+## 2. High-level architecture
 
-## Features
+Three layers, all external clients behind lazy `@lru_cache` factories so every
+module imports side-effect-free (no API keys, no network at import time):
 
-The assistant should be able to query a vector database and perform web search when needed.
+| Layer | Location | Contents |
+|---|---|---|
+| Orchestration | `graph/graph.py` | `StateGraph` assembly, pure routing functions, `MAX_RETRIES = 5`, compiled `app` |
+| Nodes | `graph/nodes/` | State-transforming steps; the only place state is written |
+| Chains | `graph/chains/` | Six LCEL chains on `gpt-5-mini` (`temperature=0`): `question_router`, `retrieval_grader`, `generation`, `hallucination_grader`, `answer_grader`, `query_rewriter` |
 
-## Process
+Supporting modules: `graph/state.py` (the state schema), `graph/consts.py`
+(node names + `stop_reason` values), `graph/config.py` (env-driven flags),
+`ingestion.py` (offline Chroma build), `main.py` (CLI, state seeding, caveat
+presentation).
 
-### 1. Question routing
+**Design grammar** (applied consistently):
+- Conditional edge functions are **pure** — they read state and chains, never write.
+- All state writes happen in **nodes**, including tiny pass-through nodes whose
+  only job is one write (feedback, rewritten query, stop reason).
+- Every retry cycle passes through `generate`, which increments the `retries`
+  counter that `MAX_RETRIES` caps.
+- Shared string constants live in `consts.py`; user-facing presentation lives
+  in `main.py`.
 
-The user question first goes through the `question_router`.
+## 3. GraphState
 
-The router decides whether the question should go to:
+Defined in `graph/state.py` (`TypedDict`). `main.py` seeds every field per
+question; all readers use safe defaults so partial states behave like today's
+defaults.
 
-```text
-question_router
-├── websearch → generate
-└── retrieve
+| Field | Type | Purpose |
+|---|---|---|
+| `question` | `str` | The original user question. Never rewritten; all grading judges against it. |
+| `documents` | `List[Document]` | Working context: filtered Chroma chunks + at most one web supplement. |
+| `generation` | `str` | The latest generated answer. |
+| `web_search` | `bool` | Set by `grade_documents` when any retrieved chunk was irrelevant → fall back to web search. |
+| `web_search_enabled` | `bool` | Privacy toggle, seeded from `WEB_SEARCH_ENABLED`. `False` = never call external search. |
+| `retries` | `int` | Number of generations so far; caps the quality-check loops. |
+| `stop_reason` | `str` | Why the run ended early (`""` = normal finish); drives user-facing caveats. |
+| `retry_feedback` | `str` | Corrective instruction for the next generation after a failed grounding check (`""` = none). |
+| `search_query` | `str` | Rewritten web-search query for retry rounds (`""` = use the original question). |
+
+## 4. Nodes
+
+| Node | Constant | Responsibility |
+|---|---|---|
+| `retrieve` | `RETRIEVE` | Top-3 similarity search against the persisted Chroma collection. |
+| `grade_documents` | `GRADE_DOCUMENTS` | Grade each chunk (`retrieval_grader`); keep relevant ones, set `web_search=True` if any failed. |
+| `websearch` | `WEBSEARCH` | Tavily search + relevance gate on results (see §7); appends/replaces the web supplement. |
+| `generate` | `GENERATE` | Generate the answer from question + documents (+ `retry_feedback`); increments `retries`. Empty context → deterministic insufficient-context answer, no LLM call. |
+| `add_grounding_feedback` | `ADD_GROUNDING_FEEDBACK` | Pass-through: writes the corrective instruction into `retry_feedback`. |
+| `rewrite_query` | `REWRITE_QUERY` | Pass-through: rewrites the question into a more specific search query (`query_rewriter` chain) using the previous not-useful answer; writes `search_query`. |
+| `web_search_disabled_notice` | `WEB_SEARCH_DISABLED_NOTICE` | Terminal: records `stop_reason = "web_search_disabled"`. |
+| `max_retries_not_grounded_notice` | `MAX_RETRIES_NOT_GROUNDED_NOTICE` | Terminal: records `stop_reason = "max_retries_not_grounded"`. |
+| `max_retries_not_useful_notice` | `MAX_RETRIES_NOT_USEFUL_NOTICE` | Terminal: records `stop_reason = "max_retries_not_useful"`. |
+
+## 5. Conditional routing
+
+Three pure decision functions in `graph/graph.py`:
+
+**`route_question`** (conditional entry point)
+- Privacy mode off → an LLM router picks `retrieve` (knowledge-base topics) or
+  `websearch` (current/external information).
+- Privacy mode on → always `retrieve`, **without calling the router LLM** (the
+  question never leaves the local environment, and the call is saved).
+
+**`decide_to_generate`** (after document grading)
+- All chunks relevant → `generate`.
+- Any chunk irrelevant → `websearch` — unless privacy mode is on, in which case
+  `generate` proceeds with whatever relevant chunks remain (possibly none, which
+  yields the deterministic insufficient-context answer).
+
+**`grade_generation`** (after generation; six explicit outcomes, each mapped
+one-to-one to an edge)
+
+| Outcome | Condition | Next |
+|---|---|---|
+| `useful` | grounded + answers the question | `END` |
+| `not_grounded` | failed grounding, retries remain | `add_grounding_feedback` → `generate` |
+| `not_useful` | grounded but off-target, web search enabled, retries remain | `rewrite_query` → `websearch` → `generate` |
+| `web_search_disabled` | grounded but off-target, privacy mode | notice node → `END` |
+| `max_retries_not_grounded` | failed grounding at the retry limit | notice node → `END` |
+| `max_retries_not_useful` | grounded but off-target at the retry limit | notice node → `END` |
+
+Ordering details that matter:
+- **Grade first, then check the limit** — even the final allowed generation is
+  fully graded; the cap only fires when the answer would otherwise loop.
+- In the not-useful branch, the **privacy check precedes the retry-limit
+  check**: with web search disabled, improvement was impossible regardless of
+  retries, so the privacy caveat is the accurate one.
+
+## 6. Full workflow
+
+```mermaid
+flowchart TD
+    Q([User question]) --> ROUTE{route_question}
+
+    ROUTE -- "websearch" --> WS[websearch<br/>Tavily + relevance gate]
+    ROUTE -- "retrieve<br/>(always, in privacy mode)" --> RET[retrieve<br/>Chroma, k=3]
+
+    RET --> GD[grade_documents<br/>per-chunk relevance gate]
+    GD -- "all relevant" --> GEN[generate<br/>retries += 1]
+    GD -- "any irrelevant" --> WS
+    GD -. "any irrelevant,<br/>privacy mode" .-> GEN
+    WS --> GEN
+
+    GEN --> HG{grounding gate}
+    HG -- "not grounded" --> FB[add_grounding_feedback]
+    FB --> GEN
+    HG -- "not grounded,<br/>retries exhausted" --> N1[max_retries_not_grounded_notice]
+    HG -- "grounded" --> AG{usefulness gate}
+
+    AG -- "useful" --> E([END])
+    AG -- "not useful" --> RW[rewrite_query]
+    RW --> WS
+    AG -- "not useful,<br/>privacy mode" --> N3[web_search_disabled_notice]
+    AG -- "not useful,<br/>retries exhausted" --> N2[max_retries_not_useful_notice]
+
+    N1 --> E
+    N2 --> E
+    N3 --> E
 ```
 
-### 2. Vector database retrieval path
+Step by step:
 
-If the question is routed to the vector database:
+1. **`route_question`** — vector store vs. web search (or forced retrieval in privacy mode).
+2. **`retrieve`** — top-3 Chroma chunks.
+3. **`grade_documents`** — per-chunk relevance grading; irrelevant chunks dropped; any failure flags a web-search fallback.
+4. **`websearch`** — searches with `search_query` if a retry rewrote it, otherwise the original question. Results are defensively parsed (string error responses, malformed entries, and empty contents are skipped), then **each result is graded for relevance against the original question** — the same gate internal chunks face. Relevant contents merge into one `Document(metadata={"source": "web_search"})`, which **replaces** any previous web supplement rather than stacking duplicates. Nothing usable → documents pass through unchanged.
+5. **`generate`** — strict answer-from-context-only generation; `retry_feedback`, when present, is folded into the question input so a retry differs from the previous attempt. Empty context short-circuits to a fixed insufficient-context answer without calling the LLM.
+6. **Grounding check** (`hallucination_grader`) — is every claim supported by the documents?
+7. **Usefulness check** (`answer_grader`) — does the grounded answer actually address the question?
+8. Failure routing per the table in §5.
 
-```text
-retrieve
-→ grade_documents
-```
+## 7. Web-result relevance checking
 
-`grade_documents` checks whether the retrieved documents are relevant to the user question.
+External web content is the least trusted input in the system, so it does not
+bypass the relevance gate that curated chunks pass through. Inside the
+`websearch` node (no extra graph edges — keeping the check local avoids
+creating a new, ungoverned loop):
 
-```text
-grade_documents
-├── relevant documents found
-│   └── keep relevant documents → generate
-└── no relevant documents found
-    └── websearch → generate
-```
+- Each Tavily result is graded individually with the existing
+  `retrieval_grader` against the **original** question (the intent), even when
+  the search itself used a rewritten query.
+- Irrelevant results are dropped; only relevant content reaches generation.
+- Malformed responses (Tavily errors arrive as plain strings; entries can lack
+  `content`) are skipped defensively — the node never crashes, and a fully
+  unusable response simply leaves the documents unchanged.
 
-The purpose of this step is to filter out irrelevant documents before generation.
+## 8. Meaningful retries
 
-### 3. Answer generation
+A retry is only worth its cost if something changes between attempts —
+re-invoking the same chain with identical inputs at `temperature=0` mostly
+reproduces the same failure. Two mechanisms guarantee a difference:
 
-The `generate` node uses the user question and the selected documents to generate an answer.
+- **`not_grounded` → `add_grounding_feedback` → `generate`**: the next
+  generation receives a corrective instruction ("use only explicitly supported
+  facts; if the documents are insufficient, say so") folded into its input.
+  The prompt template and chain input variables are unchanged.
+- **`not_useful` → `rewrite_query` → `websearch` → `generate`**: the
+  `query_rewriter` chain produces a more specific search query, informed by
+  the previous (not useful) answer. The fresh web supplement replaces the
+  stale one, so the next grounding check judges against genuinely new context.
 
-```text
-generate
-→ check whether the answer is grounded in the documents
-```
+Both helper nodes are linear pass-throughs spliced into the two pre-existing
+cycles — no new decision points, so no new uncontrolled loops. Note that
+`retry_feedback` persists for the remainder of the run once set: every later
+generation in that run keeps the stricter instruction.
 
-### 4. Answer grounding and usefulness check
+## 9. Privacy mode (`WEB_SEARCH_ENABLED=false`)
 
-After generation, the answer is checked in two layers:
+For deployments where user questions must never reach an external search
+service. Parsed by `graph/config.py` (`false`/`0`/`no`/`off`, case-insensitive,
+disable; anything else — including unset — preserves full behavior) and seeded
+into state by `main.py`. When disabled:
 
-#### 4.1 Grounding check
+- `route_question` always returns `retrieve` and skips the router LLM.
+- `decide_to_generate` never falls back to web search; generation proceeds
+  with the remaining relevant chunks (or the insufficient-context answer).
+- `grade_generation` ends a grounded-but-not-useful run via the
+  `web_search_disabled` notice instead of searching; the `rewrite_query` chain
+  is never invoked.
+- The `websearch` node is unreachable (verified by end-to-end tests asserting
+  zero web-tool calls in worst-case scenarios).
 
-Check whether the generated answer is grounded in the provided documents.
+All grounding and usefulness gates remain active in privacy mode.
 
-```text
-generation
-├── grounded in documents
-└── not grounded in documents
-```
+## 10. stop_reason and user-facing caveats
 
-If the answer is not grounded in the documents, it may contain hallucination.
+Terminal notice nodes record *why* a run ended without a passing answer;
+`main.py` maps each reason to a caveat appended after the answer
+(`STOP_REASON_NOTES`). Successful answers are printed without any caveat, in
+both modes.
 
-```text
-not grounded → hallucination risk → regenerate
-```
+| `stop_reason` | Meaning | User-facing caveat (summary) |
+|---|---|---|
+| `""` | Both gates passed | none |
+| `web_search_disabled` | Grounded but off-target; web search unavailable | "Web search is disabled… answer limited to the local knowledge base." |
+| `max_retries_not_grounded` | Retry limit hit; answer still failed grounding | "Did not pass the anti-hallucination check… do not treat as fully reliable." |
+| `max_retries_not_useful` | Retry limit hit; grounded but still off-target | "Grounded but may not fully answer your question." |
 
-#### 4.2 Usefulness check
+## 11. Retry exhaustion
 
-If the answer is grounded in the documents, check whether it actually answers the user question.
+`MAX_RETRIES = 5` caps total generations per question. Because the limit is
+checked **after** grading, the fifth generation still gets the full two-gate
+check — the protective stop only replaces a sixth loop iteration. The two
+exhaustion outcomes are distinguished (`max_retries_not_grounded` vs.
+`max_retries_not_useful`) because they require different user warnings: the
+former may contain unsupported content; the latter is grounded but incomplete.
 
-```text
-grounded
-├── useful → end
-└── not useful → grounded in documents but does not answer the question → websearch
-```
+## 12. Testing overview
 
-## Summary
+| Suite | What it covers | External calls |
+|---|---|---|
+| `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing | None — every dependency mocked at its lazy `get_*()` factory seam |
+| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, caveat formatting, and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode) | None — fully mocked |
+| `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
 
-The workflow contains three quality-control layers:
+Run the mocked suites with `uv run pytest tests/node/ tests/graph/ -v` (no API
+keys required).
 
-```text
-1. Document relevance check
-   Are the retrieved documents relevant to the question?
+## 13. Known limitations & future improvements
 
-2. Grounding check
-   Is the generated answer based on the provided documents?
+Limitations (deliberate scope):
+- Single-turn CLI; no conversation memory or API surface.
+- `print()`-based observability; LangSmith tracing available via env vars but undocumented in traces/screenshots.
+- Sequential per-chunk / per-result grading (latency and cost scale with k).
+- A single irrelevant chunk triggers the web fallback even when relevant chunks remain.
+- Re-running `ingestion.py` appends duplicate chunks (no stable document IDs).
+- Web search and document loading still use the sunset `langchain-community` integrations.
+- Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 
-3. Usefulness check
-   Does the generated answer actually answer the user question?
-```
-
-The full workflow is:
-
-```text
-question
-→ question_router
-    ├── websearch → generate
-    └── retrieve → grade_documents
-            ├── relevant documents → generate
-            └── no relevant documents → websearch → generate
-
-generate
-→ grounding check
-    ├── not grounded → regenerate
-    └── grounded → usefulness check
-            ├── useful → end
-            └── not useful → websearch
-```
+Future improvements (rough priority): LangSmith tracing evidence + structured
+logging; CI running the mocked suites; an offline eval harness scored with the
+existing graders; rationale-bearing grounding feedback; batched grading;
+idempotent ingestion; migration off `langchain-community`.

@@ -23,9 +23,10 @@ def _patch_generate_answer(monkeypatch):
 
     calls = {}
 
-    def fake_generate_answer(question, documents):
+    def fake_generate_answer(question, documents, retry_feedback=""):
         calls["question"] = question
         calls["documents"] = documents
+        calls["retry_feedback"] = retry_feedback
         calls["called"] = True
         return "FAKE ANSWER"
 
@@ -75,6 +76,23 @@ def test_generate_preserves_documents_and_web_search(monkeypatch):
 
     assert result["documents"] == docs
     assert result["web_search"] is True
+
+
+def test_generate_passes_retry_feedback_to_generate_answer(monkeypatch):
+    calls = _patch_generate_answer(monkeypatch)
+
+    state = {"question": "Q", "documents": [], "retries": 1, "retry_feedback": "be stricter"}
+    generate(state)
+
+    assert calls["retry_feedback"] == "be stricter"
+
+
+def test_generate_defaults_to_empty_retry_feedback(monkeypatch):
+    calls = _patch_generate_answer(monkeypatch)
+
+    generate({"question": "Q", "documents": [], "retries": 0})
+
+    assert calls["retry_feedback"] == ""
 
 
 def test_generate_uses_safe_defaults_for_missing_keys(monkeypatch):

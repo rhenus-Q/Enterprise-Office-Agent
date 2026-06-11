@@ -22,10 +22,10 @@ question
             └── no relevant docs → websearch → generate
 generate
 → grounding check (hallucination_grader)
-    ├── not grounded → regenerate
+    ├── not grounded → add grounding feedback → regenerate
     └── grounded → usefulness check (answer_grader)
             ├── useful → END
-            └── not useful → websearch
+            └── not useful → rewrite search query → websearch
 ```
 
 Three quality gates: **document relevance**, **answer grounding** (anti-hallucination), and
@@ -39,11 +39,11 @@ Three quality gates: **document relevance**, **answer grounding** (anti-hallucin
 | `main.py` | CLI entry point. Loads `.env`, then imports the compiled `app` and runs an interactive Q&A loop. Seeds the full `GraphState`. |
 | `ingestion.py` | Builds the knowledge base: loads URLs, splits, embeds, persists to Chroma. Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
 | `graph/graph.py` | Assembles the LangGraph `StateGraph`, wires nodes + conditional edges, exports compiled `app`. Holds `MAX_RETRIES` and the routing decision functions. |
-| `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `retries`, `stop_reason`. |
+| `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `retries`, `stop_reason`, `retry_feedback`, `search_query`. |
 | `graph/config.py` | Env-driven runtime flags: `web_search_enabled()` reads `WEB_SEARCH_ENABLED` (privacy mode). |
 | `graph/consts.py` | Node-name string constants (`RETRIEVE`, `GRADE_DOCUMENTS`, `GENERATE`, `WEBSEARCH`, `WEB_SEARCH_DISABLED_NOTICE`) and `stop_reason` values. |
-| `graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, plus terminal notice nodes (`web_search_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`) that record `stop_reason`. |
-| `graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`. Each exposes a lazy `get_*()` factory. |
+| `graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`) that record `stop_reason`. |
+| `graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. |
 | `tests/node/` | Unit tests for node functions. Fully mocked — no API keys needed. |
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
 | `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |

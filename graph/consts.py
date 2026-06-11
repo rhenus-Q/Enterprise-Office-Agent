@@ -5,6 +5,8 @@ WEBSEARCH = "websearch"
 WEB_SEARCH_DISABLED_NOTICE = "web_search_disabled_notice"
 MAX_RETRIES_NOT_GROUNDED_NOTICE = "max_retries_not_grounded_notice"
 MAX_RETRIES_NOT_USEFUL_NOTICE = "max_retries_not_useful_notice"
+ADD_GROUNDING_FEEDBACK = "add_grounding_feedback"
+REWRITE_QUERY = "rewrite_query"
 
 # Values for GraphState["stop_reason"] ("" = normal finish).
 STOP_REASON_WEB_SEARCH_DISABLED = "web_search_disabled"

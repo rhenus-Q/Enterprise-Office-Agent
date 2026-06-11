@@ -10,12 +10,13 @@ This project implements an internal-document Q&A assistant as an **agentic RAG w
 
 - **Question routing** — an LLM router sends knowledge-base questions to vector retrieval and out-of-scope questions straight to web search.
 - **Three quality gates**, each an independent structured-output LLM grader:
-  1. **Document relevance** — irrelevant retrieved chunks are filtered out before generation.
+  1. **Document relevance** — irrelevant retrieved chunks are filtered out before generation, and external web results must pass the *same* relevance gate before they're added to the context (untrusted sources don't get a free pass).
   2. **Answer grounding (anti-hallucination)** — answers not supported by the documents are regenerated.
   3. **Answer usefulness** — grounded but off-target answers trigger a web-search supplement.
 - **Web search fallback** via Tavily when the local knowledge base isn't sufficient.
 - **Privacy mode** — a `WEB_SEARCH_ENABLED=false` toggle disables every web-search path (routing, fallback, and supplement), so user questions never leave the local environment.
 - **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
+- **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
 - **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
 - **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
 
@@ -34,10 +35,12 @@ flowchart TD
     WS --> GEN
 
     GEN --> HG{grounding gate<br/>hallucination_grader}
-    HG -- "not grounded" --> GEN
+    HG -- "not grounded" --> FB[add_grounding_feedback<br/>corrective instruction]
+    FB --> GEN
     HG -- "grounded" --> AG{usefulness gate<br/>answer_grader}
     AG -- "useful" --> E([END])
-    AG -- "not useful" --> WS
+    AG -- "not useful" --> RW[rewrite_query<br/>more specific search]
+    RW --> WS
     HG -. "max retries" .-> E
     AG -. "max retries" .-> E
 ```
@@ -47,12 +50,12 @@ flowchart TD
 1. **`route_question`** (conditional entry point) — a structured-output router (`datasource: "retrieve" | "websearch"`) decides whether the question is covered by the ingested knowledge base or needs external/current information.
 2. **`retrieve`** — top-3 similarity search against a persisted Chroma vector store.
 3. **`grade_documents`** — each chunk is graded individually (`is_relevant: bool`); irrelevant chunks are dropped, and if any chunk failed, a `web_search` flag routes the flow through Tavily before generating.
-4. **`websearch`** — Tavily results are merged into a single `Document` (tagged `source: web_search`) and appended to the context.
+4. **`websearch`** — searches with the rewritten `search_query` on retry rounds (original question otherwise). Each Tavily result is individually graded for relevance against the *original* question (reusing the retrieval grader, so external content faces the same gate as internal chunks); only relevant results are merged into a single `Document` (tagged `source: web_search`), which **replaces** any previous web supplement instead of stacking duplicates. Malformed responses and irrelevant results are dropped defensively — if nothing usable comes back, the workflow continues with the existing documents.
 5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM. Each pass increments `retries`.
 6. **`grade_generation`** (conditional edge) — two-layer check with six explicit outcomes:
-   - `not_grounded` → regenerate,
+   - `not_grounded` → `add_grounding_feedback` injects a corrective instruction into the next generation, then regenerate,
    - `useful` → END,
-   - `not_useful` → web search, then regenerate,
+   - `not_useful` → `rewrite_query` produces a more specific search query, then web search and regenerate,
    - `web_search_disabled` → terminal notice node (privacy mode; see below),
    - `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one).
 
@@ -83,9 +86,12 @@ State is a minimal `TypedDict` (`question`, `documents`, `generation`, `web_sear
 │   ├── state.py             # GraphState TypedDict
 │   ├── config.py            # Env-driven runtime flags (WEB_SEARCH_ENABLED)
 │   ├── consts.py            # Node-name constants
-│   ├── nodes/               # retrieve, grade_documents, generate, web_search
+│   ├── nodes/               # retrieve, grade_documents, generate, web_search,
+│   │                        #   retry helpers (add_grounding_feedback, rewrite_query),
+│   │                        #   terminal notice nodes (stop_reason recorders)
 │   └── chains/              # LCEL chains: generation, retrieval_grader, question_router,
-│                            #   hallucination_grader, answer_grader (each behind a lazy get_*() factory)
+│                            #   hallucination_grader, answer_grader, query_rewriter
+│                            #   (each behind a lazy get_*() factory)
 └── tests/
     ├── conftest.py          # Loads .env; provides the `requires_openai` skip marker
     ├── node/                # Unit tests — all external dependencies mocked, no API keys needed
@@ -210,7 +216,7 @@ uv run pytest -v
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 64 tests passing (17 node + 47 graph) | 37 tests passing |
+| Status | 85 tests passing (28 node + 57 graph) | 37 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
@@ -226,7 +232,6 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 ## Future Improvements
 
 - Structured logging and documented LangSmith tracing setup.
-- Query rewriting before web-search retries instead of re-running the identical query.
 - A small offline evaluation harness (golden Q&A set scored with the existing graders).
 - Idempotent ingestion with stable document IDs; batched relevance grading.
 - CI (GitHub Actions) running the mocked unit suite on every push.

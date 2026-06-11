@@ -18,9 +18,17 @@ Workflow (see structure.md):
 
     generate
     → grounding + usefulness check
-        ├── not grounded   → regenerate (generate again)
+        ├── not grounded   → add grounding feedback → regenerate
         ├── grounded+useful → END
-        └── grounded+not useful → websearch
+        └── grounded+not useful → rewrite search query → websearch
+
+Meaningful retries: a failed grounding check injects corrective feedback into
+the next generation input (add_grounding_feedback), and a failed usefulness
+check rewrites the web search query (rewrite_query) — so each retry differs
+from the previous attempt instead of repeating identical inputs at
+temperature=0. Both extra nodes are linear pass-throughs inside the existing
+retry cycles; every cycle still passes through generate, which increments
+the retries counter that MAX_RETRIES caps.
 
 Privacy mode: when state["web_search_enabled"] is False (seeded from the
 WEB_SEARCH_ENABLED env var by main.py), every websearch route above is disabled —
@@ -53,6 +61,8 @@ from graph.consts import (  # noqa: E402
     WEB_SEARCH_DISABLED_NOTICE,
     MAX_RETRIES_NOT_GROUNDED_NOTICE,
     MAX_RETRIES_NOT_USEFUL_NOTICE,
+    ADD_GROUNDING_FEEDBACK,
+    REWRITE_QUERY,
 )
 
 from graph.nodes import (  # noqa: E402
@@ -63,6 +73,8 @@ from graph.nodes import (  # noqa: E402
     web_search_disabled_notice,
     max_retries_not_grounded_notice,
     max_retries_not_useful_notice,
+    add_grounding_feedback,
+    rewrite_query,
 )
 
 from graph.chains.question_router import get_question_router  # noqa: E402
@@ -136,9 +148,13 @@ def grade_generation(state: GraphState) -> str:
     Two-layer quality check after generation, returning six explicit outcomes
     (each maps one-to-one to the conditional edges below):
 
-    - "not_grounded": answer not supported by documents   -> back to GENERATE (regenerate).
+    - "not_grounded": answer not supported by documents
+                             -> ADD_GROUNDING_FEEDBACK, then GENERATE (the retry
+                                receives corrective feedback in its input).
     - "useful":       grounded and answers the question    -> END.
-    - "not_useful":   grounded but doesn't answer it       -> WEBSEARCH (supplement).
+    - "not_useful":   grounded but doesn't answer it
+                             -> REWRITE_QUERY, then WEBSEARCH (the retry searches
+                                with a more specific rewritten query).
     - "web_search_disabled": grounded but off-target with web search disabled
                              -> notice node recording a stop reason, then END
                                 (no way to add information; main.py shows a caveat).
@@ -223,6 +239,8 @@ workflow.add_node(WEBSEARCH, web_search)
 workflow.add_node(WEB_SEARCH_DISABLED_NOTICE, web_search_disabled_notice)
 workflow.add_node(MAX_RETRIES_NOT_GROUNDED_NOTICE, max_retries_not_grounded_notice)
 workflow.add_node(MAX_RETRIES_NOT_USEFUL_NOTICE, max_retries_not_useful_notice)
+workflow.add_node(ADD_GROUNDING_FEEDBACK, add_grounding_feedback)
+workflow.add_node(REWRITE_QUERY, rewrite_query)
 
 # 2. Entry: route_question decides the first step
 workflow.set_conditional_entry_point(
@@ -254,9 +272,11 @@ workflow.add_conditional_edges(
     GENERATE,
     grade_generation,
     {
-        "not_grounded": GENERATE,       # not grounded -> regenerate
+        # not grounded -> inject corrective feedback, then regenerate
+        "not_grounded": ADD_GROUNDING_FEEDBACK,
         "useful": END,                  # grounded and useful -> end
-        "not_useful": WEBSEARCH,        # grounded but off-target -> web search
+        # grounded but off-target -> rewrite the search query, then web search
+        "not_useful": REWRITE_QUERY,
         # off-target but privacy mode -> record the stop reason, then stop
         # with the grounded answer (main.py attaches a user-facing caveat)
         "web_search_disabled": WEB_SEARCH_DISABLED_NOTICE,
@@ -267,12 +287,17 @@ workflow.add_conditional_edges(
     },
 )
 
-# 7. The notice nodes are terminal: they only record a stop reason.
+# 7. Meaningful-retry pass-throughs: feedback feeds the regenerate cycle,
+#    the rewritten query feeds the web-search cycle.
+workflow.add_edge(ADD_GROUNDING_FEEDBACK, GENERATE)
+workflow.add_edge(REWRITE_QUERY, WEBSEARCH)
+
+# 8. The notice nodes are terminal: they only record a stop reason.
 workflow.add_edge(WEB_SEARCH_DISABLED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_GROUNDED_NOTICE, END)
 workflow.add_edge(MAX_RETRIES_NOT_USEFUL_NOTICE, END)
 
-# 8. Compile into a callable app
+# 9. Compile into a callable app
 app = workflow.compile()
 
 
