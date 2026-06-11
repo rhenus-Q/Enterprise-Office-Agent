@@ -15,6 +15,7 @@ from evals.run_eval import (
     compute_metrics,
     evaluate_row,
     load_dataset,
+    normalize_for_contains,
     render_markdown,
     summarize_result,
     validate_dataset,
@@ -187,6 +188,68 @@ def test_expected_contains_is_case_insensitive_and_checks_formatted_answer():
 
     assert ok["passed"] is True
     assert bad["passed"] is False
+
+
+def test_expected_contains_matches_unicode_hyphen_variants():
+    # Models emit typographic hyphens (here U+2011, the non-breaking hyphen
+    # that failed local-sev1-escalation) for content the dataset spells in
+    # ASCII; a semantically correct answer must not fail on the dash glyph.
+    row = _row(expected_contains=["Sev-1"])
+
+    result = evaluate_row(
+        row, _summary(formatted_answer="Escalate to Sev‑1 immediately")
+    )
+
+    assert result["checks"]["expected_contains"] is True
+    assert result["passed"] is True
+
+
+def test_expected_contains_matches_every_listed_dash_variant():
+    row = _row(expected_contains=["Sev-1"])
+    dash_variants = [
+        "‐",  # hyphen
+        "‑",  # non-breaking hyphen
+        "‒",  # figure dash
+        "–",  # en dash
+        "—",  # em dash
+        "−",  # minus sign
+        "﹘",  # small em dash
+        "﹣",  # small hyphen-minus
+        "－",  # fullwidth hyphen-minus
+    ]
+
+    for dash in dash_variants:
+        result = evaluate_row(row, _summary(formatted_answer=f"Sev{dash}1 criteria"))
+        assert result["passed"] is True, f"U+{ord(dash):04X} did not match"
+
+
+def test_expected_contains_still_fails_when_phrase_genuinely_absent():
+    # Normalization must not weaken the check into a false positive.
+    row = _row(expected_contains=["Sev-1"])
+
+    result = evaluate_row(
+        row, _summary(formatted_answer="Escalate severe incidents immediately.")
+    )
+
+    assert result["checks"]["expected_contains"] is False
+    assert result["passed"] is False
+
+
+def test_expected_contains_tolerates_line_break_inside_phrase():
+    # Whitespace runs (including newlines) collapse to single spaces, so a
+    # wrapped phrase still matches.
+    row = _row(expected_contains=["18 months"])
+
+    result = evaluate_row(row, _summary(formatted_answer="retained for 18\nmonths in hot storage"))
+
+    assert result["passed"] is True
+
+
+def test_normalize_for_contains_folds_dashes_case_and_whitespace():
+    assert normalize_for_contains("Sev‑1") == "sev-1"
+    assert normalize_for_contains("  A—B \n C ") == "a-b c"
+    # Plain ASCII content is unchanged apart from casefolding.
+    assert normalize_for_contains("Sev-1") == "sev-1"
 
 
 def test_privacy_rows_fail_on_any_web_search():

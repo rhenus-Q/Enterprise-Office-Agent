@@ -269,10 +269,15 @@ a caveat appended by the CLI:
 | Relevance grader (local chunk or web result) | Drop the ungraded content — unvetted content never reaches generation; the rest continues | `tool_error` |
 | Hallucination / answer grader | Stop and deliver the answer explicitly flagged as unverified | `tool_error` |
 
-Degraded runs keep their `stop_reason` to the end, so even an answer that
-later passes every gate carries an honest note about what failed along the
-way. All privacy-mode guarantees, budgets, and retry limits remain in force
-on every failure path.
+Degraded runs keep their `stop_reason` to the end with one deliberate
+exception: a *transient* `tool_error` (a dropped chunk/result or a failed
+query rewrite — situations the run is built to recover from) is cleared when
+the final answer subsequently passes **both** quality gates, so a fully
+successful answer never ships with an error caveat. Whole-source degradations
+(`retrieval_error`, `web_search_error`) persist even on success, and the
+terminal `tool_error` (verification itself failed) is always kept. All
+privacy-mode guarantees, budgets, and retry limits remain in force on every
+failure path.
 
 ## Build the knowledge base (ingestion)
 
@@ -413,7 +418,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 240 tests passing (71 node + 151 graph + 18 evals) | 38 tests passing |
+| Status | 249 tests passing (71 node + 155 graph + 23 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 

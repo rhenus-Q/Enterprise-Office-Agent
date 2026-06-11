@@ -94,6 +94,7 @@ defaults.
 | `max_retries_not_useful_notice` | `MAX_RETRIES_NOT_USEFUL_NOTICE` | Terminal: records `stop_reason = "max_retries_not_useful"`. |
 | `budget_exhausted_notice` | `BUDGET_EXHAUSTED_NOTICE` | Terminal: records `stop_reason = "budget_exhausted"`. |
 | `tool_error_notice` | `TOOL_ERROR_NOTICE` | Terminal: records `stop_reason = "tool_error"` (a grader call failed; the answer is delivered explicitly unverified). |
+| `clear_transient_tool_error` | `CLEAR_TRANSIENT_TOOL_ERROR` | Terminal pass-through on the successful path: clears a stale *transient* `tool_error` once the answer has passed both gates (see §10); other reasons pass through untouched. |
 
 ## 5. Conditional routing
 
@@ -123,7 +124,7 @@ mapped one-to-one to an edge)
 | Outcome | Condition | Next |
 |---|---|---|
 | `insufficient_context` | the generation is the deterministic insufficient-context answer (no usable documents) — nothing to verify, nothing to improve; the graders are skipped | `END` (privacy mode with no earlier `stop_reason`: `web_search_disabled` notice → `END`, so the caveat explains the limitation) |
-| `useful` | grounded + answers the question | `END` |
+| `useful` | grounded + answers the question | `clear_transient_tool_error` → `END` (clears a stale transient `tool_error`; see §10) |
 | `not_grounded` | failed grounding, retries remain | `add_grounding_feedback` → `generate` |
 | `not_useful` | grounded but off-target, web search enabled, retries remain | `rewrite_query` → `websearch` → `generate` |
 | `web_search_disabled` | grounded but off-target, privacy mode | notice node → `END` |
@@ -175,7 +176,8 @@ flowchart TD
     HG -- "not grounded,<br/>retries exhausted" --> N1[max_retries_not_grounded_notice]
     HG -- "grounded" --> AG{usefulness gate}
 
-    AG -- "useful" --> E([END])
+    AG -- "useful" --> CL[clear_transient_tool_error]
+    CL --> E([END])
     AG -- "not useful" --> RW[rewrite_query]
     RW --> WS
     AG -- "not useful,<br/>privacy mode" --> N3[web_search_disabled_notice]
@@ -293,12 +295,20 @@ both modes.
 | `generation_error` | The generation LLM call failed; a safe placeholder answer was returned, never graded | "The language model call failed before a reliable answer could be generated." |
 | `tool_error` | A grader or the query rewriter failed; content was dropped ungraded or verification was skipped | "An internal step failed… answer may be incomplete or not fully verified." |
 
-Degraded-run reasons (`retrieval_error`, `web_search_error`, `tool_error`
-written by mid-run nodes) persist to the end of the run, so even an answer
-that later passes every gate carries an honest caveat. Terminal notice nodes
-overwrite an earlier reason when a later failure ends the run — the reason
-that actually stopped the run wins. Nodes only write `stop_reason` on
-failure, so a successful step never clobbers an earlier recorded reason.
+Degraded-run reasons persist to the end of the run with one deliberate
+exception: a **transient `tool_error`** written by a mid-run node (a dropped
+chunk/result, a failed query rewrite — situations the run recovers from) is
+cleared by the `clear_transient_tool_error` pass-through when the final
+answer passes both quality gates, so a fully successful answer never carries
+an error caveat. Whole-source degradations (`retrieval_error`,
+`web_search_error`) persist even on success — an entire evidence source was
+unavailable, which the user should see — and the terminal `tool_error`
+(verification itself failed, recorded by `tool_error_notice`) always ends the
+run flagged. Terminal notice nodes overwrite an earlier reason when a later
+failure ends the run — the reason that actually stopped the run wins. Nodes
+only write `stop_reason` on failure, so a successful step never clobbers an
+earlier recorded reason (the success-path cleanup node is the one deliberate
+exception).
 
 ### Answer provenance (Sources section)
 

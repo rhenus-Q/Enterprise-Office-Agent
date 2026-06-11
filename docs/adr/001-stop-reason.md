@@ -37,7 +37,11 @@ separated: `main.py` maps each reason to a caveat string
 user-facing text.
 
 Nodes only write `stop_reason` on failure, so a successful step never
-clobbers a reason recorded earlier in the run.
+clobbers a reason recorded earlier in the run. One deliberate exception keeps
+`stop_reason` a *terminal* reason: the success path ("useful") passes through
+`clear_transient_tool_error`, which resets a stale mid-run `tool_error` once
+the answer has passed both quality gates (ADR 006) — whole-source
+degradations (`retrieval_error`, `web_search_error`) persist even then.
 
 ## Consequences
 

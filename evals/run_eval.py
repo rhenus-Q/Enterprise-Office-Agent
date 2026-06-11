@@ -24,6 +24,7 @@ nondeterministic. Run it deliberately. --validate-only is always safe.
 import argparse
 import json
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -44,6 +45,38 @@ SOURCE_TYPES = ("local_corpus", "web", "none")
 # Substring marking a non-confident answer. Matches the graph's deterministic
 # insufficient-context answer and the usual phrasing of an honest decline.
 INSUFFICIENT_MARKER = "do not have enough information"
+
+# Unicode dash/hyphen variants normalized to ASCII "-" before substring
+# checks: models routinely emit typographic hyphens (e.g. "Sev‑1" with a
+# U+2011 non-breaking hyphen) for content the dataset spells in ASCII, which
+# must not fail an otherwise-correct answer.
+_DASH_VARIANTS = (
+    "‐"  # hyphen
+    "‑"  # non-breaking hyphen
+    "‒"  # figure dash
+    "–"  # en dash
+    "—"  # em dash
+    "−"  # minus sign
+    "﹘"  # small em dash
+    "﹣"  # small hyphen-minus
+    "－"  # fullwidth hyphen-minus
+)
+_DASH_TRANSLATION = str.maketrans({c: "-" for c in _DASH_VARIANTS})
+
+
+def normalize_for_contains(text):
+    """
+    Normalize text for expected_contains matching: NFKC Unicode
+    normalization, common dash/hyphen variants folded to ASCII "-",
+    whitespace runs (including line breaks) collapsed to single spaces, and
+    casefold for case-insensitive comparison. This makes the check robust to
+    typographic variation while staying strict about actual content.
+    """
+
+    normalized = unicodedata.normalize("NFKC", str(text))
+    normalized = normalized.translate(_DASH_TRANSLATION)
+    normalized = " ".join(normalized.split())
+    return normalized.casefold()
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +204,10 @@ def evaluate_row(row, summary):
 
     contains = row.get("expected_contains") or []
     if contains:
-        text = summary["formatted_answer"].lower()
-        checks["expected_contains"] = all(needle.lower() in text for needle in contains)
+        text = normalize_for_contains(summary["formatted_answer"])
+        checks["expected_contains"] = all(
+            normalize_for_contains(needle) in text for needle in contains
+        )
 
     # Hard privacy guarantee: a disabled-web row must never search the web.
     if not row["web_search_enabled"]:
