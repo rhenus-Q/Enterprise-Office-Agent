@@ -3,7 +3,10 @@
 This is the architecture deep-dive for the project. The [README](README.md)
 covers setup and usage; this document describes the full workflow, state
 machine, and design decisions, including the paths the README's simplified
-diagram omits (terminal notice nodes and retry helpers).
+diagram omits (terminal notice nodes and retry helpers). The *rationale*
+behind the major decisions — context, trade-offs, and rejected alternatives —
+lives in the Architecture Decision Records under
+[docs/adr/](docs/adr/README.md).
 
 ## 1. Goal
 

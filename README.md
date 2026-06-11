@@ -337,6 +337,16 @@ The harness's pure helpers (loading, validation, checks, metrics, rendering)
 are unit-tested without API calls in `tests/evals/`. See
 [`evals/README.md`](evals/README.md) for the dataset schema and check rules.
 
+## Architecture decision records
+
+The major design decisions — `stop_reason` semantics, privacy mode,
+meaningful retries, the web-result relevance gate, run budgets, graceful
+degradation, deterministic provenance, the synthetic corpus, and the eval
+harness — are documented as short ADRs in [`docs/adr/`](docs/adr/), each
+covering the context, the decision, its consequences, the trade-offs
+accepted, and the alternatives deliberately not chosen. Start with the
+[index](docs/adr/README.md).
+
 ### Mocked unit tests vs. API-based chain tests
 
 | | `tests/node/` + `tests/graph/` (unit) | `tests/chains/` (integration) |
