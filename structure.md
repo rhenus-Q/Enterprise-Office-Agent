@@ -11,9 +11,11 @@ An enterprise internal-document Q&A assistant that **never presents an
 unvetted answer as a success**. Built as a self-correcting (CRAG-style)
 LangGraph workflow:
 
-- Answers come from a curated local knowledge base (Chroma), with web search
-  (Tavily) as a fallback — and a privacy mode that disables web search
-  entirely.
+- Answers come from a curated local knowledge base (Chroma) — a synthetic
+  AcmeCorp internal-document corpus under `data/acmecorp_internal_docs/`
+  (six fictional policy/guide documents; no real company data) — with web
+  search (Tavily) as a fallback, and a privacy mode that disables web
+  search entirely.
 - Every answer passes explicit quality gates (document relevance, answer
   grounding, answer usefulness).
 - Failed gates trigger **meaningful retries** that change the input between
@@ -37,8 +39,10 @@ module imports side-effect-free (no API keys, no network at import time):
 
 Supporting modules: `graph/state.py` (the state schema), `graph/consts.py`
 (node names, `stop_reason` values, the `WEB_SEARCH_SOURCE` metadata marker),
-`graph/config.py` (env-driven flags), `ingestion.py` (offline Chroma build),
-`main.py` (CLI, state seeding, caveat + Sources presentation).
+`graph/config.py` (env-driven flags), `ingestion.py` (offline, idempotent
+Chroma build of the local Markdown corpus: collection reset + deterministic
+chunk ids, provenance metadata per document), `main.py` (CLI, state seeding,
+caveat + Sources presentation).
 
 **Design grammar** (applied consistently):
 - Conditional edge functions are **pure** — they read state and chains, never write.
@@ -267,9 +271,11 @@ section built by `format_sources(result["documents"])` — pure post-run
 formatting of `Document` metadata, never an LLM call, never document content:
 
 - **Local corpus documents** (anything not marked as the web supplement) are
-  cited as `- Local corpus: <title>` (falling back to the `source` URL, then
-  to the safe label `Local corpus document`). Titles/URLs come from the
-  `WebBaseLoader` metadata persisted by `ingestion.py`.
+  cited as `- Local corpus: <title>` (falling back to the `source` path, then
+  to the safe label `Local corpus document`). Titles come from each corpus
+  document's H1 heading; `ingestion.py` also records `source` (repo-relative
+  path), `source_type: "local_corpus"`, and a `document_category`, all
+  persisted through chunking into Chroma.
 - **The web supplement** is detected via `metadata["source"] ==
   WEB_SEARCH_SOURCE` (a constant in `consts.py` shared with the `websearch`
   node, which also records `source_type: "web"` and the `search_query` that
@@ -361,11 +367,10 @@ Limitations (deliberate scope):
 - `print()`-based observability; LangSmith tracing available via env vars but undocumented in traces/screenshots.
 - Sequential per-chunk / per-result grading (latency and cost scale with k).
 - A single irrelevant chunk triggers the web fallback even when relevant chunks remain.
-- Re-running `ingestion.py` appends duplicate chunks (no stable document IDs).
-- Web search and document loading still use the sunset `langchain-community` integrations.
+- Web search still uses the sunset `langchain-community` Tavily integration.
 - Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 
 Future improvements (rough priority): LangSmith tracing evidence + structured
 logging; CI running the mocked suites; an offline eval harness scored with the
 existing graders; rationale-bearing grounding feedback; batched grading;
-idempotent ingestion; migration off `langchain-community`.
+migration off `langchain-community` for Tavily.

@@ -6,6 +6,8 @@
 
 This project implements an internal-document Q&A assistant as an **agentic RAG workflow**: instead of a single retrieve-then-generate pass, the system routes each question to the best data source, grades the relevance of every retrieved document, checks each generated answer for hallucinations and usefulness, and automatically falls back to web search or regenerates when a quality gate fails. The graph is a LangGraph `StateGraph` with explicit conditional edges, a bounded retry loop, and three independent LLM quality gates — a practical implementation of the **Corrective RAG (CRAG)** pattern.
 
+The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp internal documents (VPN access policy, expense reimbursement policy, security incident response playbook, on-call & escalation policy, data retention policy, employee onboarding guide) under [`data/acmecorp_internal_docs/`](data/acmecorp_internal_docs/). The documents are entirely fictional — no real company data — but written with realistic structure (effective dates, owners, thresholds, SLAs, escalation paths, exceptions), so privacy mode, provenance, and the quality gates operate on enterprise-shaped content rather than tutorial pages.
+
 ## Key Features
 
 - **Question routing** — an LLM router sends knowledge-base questions to vector retrieval and out-of-scope questions straight to web search.
@@ -84,7 +86,9 @@ State is a minimal `TypedDict` (`question`, `documents`, `generation`, `web_sear
 ```
 .
 ├── main.py                  # CLI entry point: interactive Q&A loop over the compiled graph
-├── ingestion.py             # One-time KB build: load URLs → split → embed → persist to Chroma
+├── ingestion.py             # KB build: load local Markdown corpus → split → embed → persist to Chroma (idempotent)
+├── data/
+│   └── acmecorp_internal_docs/  # Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 ├── structure.md             # Prose description of the workflow design
 ├── graph/
 │   ├── graph.py             # StateGraph assembly, routing/decision functions, MAX_RETRIES, compiled `app`
@@ -131,7 +135,6 @@ See [`.env.example`](.env.example) for the full template:
 | `WEB_SEARCH_ENABLED` | Optional (default `true`) | Set to `false` to disable all external web search (privacy mode) |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE` | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below) |
 | `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` | Optional | LangSmith tracing of the correction loops |
-| `USER_AGENT` | Optional | Polite user agent for ingestion's web loader |
 
 `.env` is gitignored; only `.env.example` is committed.
 
@@ -222,13 +225,28 @@ on every failure path.
 
 ## Build the knowledge base (ingestion)
 
-Run once before first use (and again whenever the source URLs change):
+Run once before first use (and again whenever the corpus changes):
 
 ```powershell
 uv run python ingestion.py
 ```
 
-This loads the configured URLs, splits them into 1000-character chunks (200 overlap), embeds them, and persists a Chroma collection to `chroma_db/` (gitignored). The demo corpus is three LangChain documentation pages (RAG, vector stores, text splitters) — swap the `URLS` list in `ingestion.py` for your own internal documents.
+This loads the Markdown documents from `data/acmecorp_internal_docs/`, splits them into 1000-character chunks (200 overlap), embeds them, and persists a Chroma collection to `chroma_db/` (gitignored). Ingestion is **idempotent**: the existing collection is dropped and rebuilt with deterministic chunk ids, so re-running never duplicates chunks (tradeoff: a run that fails mid-ingestion leaves the index empty until re-run).
+
+### The synthetic AcmeCorp corpus
+
+The corpus is six fictional internal documents — created for this project, containing no real company data or copyrighted policies:
+
+| Document | Category | Sample question it answers |
+|---|---|---|
+| `vpn_policy.md` | it_security | "How do I request VPN access?" |
+| `expense_reimbursement_policy.md` | finance | "What expenses require manager approval?" |
+| `incident_response_playbook.md` | it_security | "When should a security incident be escalated to Sev-1?" |
+| `on_call_escalation_policy.md` | operations | "Who gets paged for after-hours production incidents?" |
+| `data_retention_policy.md` | compliance | "How long are audit logs retained?" |
+| `employee_onboarding_guide.md` | hr | "What should a new employee do during their first week?" |
+
+Each document has an effective date, a policy owner, concrete rules (approval thresholds, ack SLAs, retention periods), escalation paths, an exceptions process, and contacts; documents cross-reference each other so multi-document questions retrieve coherently. Every document carries provenance metadata (`source`, `title`, `source_type: "local_corpus"`, `document_category`) that survives chunking and feeds the `Sources:` section. To use your own documents, drop Markdown files into the corpus folder (and optionally extend `DOCUMENT_CATEGORIES` in `ingestion.py`), then re-run ingestion.
 
 ## Run the assistant
 
@@ -241,7 +259,7 @@ Enterprise Knowledge Assistant
 Type 'exit' to quit.
 
 Enter your question:
-> Why do we split documents into chunks?
+> How do I request VPN access?
 ```
 
 Node-by-node progress banners (`---RETRIEVE---`, `---CHECK HALLUCINATIONS---`, …) show the graph's path, including any correction loops.
@@ -253,11 +271,12 @@ context came from:
 
 ```
 Answer:
-Documents are split into chunks because ...
+Submit the "VPN Access Request" form in the IT Service Portal; your manager
+approves it, and IT Security provisions access within 2 business days ...
 
 Sources:
-- Local corpus: Text splitters | LangChain
-- Web search: "document chunking strategies 2026"
+- Local corpus: AcmeCorp VPN Access Policy
+- Web search: "AcmeCorp VPN client setup"
 ```
 
 Local corpus documents are cited by their ingestion metadata (page title,
@@ -303,15 +322,14 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 - **Single-turn CLI** — no conversation memory; each question is independent. No API/web surface.
 - **Observability is `print()`-based** — no structured logging, timing, or token/cost tracking out of the box (LangSmith tracing can be enabled via env vars).
 - **Aggressive web fallback** — a single irrelevant retrieved chunk triggers a web-search detour, even when relevant chunks remain.
-- **Non-idempotent ingestion** — re-running `ingestion.py` appends duplicate chunks to the existing Chroma collection.
 - **Per-document sequential grading** — relevance grading makes one LLM call per chunk.
-- Web search and document loading still use the sunset `langchain-community` integrations.
+- Web search still uses the sunset `langchain-community` Tavily integration.
 
 ## Future Improvements
 
 - Structured logging and documented LangSmith tracing setup.
 - A small offline evaluation harness (golden Q&A set scored with the existing graders).
-- Idempotent ingestion with stable document IDs; batched relevance grading.
+- Batched relevance grading.
 - CI (GitHub Actions) running the mocked unit suite on every push.
 - Migration from `langchain-community` to the maintained standalone integrations (e.g. `langchain-tavily`).
 

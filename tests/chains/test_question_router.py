@@ -3,7 +3,8 @@ test_question_router.py
 
 Verify that question_router routes questions correctly to:
 - "retrieve" : questions on topics covered by the internal vector store
-               (RAG / vector stores / text splitters and related LangChain concepts).
+               (AcmeCorp internal documents: VPN access, expenses, incident
+               response, on-call escalation, data retention, onboarding).
 - "websearch": questions needing real-time / external information not in the store
                (current events, weather, latest version numbers, etc.).
 
@@ -20,13 +21,14 @@ from graph.consts import RETRIEVE, WEBSEARCH
 from graph.chains.question_router import question_router, RouteQuery
 
 
-# Questions that should go to vector retrieval (all on indexed RAG / vector store / text splitter topics)
+# Questions that should go to vector retrieval (all on indexed AcmeCorp policy topics)
 RETRIEVE_QUESTIONS = [
-    "What is Retrieval-Augmented Generation?",
-    "How do vector stores work in LangChain?",
-    "Why do we need text splitters when building a RAG pipeline?",
-    "What is the difference between a retriever and a vector store?",
-     "What is RAG? How does it combine retrieval and generation?",
+    "How do I request VPN access?",
+    "What expenses require manager approval?",
+    "When should a security incident be escalated to Sev-1?",
+    "Who gets paged for after-hours production incidents?",
+    "How long are audit logs retained?",
+    "What should a new employee do during their first week?",
 ]
 
 
@@ -44,7 +46,7 @@ WEBSEARCH_QUESTIONS = [
 def test_router_returns_routequery_with_valid_datasource():
     """The result should be a RouteQuery, with datasource one of the two valid values."""
 
-    result = question_router.invoke({"question": "What is RAG?"})
+    result = question_router.invoke({"question": "How do I request VPN access?"})
 
     assert isinstance(result, RouteQuery)
     assert result.datasource in {RETRIEVE, WEBSEARCH}

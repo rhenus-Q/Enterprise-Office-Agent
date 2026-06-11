@@ -2,20 +2,27 @@
 ingestion.py
 
 Purpose:
-- Load documents from web pages
+- Load the synthetic AcmeCorp internal-document corpus (local Markdown files)
 - Split documents into smaller chunks
 - Convert chunks into embeddings
-- Store them in a Chroma vector database
+- Store them in a Chroma vector database (idempotent rebuild)
 - Expose a retriever for the LangGraph retrieve node
 
 This file prepares the knowledge base for the Agentic RAG workflow.
+
+The corpus under data/acmecorp_internal_docs/ is entirely fictional synthetic
+content (no real company data) — replace it with real internal documents in
+an actual deployment. Each document carries provenance metadata (source,
+title, source_type, document_category) that survives chunking and feeds the
+user-facing Sources section in main.py.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-from langchain_community.document_loaders import WebBaseLoader
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
@@ -24,13 +31,20 @@ from langchain_chroma import Chroma
 load_dotenv()
 
 
-# 1. Raw knowledge sources
-# Replace these with enterprise internal doc URLs, technical docs, product docs, SOPs, etc.
-URLS = [
-    "https://python.langchain.com/docs/concepts/rag/",
-    "https://python.langchain.com/docs/concepts/vectorstores/",
-    "https://python.langchain.com/docs/concepts/text_splitters/",
-]
+# 1. Synthetic enterprise corpus: AcmeCorp internal Markdown documents.
+# Anchored to this file's directory so ingestion works from any CWD.
+CORPUS_DIR = Path(__file__).parent / "data" / "acmecorp_internal_docs"
+
+# document_category metadata per file (provenance / future filtering).
+# Files not listed here fall back to "internal_document".
+DOCUMENT_CATEGORIES = {
+    "vpn_policy.md": "it_security",
+    "incident_response_playbook.md": "it_security",
+    "expense_reimbursement_policy.md": "finance",
+    "on_call_escalation_policy.md": "operations",
+    "data_retention_policy.md": "compliance",
+    "employee_onboarding_guide.md": "hr",
+}
 
 
 # 2. Chroma local persistence directory
@@ -42,9 +56,24 @@ CHROMA_PATH = "chroma_db"
 COLLECTION_NAME = "agentic_rag_docs"
 
 
+def _extract_title(text: str, fallback: str) -> str:
+    """Return the first Markdown H1 heading, or the fallback if none exists."""
+
+    for line in text.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return fallback
+
+
 def load_documents():
     """
-    Load raw documents from URLs.
+    Load the local Markdown corpus from CORPUS_DIR.
+
+    Each file becomes one Document with provenance metadata:
+    - source: repo-relative path (stable citation key)
+    - title: the document's H1 heading (shown in the Sources section)
+    - source_type: "local_corpus" (distinguishes from the web supplement)
+    - document_category: coarse policy domain
 
     Returns:
         List[Document]: LangChain Document objects.
@@ -52,12 +81,23 @@ def load_documents():
 
     docs = []
 
-    for url in URLS:
-        loader = WebBaseLoader(url)
-        loaded_docs = loader.load()
-        docs.extend(loaded_docs)
+    for path in sorted(CORPUS_DIR.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        docs.append(
+            Document(
+                page_content=text,
+                metadata={
+                    "source": f"data/acmecorp_internal_docs/{path.name}",
+                    "title": _extract_title(text, path.stem),
+                    "source_type": "local_corpus",
+                    "document_category": DOCUMENT_CATEGORIES.get(
+                        path.name, "internal_document"
+                    ),
+                },
+            )
+        )
 
-    print(f"Loaded {len(docs)} raw documents.")
+    print(f"Loaded {len(docs)} corpus documents from {CORPUS_DIR}.")
     return docs
 
 
@@ -71,7 +111,7 @@ def split_documents(documents):
     - Retrieval can return only the most relevant chunks
 
     Returns:
-        List[Document]: Chunked documents.
+        List[Document]: Chunked documents (metadata is copied to every chunk).
     """
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -85,9 +125,35 @@ def split_documents(documents):
     return splits
 
 
+def _chunk_ids(splits):
+    """
+    Deterministic per-chunk ids: "<source>::chunk-<index>".
+
+    Stable ids plus the collection reset in build_vectorstore make ingestion
+    idempotent — re-running replaces the index instead of appending
+    duplicate chunks.
+    """
+
+    ids = []
+    counters = {}
+
+    for chunk in splits:
+        source = chunk.metadata["source"]
+        index = counters.get(source, 0)
+        counters[source] = index + 1
+        ids.append(f"{source}::chunk-{index}")
+
+    return ids
+
+
 def build_vectorstore():
     """
-    Build a local Chroma vector store from loaded and split documents.
+    Build the local Chroma vector store from the corpus (idempotent).
+
+    The existing collection is dropped before re-indexing, so re-running
+    ingestion never duplicates chunks and removed corpus files disappear
+    from the index. Tradeoff: a run that fails mid-ingestion leaves the
+    knowledge base empty until ingestion is re-run successfully.
 
     Returns:
         Chroma: A Chroma vector store instance.
@@ -98,9 +164,18 @@ def build_vectorstore():
 
     embeddings = OpenAIEmbeddings()
 
+    # Idempotent rebuild: drop any previous index of the same collection.
+    Chroma(
+        collection_name=COLLECTION_NAME,
+        embedding_function=embeddings,
+        persist_directory=CHROMA_PATH,
+    ).delete_collection()
+    print("Cleared existing collection (idempotent rebuild).")
+
     vectorstore = Chroma.from_documents(
         documents=splits,
         embedding=embeddings,
+        ids=_chunk_ids(splits),
         collection_name=COLLECTION_NAME,
         persist_directory=CHROMA_PATH,
     )
