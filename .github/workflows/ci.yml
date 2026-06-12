@@ -1,10 +1,17 @@
-# CI: run the fully mocked test suites (tests/node/ + tests/graph/ +
-# tests/evals/) on every push and pull request. These suites mock every
-# external dependency at its lazy factory seam (tests/evals/ covers only the
-# eval harness's pure helpers), so the job needs NO API keys (OpenAI / Tavily /
-# LangSmith). The integration suite (tests/chains/) calls the real model and
-# the full eval run (evals/run_eval.py) costs real API money; both are
-# deliberately excluded from CI.
+# CI: two parallel jobs, both keys-free.
+#
+# mocked-tests: runs the fully mocked test suites (tests/node/ + tests/graph/ +
+# tests/evals/) on every push and pull request. These suites mock every external
+# dependency at its lazy factory seam (tests/evals/ covers only the eval
+# harness's pure helpers), so the job needs NO API keys (OpenAI / Tavily /
+# LangSmith). The integration suite (tests/chains/) calls the real model and the
+# full eval run (evals/run_eval.py) costs real API money; both are deliberately
+# excluded from CI.
+#
+# lint: runs ruff (lint + format check) and mypy (scoped to graph/engine.py,
+# graph/config.py, graph/formatting.py, graph/state.py, graph/consts.py).
+# No API keys required. Runs in parallel with mocked-tests so test feedback
+# is never delayed by lint failures.
 
 name: CI
 
@@ -32,3 +39,29 @@ jobs:
 
       - name: Run mocked test suites (no API keys required)
         run: uv run pytest tests/node/ tests/graph/ tests/evals/ -q
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv (with Python 3.12 and dependency cache)
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies from the committed lockfile
+        run: uv sync --locked --group dev
+
+      - name: Lint with ruff
+        run: uv run ruff check .
+
+      - name: Check formatting with ruff
+        run: uv run ruff format --check .
+
+      - name: Type-check scoped modules with mypy
+        run: uv run mypy

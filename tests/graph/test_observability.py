@@ -19,7 +19,6 @@ import graph.graph as graph_module
 from graph.consts import RETRIEVE
 from graph.engine import AnswerOptions, answer_question, build_trace
 
-
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
@@ -124,7 +123,7 @@ def test_node_timings_align_with_node_path(monkeypatch):
     result = answer_question("Q")
 
     assert len(result.node_timings_ms) == len(result.node_path)
-    for entry, node_name in zip(result.node_timings_ms, result.node_path):
+    for entry, node_name in zip(result.node_timings_ms, result.node_path, strict=False):
         assert entry["node"] == node_name
         assert isinstance(entry["duration_ms"], float)
         assert entry["duration_ms"] >= 0.0

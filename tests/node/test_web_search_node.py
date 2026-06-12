@@ -97,7 +97,7 @@ def test_web_search_preserves_existing_documents_and_appends(monkeypatch):
     result = web_search({"question": "Q", "documents": [existing]})
 
     assert len(result["documents"]) == 2
-    assert result["documents"][0] is existing               # existing kept, first
+    assert result["documents"][0] is existing  # existing kept, first
     assert result["documents"][-1].metadata["source"] == "web_search"  # web result appended last
 
 
@@ -292,9 +292,7 @@ def test_web_search_parses_dict_shaped_tavily_response(monkeypatch):
         monkeypatch,
         {
             "query": "Q",
-            "results": [
-                {"content": "alpha", "url": "https://a.example", "title": "Page A"}
-            ],
+            "results": [{"content": "alpha", "url": "https://a.example", "title": "Page A"}],
             "response_time": 0.5,
         },
     )
@@ -333,7 +331,7 @@ def test_web_search_increments_counters(monkeypatch):
 
     assert result["web_search_count"] == 1
     assert result["web_result_grading_count"] == 2  # one per graded result
-    assert result["llm_call_count"] == 2            # grading calls are LLM calls
+    assert result["llm_call_count"] == 2  # grading calls are LLM calls
 
 
 def test_web_search_skipped_when_search_budget_exhausted(monkeypatch):
@@ -344,12 +342,10 @@ def test_web_search_skipped_when_search_budget_exhausted(monkeypatch):
     grader_calls = _patch_grader(monkeypatch)
 
     old_web = Document(page_content="old web", metadata={"source": "web_search"})
-    result = web_search(
-        {"question": "Q", "documents": [old_web], "web_search_count": 5}
-    )
+    result = web_search({"question": "Q", "documents": [old_web], "web_search_count": 5})
 
-    assert "payload" not in calls          # Tavily never called
-    assert grader_calls == []              # no grading either
+    assert "payload" not in calls  # Tavily never called
+    assert grader_calls == []  # no grading either
     assert result["documents"] == [old_web]
 
 
@@ -400,10 +396,10 @@ def test_web_search_skips_malformed_entries_and_keeps_usable_ones(monkeypatch):
         monkeypatch,
         [
             "not-a-dict",
-            {"url": "https://example.com"},   # missing "content"
-            {"content": ""},                   # empty content
-            {"content": "   "},                # whitespace-only content
-            {"content": 42},                   # non-string content
+            {"url": "https://example.com"},  # missing "content"
+            {"content": ""},  # empty content
+            {"content": "   "},  # whitespace-only content
+            {"content": 42},  # non-string content
             {"content": "good result"},
         ],
     )
@@ -436,9 +432,9 @@ def test_tavily_failure_preserves_local_documents(monkeypatch):
     local = Document(page_content="local chunk")
     result = web_search({"question": "Q", "documents": [local]})  # must not raise
 
-    assert result["documents"] == [local]           # local docs survive, nothing appended
+    assert result["documents"] == [local]  # local docs survive, nothing appended
     assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_ERROR
-    assert grader_calls == []                       # nothing to grade
+    assert grader_calls == []  # nothing to grade
 
 
 def test_tavily_failure_with_no_documents_returns_empty_context(monkeypatch):
@@ -477,7 +473,7 @@ def test_grader_failure_drops_only_the_ungraded_result(monkeypatch):
     result = web_search({"question": "Q", "documents": []})  # must not raise
 
     assert len(result["documents"]) == 1
-    assert result["documents"][0].page_content == "good"     # ungraded content never appended
+    assert result["documents"][0].page_content == "good"  # ungraded content never appended
     assert result["stop_reason"] == STOP_REASON_TOOL_ERROR
 
 

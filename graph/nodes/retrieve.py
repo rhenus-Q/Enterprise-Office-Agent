@@ -1,8 +1,8 @@
 from functools import lru_cache
 
-from ingestion import get_retriever
 from graph.consts import STOP_REASON_RETRIEVAL_ERROR
 from graph.state import GraphState
+from ingestion import get_retriever
 
 
 @lru_cache(maxsize=1)
@@ -35,7 +35,9 @@ def retrieve(state: GraphState):
         documents = get_node_retriever().invoke(question)
     except Exception as exc:
         # Log only the exception type: messages may carry paths or secrets.
-        print(f"---RETRIEVAL FAILED ({type(exc).__name__}): FALLING BACK WITHOUT LOCAL DOCUMENTS---")
+        print(
+            f"---RETRIEVAL FAILED ({type(exc).__name__}): FALLING BACK WITHOUT LOCAL DOCUMENTS---"
+        )
         return {
             "question": question,
             "documents": [],

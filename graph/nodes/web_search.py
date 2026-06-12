@@ -111,16 +111,16 @@ def web_search(state: GraphState):
     # on retry rounds only the freshest web content should feed generation.
     # (Also copies the list, so state is never mutated in place.)
     documents = [
-        doc
-        for doc in state.get("documents", [])
-        if doc.metadata.get("source") != WEB_SEARCH_SOURCE
+        doc for doc in state.get("documents", []) if doc.metadata.get("source") != WEB_SEARCH_SOURCE
     ]
 
     try:
         search_results = get_web_search_tool().invoke({"query": search_query})
     except Exception as exc:
         # Log only the exception type: messages may carry secrets.
-        print(f"---WEB SEARCH FAILED ({type(exc).__name__}): CONTINUING WITH LOCAL DOCUMENTS ONLY---")
+        print(
+            f"---WEB SEARCH FAILED ({type(exc).__name__}): CONTINUING WITH LOCAL DOCUMENTS ONLY---"
+        )
         return {
             "question": question,
             "documents": documents,
@@ -167,7 +167,9 @@ def web_search(state: GraphState):
         except Exception as exc:
             # Conservative: an ungraded result is never trusted. Drop it and
             # keep grading the remaining results.
-            print(f"---WEB RESULT GRADING FAILED ({type(exc).__name__}): DROPPING UNGRADED RESULT---")
+            print(
+                f"---WEB RESULT GRADING FAILED ({type(exc).__name__}): DROPPING UNGRADED RESULT---"
+            )
             grading_error = True
             continue
 

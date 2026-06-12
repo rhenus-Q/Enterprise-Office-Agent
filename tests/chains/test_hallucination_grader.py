@@ -14,16 +14,13 @@ so each case passes a list of Document objects, mirroring GraphState.
 """
 
 import pytest
-
 from langchain_core.documents import Document
 
-from tests.conftest import requires_openai
-
 from graph.chains.hallucination_grader import (
-    hallucination_grader,
     GradeHallucination,
+    hallucination_grader,
 )
-
+from tests.conftest import requires_openai
 
 # Shared source documents the answers are graded against.
 DOCS = [
@@ -63,13 +60,11 @@ GROUNDED_CASES = [
 NOT_GROUNDED_CASES = [
     (
         DOCS,
-        "RAG was invented by OpenAI in 2017 and always uses exactly five "
-        "documents per query.",
+        "RAG was invented by OpenAI in 2017 and always uses exactly five documents per query.",
     ),
     (
         DOCS,
-        "Text splitters use a fixed chunk size of 512 tokens and require a GPU "
-        "to run.",
+        "Text splitters use a fixed chunk size of 512 tokens and require a GPU to run.",
     ),
 ]
 

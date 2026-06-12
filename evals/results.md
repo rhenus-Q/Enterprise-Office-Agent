@@ -133,4 +133,3 @@ Tracked LLM calls are the graph's budgeted operational counter (generations, que
 **Q:** What are today's top technology news headlines?
 
 **A:** I do not have enough information in the provided documents. Note: Web search is disabled, so I could only use the local knowledge base. I may not have enough information to fully answer this question.
-

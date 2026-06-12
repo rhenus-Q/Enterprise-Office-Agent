@@ -1,14 +1,12 @@
+from graph.chains.generation import generate_answer
 from graph.consts import STOP_REASON_GENERATION_ERROR
 from graph.state import GraphState
-from graph.chains.generation import generate_answer
-
 
 # Safe replacement answer when the generation LLM call itself fails.
 # Deliberately deterministic and content-free: a failed call must never be
 # presented as (or mistaken for) a real grounded answer.
 GENERATION_FAILED_ANSWER = (
-    "I could not generate an answer because the language model request failed. "
-    "Please try again."
+    "I could not generate an answer because the language model request failed. Please try again."
 )
 
 

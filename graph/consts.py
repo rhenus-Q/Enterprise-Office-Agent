@@ -19,14 +19,16 @@ WEB_SEARCH_SOURCE = "web_search"
 
 # Values for GraphState["stop_reason"] ("" = normal finish).
 STOP_REASON_WEB_SEARCH_DISABLED = "web_search_disabled"
-STOP_REASON_WEB_FALLBACK_DISABLED = "web_fallback_disabled"  # WEB_FALLBACK_POLICY=disabled blocked a local run's web retry
+STOP_REASON_WEB_FALLBACK_DISABLED = (
+    "web_fallback_disabled"  # WEB_FALLBACK_POLICY=disabled blocked a local run's web retry
+)
 STOP_REASON_MAX_RETRIES_NOT_GROUNDED = "max_retries_not_grounded"
 STOP_REASON_MAX_RETRIES_NOT_USEFUL = "max_retries_not_useful"
 STOP_REASON_BUDGET_EXHAUSTED = "budget_exhausted"
 
 # External-dependency failure stop reasons. Degraded runs record these so the
 # caller can attach an honest caveat instead of crashing or staying silent.
-STOP_REASON_RETRIEVAL_ERROR = "retrieval_error"        # Chroma / retriever failed
-STOP_REASON_WEB_SEARCH_ERROR = "web_search_error"      # Tavily search failed
-STOP_REASON_GENERATION_ERROR = "generation_error"      # generation LLM call failed
-STOP_REASON_TOOL_ERROR = "tool_error"                  # a grader / query-rewrite call failed
+STOP_REASON_RETRIEVAL_ERROR = "retrieval_error"  # Chroma / retriever failed
+STOP_REASON_WEB_SEARCH_ERROR = "web_search_error"  # Tavily search failed
+STOP_REASON_GENERATION_ERROR = "generation_error"  # generation LLM call failed
+STOP_REASON_TOOL_ERROR = "tool_error"  # a grader / query-rewrite call failed

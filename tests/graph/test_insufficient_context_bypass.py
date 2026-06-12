@@ -27,7 +27,6 @@ from graph.consts import (
 from graph.graph import grade_generation
 from main import WEB_SEARCH_DISABLED_NOTE, format_answer
 
-
 # ---------------------------------------------------------------------------
 # Helpers (mirrors the other graph test files)
 # ---------------------------------------------------------------------------
@@ -199,9 +198,7 @@ def test_insufficient_context_preserves_earlier_stop_reason(monkeypatch):
 def test_generation_error_takes_precedence_over_insufficient_context(monkeypatch):
     _patch_graders_to_fail_if_called(monkeypatch)
 
-    result = grade_generation(
-        _generation_state(stop_reason=STOP_REASON_GENERATION_ERROR)
-    )
+    result = grade_generation(_generation_state(stop_reason=STOP_REASON_GENERATION_ERROR))
 
     assert result == "generation_error"
 
@@ -236,9 +233,7 @@ def test_missing_flag_defaults_to_grading_as_before(monkeypatch):
     # Callers that never seed insufficient_context get today's behavior.
     calls = _patch_counting_graders(monkeypatch, grounded=True, useful=True)
 
-    state = _generation_state(
-        documents=[Document(page_content="d")], generation="A"
-    )
+    state = _generation_state(documents=[Document(page_content="d")], generation="A")
     del state["insufficient_context"]
 
     assert grade_generation(state) == "useful"
@@ -261,9 +256,9 @@ def test_app_privacy_mode_decline_ends_with_caveat_and_no_grader_calls(monkeypat
 
     assert result["generation"] == INSUFFICIENT_CONTEXT_ANSWER
     assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_DISABLED
-    assert result["retries"] == 1                # no retry loop on the decline
-    assert result["llm_call_count"] == 0         # the short-circuit costs nothing
-    assert web_calls == []                       # privacy guarantee holds
+    assert result["retries"] == 1  # no retry loop on the decline
+    assert result["llm_call_count"] == 0  # the short-circuit costs nothing
+    assert web_calls == []  # privacy guarantee holds
 
     formatted = format_answer(result)
     assert formatted.startswith(INSUFFICIENT_CONTEXT_ANSWER)
@@ -282,7 +277,7 @@ def test_app_web_enabled_decline_ends_cleanly_without_grading(monkeypatch):
     result = graph_module.app.invoke(_initial_state(enabled=True))
 
     assert result["generation"] == INSUFFICIENT_CONTEXT_ANSWER
-    assert result["stop_reason"] == ""           # clean honest decline
+    assert result["stop_reason"] == ""  # clean honest decline
     assert result["retries"] == 1
-    assert len(web_calls) == 1                   # the one fallback search, no rewrite round
+    assert len(web_calls) == 1  # the one fallback search, no rewrite round
     assert format_answer(result) == INSUFFICIENT_CONTEXT_ANSWER  # no Sources, no caveat

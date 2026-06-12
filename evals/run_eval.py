@@ -25,7 +25,7 @@ import argparse
 import json
 import sys
 import unicodedata
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Make project-root imports (graph.*, main) work when invoked as
@@ -33,12 +33,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from graph.consts import WEB_SEARCH_SOURCE  # noqa: E402  (pure constants, side-effect-free)
-from graph.config import (  # noqa: E402  (pure env helpers, side-effect-free)
+from graph.config import (
     WEB_FALLBACK_AGGRESSIVE,
     WEB_FALLBACK_CONSERVATIVE,
     WEB_FALLBACK_DISABLED,
 )
+from graph.consts import WEB_SEARCH_SOURCE
 
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
@@ -142,7 +142,9 @@ def validate_dataset(rows):
             isinstance(expected_stop, str)
             or (isinstance(expected_stop, list) and all(isinstance(s, str) for s in expected_stop))
         ):
-            errors.append(f"{label}: expected_stop_reason must be null, a string, or a list of strings")
+            errors.append(
+                f"{label}: expected_stop_reason must be null, a string, or a list of strings"
+            )
 
         expected_source = row.get("expected_source_type")
         if expected_source is not None and expected_source not in SOURCE_TYPES:
@@ -232,7 +234,9 @@ def evaluate_row(row, summary):
 
     category = row["category"]
     if category == "web_fallback":
-        checks["web_fallback_used"] = summary["web_source_used"] and summary["web_search_count"] >= 1
+        checks["web_fallback_used"] = (
+            summary["web_source_used"] and summary["web_search_count"] >= 1
+        )
     if category == "insufficient_context":
         # The system must not answer confidently: either it says it lacks the
         # information, or the run ended with an explicit stop-reason caveat.
@@ -289,7 +293,7 @@ def _table_cell(text, limit=200):
 def render_markdown(evaluated, metrics, dataset_path):
     """Render the full eval report as Markdown."""
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         "# Eval results",
         "",
@@ -380,32 +384,52 @@ def run_eval(rows, output_path, dataset_path):
             # One broken row must not kill the eval; record it as a failure.
             print(f"    ERROR: {type(exc).__name__}")
             summary = summarize_result({}, "")
-            entry = {"row": row, "summary": summary, "checks": {"run_completed": False}, "passed": False}
+            entry = {
+                "row": row,
+                "summary": summary,
+                "checks": {"run_completed": False},
+                "passed": False,
+            }
         evaluated.append(entry)
 
     metrics = compute_metrics(evaluated)
-    Path(output_path).write_text(render_markdown(evaluated, metrics, dataset_path), encoding="utf-8")
+    Path(output_path).write_text(
+        render_markdown(evaluated, metrics, dataset_path), encoding="utf-8"
+    )
 
     print()
     print(f"Overall: {metrics['passed']}/{metrics['total']} passed")
-    for key in ("local_answerable_passed", "web_fallback_passed",
-                "insufficient_context_passed", "privacy_mode_passed"):
+    for key in (
+        "local_answerable_passed",
+        "web_fallback_passed",
+        "insufficient_context_passed",
+        "privacy_mode_passed",
+    ):
         passed, total = metrics[key]
         print(f"  {key}: {passed}/{total}")
-    print(f"  average retries: {metrics['average_retries']}, "
-          f"average tracked LLM calls: {metrics['average_llm_calls']}, "
-          f"total web searches: {metrics['total_web_searches']}")
+    print(
+        f"  average retries: {metrics['average_retries']}, "
+        f"average tracked LLM calls: {metrics['average_llm_calls']}, "
+        f"total web searches: {metrics['total_web_searches']}"
+    )
     print(f"Report written to {output_path}")
     return metrics
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Behavioral eval harness for the Agentic RAG graph.")
-    parser.add_argument("--dataset", default=str(DEFAULT_DATASET), help="Path to the JSONL dataset.")
+    parser = argparse.ArgumentParser(
+        description="Behavioral eval harness for the Agentic RAG graph."
+    )
+    parser.add_argument(
+        "--dataset", default=str(DEFAULT_DATASET), help="Path to the JSONL dataset."
+    )
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Markdown report path.")
     parser.add_argument("--limit", type=int, default=None, help="Run only the first N rows.")
-    parser.add_argument("--validate-only", action="store_true",
-                        help="Validate the dataset format and exit (no API calls).")
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate the dataset format and exit (no API calls).",
+    )
     args = parser.parse_args(argv)
 
     rows = load_dataset(args.dataset)

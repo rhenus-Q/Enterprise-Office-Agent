@@ -176,22 +176,32 @@ def test_summarize_handles_empty_result_safely():
 
 def test_stop_reason_check_accepts_string_and_list_forms():
     assert evaluate_row(_row(expected_stop_reason=""), _summary())["passed"] is True
-    assert evaluate_row(_row(expected_stop_reason=""), _summary(stop_reason="tool_error"))["passed"] is False
-    assert evaluate_row(
-        _row(expected_stop_reason=["web_search_disabled", ""]),
-        _summary(stop_reason="web_search_disabled"),
-    )["passed"] is True
+    assert (
+        evaluate_row(_row(expected_stop_reason=""), _summary(stop_reason="tool_error"))["passed"]
+        is False
+    )
+    assert (
+        evaluate_row(
+            _row(expected_stop_reason=["web_search_disabled", ""]),
+            _summary(stop_reason="web_search_disabled"),
+        )["passed"]
+        is True
+    )
 
 
 def test_source_type_checks():
     assert evaluate_row(_row(expected_source_type="local_corpus"), _summary())["passed"] is True
-    assert evaluate_row(
-        _row(expected_source_type="web"), _summary(web_source_used=False)
-    )["passed"] is False
-    assert evaluate_row(
-        _row(expected_source_type="none"),
-        _summary(sources_shown=False, local_source_used=False),
-    )["passed"] is True
+    assert (
+        evaluate_row(_row(expected_source_type="web"), _summary(web_source_used=False))["passed"]
+        is False
+    )
+    assert (
+        evaluate_row(
+            _row(expected_source_type="none"),
+            _summary(sources_shown=False, local_source_used=False),
+        )["passed"]
+        is True
+    )
 
 
 def test_expected_contains_is_case_insensitive_and_checks_formatted_answer():
@@ -210,9 +220,7 @@ def test_expected_contains_matches_unicode_hyphen_variants():
     # ASCII; a semantically correct answer must not fail on the dash glyph.
     row = _row(expected_contains=["Sev-1"])
 
-    result = evaluate_row(
-        row, _summary(formatted_answer="Escalate to Sev‑1 immediately")
-    )
+    result = evaluate_row(row, _summary(formatted_answer="Escalate to Sev‑1 immediately"))
 
     assert result["checks"]["expected_contains"] is True
     assert result["passed"] is True
@@ -241,9 +249,7 @@ def test_expected_contains_still_fails_when_phrase_genuinely_absent():
     # Normalization must not weaken the check into a false positive.
     row = _row(expected_contains=["Sev-1"])
 
-    result = evaluate_row(
-        row, _summary(formatted_answer="Escalate severe incidents immediately.")
-    )
+    result = evaluate_row(row, _summary(formatted_answer="Escalate severe incidents immediately."))
 
     assert result["checks"]["expected_contains"] is False
     assert result["passed"] is False
@@ -319,7 +325,7 @@ def _evaluated_fixture():
     ]
     return [
         {"row": row, "summary": summary, **evaluate_row(row, summary)}
-        for row, summary in zip(rows, summaries)
+        for row, summary in zip(rows, summaries, strict=False)
     ]
 
 

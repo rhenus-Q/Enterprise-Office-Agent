@@ -1,6 +1,6 @@
+from graph.chains.retrieval_grader import get_retrieval_grader
 from graph.consts import STOP_REASON_TOOL_ERROR
 from graph.state import GraphState
-from graph.chains.retrieval_grader import get_retrieval_grader
 
 
 def grade_documents(state: GraphState):
@@ -38,7 +38,9 @@ def grade_documents(state: GraphState):
             grade = score.is_relevant
         except Exception as exc:
             # Log only the exception type: messages may carry secrets.
-            print(f"---DOCUMENT GRADING FAILED ({type(exc).__name__}): DROPPING UNGRADED DOCUMENT---")
+            print(
+                f"---DOCUMENT GRADING FAILED ({type(exc).__name__}): DROPPING UNGRADED DOCUMENT---"
+            )
             grading_error = True
             web_search = True
             continue

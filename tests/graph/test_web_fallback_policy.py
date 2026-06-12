@@ -18,10 +18,10 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
-
 from langchain_core.documents import Document
 
 import graph.graph as graph_module
+from graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
 from graph.config import (
     WEB_FALLBACK_AGGRESSIVE,
     WEB_FALLBACK_CONSERVATIVE,
@@ -34,11 +34,9 @@ from graph.consts import (
     STOP_REASON_WEB_FALLBACK_DISABLED,
     WEBSEARCH,
 )
-from graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
 from graph.graph import decide_to_generate, grade_generation
 from graph.nodes.web_fallback_disabled_notice import web_fallback_disabled_notice
 from main import WEB_FALLBACK_DISABLED_NOTE, format_answer
-
 
 # ---------------------------------------------------------------------------
 # graph.config.web_fallback_policy -- env parsing
@@ -254,9 +252,7 @@ def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", 
     monkeypatch.setattr(
         retrieve_module,
         "get_node_retriever",
-        lambda: SimpleNamespace(
-            invoke=lambda q: [Document(page_content=c) for c in retrieved]
-        ),
+        lambda: SimpleNamespace(invoke=lambda q: [Document(page_content=c) for c in retrieved]),
     )
     monkeypatch.setattr(
         grade_module,
@@ -275,9 +271,9 @@ def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", 
     monkeypatch.setattr(
         generate_module,
         "generate_answer",
-        lambda question, documents, retry_feedback="": "FINAL ANSWER"
-        if documents
-        else INSUFFICIENT_CONTEXT_ANSWER,
+        lambda question, documents, retry_feedback="": (
+            "FINAL ANSWER" if documents else INSUFFICIENT_CONTEXT_ANSWER
+        ),
     )
     monkeypatch.setattr(
         rewrite_module,
@@ -334,7 +330,7 @@ def test_app_conservative_mixed_relevance_stays_local(monkeypatch):
 
     assert web_calls == []
     assert result["generation"] == "FINAL ANSWER"
-    assert len(result["documents"]) == 2          # the irrelevant chunk was filtered
+    assert len(result["documents"]) == 2  # the irrelevant chunk was filtered
     assert result["stop_reason"] == ""
 
 
@@ -383,8 +379,8 @@ def test_app_disabled_all_irrelevant_declines_without_web(monkeypatch):
 
     assert web_calls == []
     assert result["generation"] == INSUFFICIENT_CONTEXT_ANSWER
-    assert result["retries"] == 1                 # bypass: no retry loop
-    assert result["stop_reason"] == ""            # clean honest decline
+    assert result["retries"] == 1  # bypass: no retry loop
+    assert result["stop_reason"] == ""  # clean honest decline
 
 
 def test_app_disabled_not_useful_local_run_stops_with_policy_caveat(monkeypatch):

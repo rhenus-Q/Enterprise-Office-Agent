@@ -13,10 +13,8 @@ on-topic vs. off-topic.
 
 import pytest
 
+from graph.chains.answer_grader import GradeAnswer, answer_grader
 from tests.conftest import requires_openai
-
-from graph.chains.answer_grader import answer_grader, GradeAnswer
-
 
 # (question, generation) answer actually addresses the question -> expect answers_question == True
 USEFUL_CASES = [
@@ -103,8 +101,3 @@ def test_answer_grader_rejects_offtopic_answers(user_question, generation):
     assert result.answers_question is False, (
         f"expected False, got {result.answers_question!r}, question: {user_question!r}"
     )
-
-
-
-
-

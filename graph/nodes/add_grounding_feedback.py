@@ -1,6 +1,5 @@
 from graph.state import GraphState
 
-
 # Corrective instruction injected into the next generation attempt after a
 # failed grounding check. Folding this into the generation input makes the
 # retry meaningfully different from the previous attempt (temperature=0 would

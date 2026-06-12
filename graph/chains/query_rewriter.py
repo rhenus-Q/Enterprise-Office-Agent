@@ -18,10 +18,9 @@ and returns the rewritten query as a plain string.
 
 from functools import lru_cache
 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-
 
 system_prompt = """
 You are a web search query rewriter for an enterprise RAG system.

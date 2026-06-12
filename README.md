@@ -429,11 +429,45 @@ uv run pytest tests/chains/ -v
 uv run pytest -v
 ```
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the three
-fully mocked suites (`tests/node/`, `tests/graph/`, `tests/evals/`) on every
-push and pull request — no API keys are configured in CI, which doubles as a
-regression test that imports stay side-effect-free. The key-gated integration
-suite is deliberately excluded.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs two parallel
+jobs on every push and pull request — both keys-free:
+
+- **`mocked-tests`**: the three fully mocked suites (`tests/node/`,
+  `tests/graph/`, `tests/evals/`), which also doubles as a regression test that
+  imports stay side-effect-free.
+- **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
+  engine-API surface: `graph/engine.py`, `graph/config.py`,
+  `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).
+
+The key-gated integration suite (`tests/chains/`) and the full eval run are
+deliberately excluded from CI.
+
+## Dev hygiene
+
+Ruff (lint + format), mypy (scoped), and pre-commit hooks are configured in
+[`pyproject.toml`](pyproject.toml) and [`.pre-commit-config.yaml`](.pre-commit-config.yaml):
+
+```powershell
+# Install local hooks once per clone
+uv run pre-commit install
+
+# Lint and format (mirrors the CI lint job)
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+
+# Apply safe fixes and format in one pass
+uv run ruff check --fix . ; uv run ruff format .
+
+# Run all hooks across every file (same tools as CI)
+uv run pre-commit run --all-files
+```
+
+Mypy is scoped to the engine-API surface (`graph/engine.py`, `graph/config.py`,
+`graph/formatting.py`, `graph/state.py`, `graph/consts.py`); nodes, chains,
+tests, and `ingestion.py` are outside scope. Mypy is **not** a pre-commit hook
+(hook-venv isolation makes it unreliable for LangChain-typed code); run it
+directly or via CI instead.
 
 ## Behavioral evals
 
@@ -479,7 +513,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 249 tests passing (71 node + 155 graph + 23 evals) | 38 tests passing |
+| Status | 294 tests passing (71 node + 200 graph + 23 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 

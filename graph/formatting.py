@@ -23,7 +23,6 @@ from graph.consts import (
     WEB_SEARCH_SOURCE,
 )
 
-
 # Caveat shown when the workflow stopped because it would have needed web
 # search, but web search is disabled (privacy mode).
 WEB_SEARCH_DISABLED_NOTE = (
@@ -65,8 +64,7 @@ BUDGET_EXHAUSTED_NOTE = (
 # Caveat shown when the local retriever (Chroma) failed; the run degraded to
 # web search (or the insufficient-context answer in privacy mode).
 RETRIEVAL_ERROR_NOTE = (
-    "Note: Local document retrieval failed, so the answer may be incomplete "
-    "or unavailable."
+    "Note: Local document retrieval failed, so the answer may be incomplete or unavailable."
 )
 
 # Caveat shown when the web search call (Tavily) failed; the run continued
@@ -163,7 +161,9 @@ def source_lines(documents) -> list:
             doc_lines = _web_source_lines(metadata)
         else:
             label = str(metadata.get("title") or metadata.get("source") or "").strip()
-            doc_lines = [f"- Local corpus: {label}" if label else f"- {LOCAL_SOURCE_FALLBACK_LABEL}"]
+            doc_lines = [
+                f"- Local corpus: {label}" if label else f"- {LOCAL_SOURCE_FALLBACK_LABEL}"
+            ]
 
         for line in doc_lines:
             if line not in seen:

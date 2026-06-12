@@ -10,7 +10,6 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
-
 from langchain_core.documents import Document
 
 import graph.graph as graph_module
@@ -25,7 +24,6 @@ from graph.consts import GENERATE, RETRIEVE, WEBSEARCH
 from graph.engine import AnswerOptions, AnswerResult, answer_question, seed_state
 from graph.graph import decide_to_generate, grade_generation
 from graph.state import GraphState
-
 
 # ---------------------------------------------------------------------------
 # normalize_web_fallback_policy
@@ -181,9 +179,7 @@ def test_answer_question_returns_structured_answer_result(monkeypatch):
 def test_answer_question_invokes_graph_with_centralized_seed(monkeypatch):
     fake = _install_fake_app(monkeypatch, {"generation": "A"})
 
-    answer_question(
-        "Q", AnswerOptions(web_search_enabled=False, web_fallback_policy="disabled")
-    )
+    answer_question("Q", AnswerOptions(web_search_enabled=False, web_fallback_policy="disabled"))
 
     assert fake.invoked_with == seed_state(
         "Q", web_search_enabled=False, web_fallback_policy="disabled"
@@ -330,9 +326,7 @@ def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", 
     monkeypatch.setattr(
         retrieve_module,
         "get_node_retriever",
-        lambda: SimpleNamespace(
-            invoke=lambda q: [Document(page_content=c) for c in retrieved]
-        ),
+        lambda: SimpleNamespace(invoke=lambda q: [Document(page_content=c) for c in retrieved]),
     )
     monkeypatch.setattr(
         grade_module,
@@ -351,9 +345,9 @@ def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", 
     monkeypatch.setattr(
         generate_module,
         "generate_answer",
-        lambda question, documents, retry_feedback="": "FINAL ANSWER"
-        if documents
-        else INSUFFICIENT_CONTEXT_ANSWER,
+        lambda question, documents, retry_feedback="": (
+            "FINAL ANSWER" if documents else INSUFFICIENT_CONTEXT_ANSWER
+        ),
     )
     monkeypatch.setattr(
         rewrite_module,
