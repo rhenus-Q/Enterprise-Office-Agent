@@ -1,6 +1,6 @@
 # ADR 011: Configurable web-fallback policy (conservative by default)
 
-Status: Accepted
+Status: Accepted (amended 2026-06-11: policy resolved into per-run state, see Update below)
 
 Date: 2026-06-11
 
@@ -46,6 +46,21 @@ invalid values fall back to the default) with three values, applied in
   allowed: they were never a local-path fallback. With no relevant local
   documents, the run declines honestly via the insufficient-context bypass
   (ADR-010-adjacent behavior in `grade_generation`).
+
+> **Update (2026-06-11, engine API phase):** the policy is no longer read
+> from `os.environ` at decision time. `graph/engine.py` resolves the
+> effective policy once at run start — an explicit `AnswerOptions` value
+> wins, otherwise the `WEB_FALLBACK_POLICY` env var — normalizes it
+> (`graph.config.normalize_web_fallback_policy`, invalid → `conservative`),
+> and seeds it into `GraphState["web_fallback_policy"]`. `decide_to_generate`
+> and `grade_generation` read the policy from state, falling back to the
+> env helper only for legacy callers that seed state without the field.
+> This supersedes the "No new graph state was needed" note below: one state
+> field was added so evals, tests, and future workflow callers can vary the
+> policy per run without mutating the environment, and so a run's behavior
+> cannot change mid-flight if the environment does. Semantics of the three
+> policy values, the conservative default, and the privacy-switch override
+> are unchanged.
 
 `WEB_FALLBACK_POLICY` is deliberately separate from `WEB_SEARCH_ENABLED`:
 the privacy switch decides whether external web search is allowed *at all*

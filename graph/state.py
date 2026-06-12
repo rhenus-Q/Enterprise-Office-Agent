@@ -8,6 +8,7 @@ class GraphState(TypedDict):
     generation: str
     web_search: bool
     web_search_enabled: bool  # WEB_SEARCH_ENABLED toggle; False = privacy mode, never call external web search
+    web_fallback_policy: str  # resolved per-run WEB_FALLBACK_POLICY ("conservative" / "aggressive" / "disabled"); seeded once at run start so graph decisions never read os.environ mid-run
     retries: int  # number of generations so far; caps the quality-check loop to prevent infinite retries
     stop_reason: str  # why the run ended early ("" = normal finish); lets the caller add user-facing caveats
     insufficient_context: bool  # True = the latest generation is the deterministic insufficient-context answer (no usable documents); skips the graders, which have nothing to verify
