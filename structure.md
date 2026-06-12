@@ -45,7 +45,13 @@ Supporting modules: `graph/state.py` (the state schema), `graph/consts.py`
 `graph/config.py` (env-driven flags), `graph/engine.py` (the canonical
 programmatic entry point: `answer_question()` / `AnswerOptions` /
 `AnswerResult`, plus `seed_state()` — the single state-seeding helper used by
-the CLI, the eval harness, and tests), `graph/formatting.py` (shared
+the CLI, the eval harness, and tests — and the lightweight per-run
+observability: `run_id`, executed node path, per-step timings, total
+duration, and an optional metadata-only trace JSON via
+`AnswerOptions.trace_path`; collected centrally by streaming the compiled
+graph's node updates (`stream_mode="updates"`), merged onto the seeded state
+— GraphState has only last-value channels, so this reproduces `invoke()`
+exactly and tracing can never change behavior), `graph/formatting.py` (shared
 presentation: stop-reason caveats + Sources section), `ingestion.py`
 (offline, idempotent Chroma build of the local Markdown corpus: collection
 reset + deterministic chunk ids, provenance metadata per document),
@@ -445,7 +451,7 @@ Run the mocked suites with `uv run pytest tests/node/ tests/graph/ tests/evals/ 
 
 Limitations (deliberate scope):
 - Single-turn CLI; no conversation memory or API surface.
-- `print()`-based observability; LangSmith tracing available via env vars but undocumented in traces/screenshots.
+- Console observability is `print()`-based; the engine adds per-run run_id / node path / timings / optional trace JSON, but there is no structured logging or metrics backend. LangSmith tracing available via env vars but undocumented in traces/screenshots.
 - Sequential per-chunk / per-result grading (latency and cost scale with k).
 - Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 - Prompt-injection defense is prompt-level only (ADR 010): no injection detection, content sanitization, or domain allowlisting; generation has no tools to call, which limits but does not eliminate the impact of injected instructions.
