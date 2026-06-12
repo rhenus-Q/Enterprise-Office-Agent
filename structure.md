@@ -432,10 +432,10 @@ in privacy mode still never calls the router, Tavily, or the rewriter).
 | `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
 
 Separate from the test suites, `evals/` holds a **behavioral eval harness**:
-a 15-question JSONL dataset (local-corpus / web-fallback /
-insufficient-context / privacy-mode categories) run through the real compiled
+a 24-question JSONL dataset (local-corpus / web-fallback /
+insufficient-context / privacy-mode / multi-document / policy-fallback categories) run through the real compiled
 graph by `evals/run_eval.py`, scored with deterministic checks (stop reasons,
-source provenance, counters, expected substrings) and reported to
+source provenance including local title checks, counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes) and reported to
 `evals/results.md`. The harness runs each row through
 `graph.engine.answer_question()` — the same entry point `main.py` uses — so
 state seeding is never duplicated; privacy-mode rows pass

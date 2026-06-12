@@ -98,7 +98,7 @@ State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the wor
 ├── docs/
 │   └── adr/                 # Architecture Decision Records 001–011 (with index in README.md)
 ├── evals/
-│   ├── questions.jsonl      # Behavioral eval dataset (15 rows, 4 categories)
+│   ├── questions.jsonl      # Behavioral eval dataset (24 rows, 6 categories)
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
 │   └── results.md           # Generated eval report
 ├── .github/
@@ -363,7 +363,7 @@ The corpus is six fictional internal documents — created for this project, con
 | `data_retention_policy.md` | compliance | "How long are audit logs retained?" |
 | `employee_onboarding_guide.md` | hr | "What should a new employee do during their first week?" |
 
-Each document has an effective date, a policy owner, concrete rules (approval thresholds, ack SLAs, retention periods), escalation paths, an exceptions process, and contacts; documents cross-reference each other so multi-document questions retrieve coherently. Every document carries provenance metadata (`source`, `title`, `source_type: "local_corpus"`, `document_category`) that survives chunking and feeds the `Sources:` section. To use your own documents, drop Markdown files into the corpus folder (and optionally extend `DOCUMENT_CATEGORIES` in `ingestion.py`), then re-run ingestion.
+Each document has an effective date, a policy owner, concrete rules (approval thresholds, ack SLAs, retention periods), escalation paths, an exceptions process, and contacts; documents cross-reference each other so multi-document questions retrieve coherently, with eval rows now checking multi-document provenance. Every document carries provenance metadata (`source`, `title`, `source_type: "local_corpus"`, `document_category`) that survives chunking and feeds the `Sources:` section. To use your own documents, drop Markdown files into the corpus folder (and optionally extend `DOCUMENT_CATEGORIES` in `ingestion.py`), then re-run ingestion.
 
 ## Run the assistant
 
@@ -472,12 +472,12 @@ directly or via CI instead.
 ## Behavioral evals
 
 Beyond code-path tests, [`evals/`](evals/) contains a lightweight behavioral
-evaluation harness: 15 realistic questions
-([`evals/questions.jsonl`](evals/questions.jsonl)) across four categories —
+evaluation harness: 24 realistic questions
+([`evals/questions.jsonl`](evals/questions.jsonl)) across six categories —
 answerable from the AcmeCorp corpus (5), requiring web fallback (5),
-unanswerable without fabricating (3), and privacy-mode guarantees (2). The
+unanswerable without fabricating (3), privacy-mode guarantees (2), multi-document provenance (4), and fallback-policy behavior (5). The
 runner drives the real graph and applies **deterministic** checks (stop
-reasons, source provenance, run counters, expected substrings — no
+reasons, source provenance including required local titles, run counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes — no
 LLM-as-judge), then writes a Markdown report to
 [`evals/results.md`](evals/results.md):
 
@@ -513,7 +513,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
 | Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 294 tests passing (71 node + 200 graph + 23 evals) | 38 tests passing |
+| Status | 305 tests passing (69 node + 200 graph + 36 evals) | 38 tests passing |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
