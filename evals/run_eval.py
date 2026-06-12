@@ -43,7 +43,22 @@ from graph.consts import WEB_SEARCH_SOURCE
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
 
-CATEGORIES = ("local_corpus", "web_fallback", "insufficient_context", "privacy_mode")
+CATEGORIES = (
+    "local_corpus",
+    "web_fallback",
+    "insufficient_context",
+    "privacy_mode",
+    "multi_document",
+    "policy_fallback",
+)
+CATEGORY_METRIC_KEYS = {
+    "local_corpus": "local_answerable_passed",
+    "web_fallback": "web_fallback_passed",
+    "insufficient_context": "insufficient_context_passed",
+    "privacy_mode": "privacy_mode_passed",
+    "multi_document": "multi_document_passed",
+    "policy_fallback": "policy_fallback_passed",
+}
 REQUIRED_FIELDS = ("id", "category", "question", "web_search_enabled", "expected_behavior")
 SOURCE_TYPES = ("local_corpus", "web", "none")
 WEB_FALLBACK_POLICIES = (
@@ -163,7 +178,53 @@ def validate_dataset(rows):
         ):
             errors.append(f"{label}: expected_contains must be a list of strings")
 
+        expected_titles = row.get("expected_source_titles")
+        if expected_titles is not None and not (
+            isinstance(expected_titles, list)
+            and all(isinstance(title, str) for title in expected_titles)
+        ):
+            errors.append(f"{label}: expected_source_titles must be a list of strings")
+
+        min_local_sources = row.get("expected_min_local_sources")
+        if min_local_sources is not None and (
+            isinstance(min_local_sources, bool)
+            or not isinstance(min_local_sources, int)
+            or min_local_sources <= 0
+        ):
+            errors.append(f"{label}: expected_min_local_sources must be a positive integer")
+
+        web_search_count = row.get("expected_web_search_count")
+        if web_search_count is not None and not _valid_web_search_count_expectation(
+            web_search_count
+        ):
+            errors.append(
+                f"{label}: expected_web_search_count must be an integer >= 0 "
+                'or an object with integer "min" / "max" values'
+            )
+
     return errors
+
+
+def _valid_web_search_count_expectation(value):
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value >= 0
+    if not isinstance(value, dict):
+        return False
+
+    allowed_keys = {"min", "max"}
+    if not value or any(key not in allowed_keys for key in value):
+        return False
+
+    for count in value.values():
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            return False
+
+    if "min" in value and "max" in value and value["min"] > value["max"]:
+        return False
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +236,17 @@ def summarize_result(result, formatted_answer):
     """Reduce a final graph state to the fields the checks need."""
 
     documents = result.get("documents") or []
+    local_source_titles = []
+    seen_local_titles = set()
+    for doc in documents:
+        metadata = getattr(doc, "metadata", None) or {}
+        if metadata.get("source") == WEB_SEARCH_SOURCE:
+            continue
+        title = str(metadata.get("title") or "").strip()
+        if title and title not in seen_local_titles:
+            seen_local_titles.add(title)
+            local_source_titles.append(title)
+
     web_source_used = any(
         (getattr(doc, "metadata", None) or {}).get("source") == WEB_SEARCH_SOURCE
         for doc in documents
@@ -195,6 +267,8 @@ def summarize_result(result, formatted_answer):
         "sources_shown": bool(documents),
         "local_source_used": local_source_used,
         "web_source_used": web_source_used,
+        "local_source_titles": local_source_titles,
+        "web_fallback_policy": result.get("web_fallback_policy", ""),
     }
 
 
@@ -227,6 +301,32 @@ def evaluate_row(row, summary):
         checks["expected_contains"] = all(
             normalize_for_contains(needle) in text for needle in contains
         )
+
+    expected_titles = row.get("expected_source_titles") or []
+    if expected_titles:
+        local_titles = summary["local_source_titles"]
+        checks["source_titles"] = all(title in local_titles for title in expected_titles)
+
+    expected_min_local = row.get("expected_min_local_sources")
+    if expected_min_local is not None:
+        checks["min_local_sources"] = len(summary["local_source_titles"]) >= expected_min_local
+
+    expected_web_count = row.get("expected_web_search_count")
+    if expected_web_count is not None:
+        actual_web_count = summary["web_search_count"]
+        if isinstance(expected_web_count, int):
+            checks["web_search_count"] = actual_web_count == expected_web_count
+        else:
+            min_ok = (
+                "min" not in expected_web_count or actual_web_count >= expected_web_count["min"]
+            )
+            max_ok = (
+                "max" not in expected_web_count or actual_web_count <= expected_web_count["max"]
+            )
+            checks["web_search_count"] = min_ok and max_ok
+
+    if row.get("web_fallback_policy") is not None:
+        checks["policy_applied"] = summary["web_fallback_policy"] == row["web_fallback_policy"]
 
     # Hard privacy guarantee: a disabled-web row must never search the web.
     if not row["web_search_enabled"]:
@@ -262,20 +362,24 @@ def compute_metrics(evaluated):
     retries = [e["summary"]["retries"] for e in evaluated]
     llm_calls = [e["summary"]["llm_call_count"] for e in evaluated]
 
-    return {
+    metrics = {
         "total": total,
         "passed": sum(1 for e in evaluated if e["passed"]),
-        "local_answerable_passed": category_counts("local_corpus"),
-        "web_fallback_passed": category_counts("web_fallback"),
-        "insufficient_context_passed": category_counts("insufficient_context"),
-        "privacy_mode_passed": category_counts("privacy_mode"),
         "stop_reason_matches": check_counts("stop_reason"),
         "source_type_matches": check_counts("source_type"),
         "expected_contains_matches": check_counts("expected_contains"),
+        "source_titles_matches": check_counts("source_titles"),
+        "min_local_sources_matches": check_counts("min_local_sources"),
+        "web_search_count_matches": check_counts("web_search_count"),
+        "policy_applied_matches": check_counts("policy_applied"),
         "average_retries": round(sum(retries) / total, 2) if total else 0.0,
         "average_llm_calls": round(sum(llm_calls) / total, 2) if total else 0.0,
         "total_web_searches": sum(e["summary"]["web_search_count"] for e in evaluated),
     }
+    for category, metric_key in CATEGORY_METRIC_KEYS.items():
+        metrics[metric_key] = category_counts(category)
+
+    return metrics
 
 
 # ---------------------------------------------------------------------------
@@ -310,9 +414,15 @@ def render_markdown(evaluated, metrics, dataset_path):
         f"| web_fallback passed | {metrics['web_fallback_passed'][0]} / {metrics['web_fallback_passed'][1]} |",
         f"| insufficient_context passed | {metrics['insufficient_context_passed'][0]} / {metrics['insufficient_context_passed'][1]} |",
         f"| privacy_mode passed | {metrics['privacy_mode_passed'][0]} / {metrics['privacy_mode_passed'][1]} |",
+        f"| multi_document passed | {metrics['multi_document_passed'][0]} / {metrics['multi_document_passed'][1]} |",
+        f"| policy_fallback passed | {metrics['policy_fallback_passed'][0]} / {metrics['policy_fallback_passed'][1]} |",
         f"| stop_reason matches | {metrics['stop_reason_matches'][0]} / {metrics['stop_reason_matches'][1]} |",
         f"| source_type matches | {metrics['source_type_matches'][0]} / {metrics['source_type_matches'][1]} |",
         f"| expected_contains matches | {metrics['expected_contains_matches'][0]} / {metrics['expected_contains_matches'][1]} |",
+        f"| source_titles matches | {metrics['source_titles_matches'][0]} / {metrics['source_titles_matches'][1]} |",
+        f"| min_local_sources matches | {metrics['min_local_sources_matches'][0]} / {metrics['min_local_sources_matches'][1]} |",
+        f"| web_search_count matches | {metrics['web_search_count_matches'][0]} / {metrics['web_search_count_matches'][1]} |",
+        f"| policy_applied matches | {metrics['policy_applied_matches'][0]} / {metrics['policy_applied_matches'][1]} |",
         f"| Average retries | {metrics['average_retries']} |",
         f"| Average tracked LLM calls | {metrics['average_llm_calls']} |",
         f"| Total web searches | {metrics['total_web_searches']} |",
@@ -399,12 +509,7 @@ def run_eval(rows, output_path, dataset_path):
 
     print()
     print(f"Overall: {metrics['passed']}/{metrics['total']} passed")
-    for key in (
-        "local_answerable_passed",
-        "web_fallback_passed",
-        "insufficient_context_passed",
-        "privacy_mode_passed",
-    ):
+    for key in CATEGORY_METRIC_KEYS.values():
         passed, total = metrics[key]
         print(f"  {key}: {passed}/{total}")
     print(

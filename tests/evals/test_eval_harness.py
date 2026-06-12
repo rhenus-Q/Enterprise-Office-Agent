@@ -47,6 +47,8 @@ def _summary(**overrides):
         "sources_shown": True,
         "local_source_used": True,
         "web_source_used": False,
+        "local_source_titles": ["AcmeCorp Employee Onboarding Guide"],
+        "web_fallback_policy": "conservative",
     }
     summary.update(overrides)
     return summary
@@ -61,13 +63,15 @@ def test_shipped_dataset_is_valid_with_expected_category_mix():
     rows = load_dataset(DEFAULT_DATASET)
 
     assert validate_dataset(rows) == []
-    assert len(rows) == 15
+    assert len(rows) == 24
     counts = {c: sum(1 for r in rows if r["category"] == c) for c in CATEGORIES}
     assert counts == {
         "local_corpus": 5,
         "web_fallback": 5,
         "insufficient_context": 3,
         "privacy_mode": 2,
+        "multi_document": 4,
+        "policy_fallback": 5,
     }
 
 
@@ -77,6 +81,37 @@ def test_shipped_dataset_privacy_and_insufficient_rows_disable_web():
     for row in rows:
         if row["category"] in ("privacy_mode", "insufficient_context"):
             assert row["web_search_enabled"] is False, row["id"]
+
+
+def test_shipped_dataset_multi_document_rows_have_load_bearing_checks():
+    rows = load_dataset(DEFAULT_DATASET)
+
+    multi_rows = [row for row in rows if row["category"] == "multi_document"]
+
+    assert len(multi_rows) == 4
+    for row in multi_rows:
+        assert row["expected_min_local_sources"] >= 2, row["id"]
+        assert len(row["expected_source_titles"]) >= 2, row["id"]
+
+
+def test_shipped_dataset_policy_rows_have_load_bearing_checks_and_pairs():
+    rows = load_dataset(DEFAULT_DATASET)
+    by_id = {row["id"]: row for row in rows}
+    policy_rows = [row for row in rows if row["category"] == "policy_fallback"]
+
+    assert len(policy_rows) == 5
+    for row in policy_rows:
+        assert row.get("web_fallback_policy") in ("conservative", "aggressive", "disabled")
+        assert "expected_web_search_count" in row
+
+    assert (
+        by_id["policy-conservative-stays-local"]["question"]
+        == by_id["policy-aggressive-escalates"]["question"]
+    )
+    assert (
+        by_id["policy-conservative-web-when-empty"]["question"]
+        == by_id["policy-disabled-declines-honestly"]["question"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +139,11 @@ def test_validate_flags_bad_category_and_duplicate_ids():
     assert any("duplicate id" in e for e in errors)
 
 
+def test_validate_accepts_new_categories():
+    assert validate_dataset([_row(category="multi_document")]) == []
+    assert validate_dataset([_row(category="policy_fallback")]) == []
+
+
 def test_validate_flags_bad_optional_field_types():
     errors = validate_dataset(
         [
@@ -115,6 +155,44 @@ def test_validate_flags_bad_optional_field_types():
     )
 
     assert len(errors) == 4
+
+
+def test_validate_accepts_new_optional_eval_v2_fields():
+    assert (
+        validate_dataset(
+            [
+                _row(
+                    expected_source_titles=["Doc A", "Doc B"],
+                    expected_min_local_sources=2,
+                    expected_web_search_count=0,
+                ),
+                _row(id="b", expected_web_search_count={"min": 1}),
+                _row(id="c", expected_web_search_count={"max": 2}),
+                _row(id="d", expected_web_search_count={"min": 1, "max": 3}),
+            ]
+        )
+        == []
+    )
+
+
+def test_validate_flags_malformed_eval_v2_fields():
+    errors = validate_dataset(
+        [
+            _row(id="a", expected_source_titles="Doc A"),
+            _row(id="b", expected_source_titles=["Doc A", 42]),
+            _row(id="c", expected_min_local_sources=0),
+            _row(id="d", expected_min_local_sources="2"),
+            _row(id="e", expected_web_search_count=-1),
+            _row(id="f", expected_web_search_count={"min": "1"}),
+            _row(id="g", expected_web_search_count={"max": -1}),
+            _row(id="h", expected_web_search_count={"min": 3, "max": 1}),
+            _row(id="i", expected_web_search_count={"exact": 1}),
+        ]
+    )
+
+    assert sum("expected_source_titles" in e for e in errors) == 2
+    assert sum("expected_min_local_sources" in e for e in errors) == 2
+    assert sum("expected_web_search_count" in e for e in errors) == 5
 
 
 def test_validate_accepts_optional_web_fallback_policy():
@@ -145,9 +223,13 @@ def test_summarize_detects_local_and_web_sources():
         "web_search_count": 1,
         "web_result_grading_count": 2,
         "documents": [
-            Document(page_content="c", metadata={"source": "data/x.md"}),
+            Document(
+                page_content="c",
+                metadata={"source": "data/x.md", "title": "AcmeCorp VPN Access Policy"},
+            ),
             Document(page_content="w", metadata={"source": WEB_SEARCH_SOURCE}),
         ],
+        "web_fallback_policy": "aggressive",
     }
 
     summary = summarize_result(result, "formatted A")
@@ -157,6 +239,8 @@ def test_summarize_detects_local_and_web_sources():
     assert summary["sources_shown"] is True
     assert summary["formatted_answer"] == "formatted A"
     assert summary["retries"] == 2
+    assert summary["local_source_titles"] == ["AcmeCorp VPN Access Policy"]
+    assert summary["web_fallback_policy"] == "aggressive"
 
 
 def test_summarize_handles_empty_result_safely():
@@ -167,6 +251,27 @@ def test_summarize_handles_empty_result_safely():
     assert summary["web_source_used"] is False
     assert summary["stop_reason"] == ""
     assert summary["web_search_count"] == 0
+    assert summary["local_source_titles"] == []
+    assert summary["web_fallback_policy"] == ""
+
+
+def test_summarize_deduplicates_local_titles_excludes_web_and_missing_titles():
+    result = {
+        "documents": [
+            Document(page_content="a", metadata={"source": "data/a.md", "title": "Doc A"}),
+            Document(page_content="a2", metadata={"source": "data/a.md", "title": "Doc A"}),
+            Document(page_content="b", metadata={"source": "data/b.md", "title": "Doc B"}),
+            Document(page_content="untitled", metadata={"source": "data/c.md"}),
+            Document(
+                page_content="web",
+                metadata={"source": WEB_SEARCH_SOURCE, "title": "Web Title"},
+            ),
+        ]
+    }
+
+    summary = summarize_result(result, "formatted")
+
+    assert summary["local_source_titles"] == ["Doc A", "Doc B"]
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +370,72 @@ def test_expected_contains_tolerates_line_break_inside_phrase():
     assert result["passed"] is True
 
 
+def test_source_titles_check_passes_and_fails_exact_titles():
+    row = _row(expected_source_titles=["Doc A", "Doc B"])
+
+    ok = evaluate_row(row, _summary(local_source_titles=["Doc A", "Doc B", "Doc C"]))
+    missing = evaluate_row(row, _summary(local_source_titles=["Doc A"]))
+
+    assert ok["checks"]["source_titles"] is True
+    assert ok["passed"] is True
+    assert missing["checks"]["source_titles"] is False
+    assert missing["passed"] is False
+
+
+def test_min_local_sources_check_counts_distinct_local_titles():
+    row = _row(expected_min_local_sources=2)
+
+    ok = evaluate_row(row, _summary(local_source_titles=["Doc A", "Doc B"]))
+    too_few = evaluate_row(row, _summary(local_source_titles=["Doc A"]))
+
+    assert ok["checks"]["min_local_sources"] is True
+    assert ok["passed"] is True
+    assert too_few["checks"]["min_local_sources"] is False
+    assert too_few["passed"] is False
+
+
+def test_web_search_count_exact_check_passes_and_fails():
+    row = _row(expected_web_search_count=0)
+
+    assert evaluate_row(row, _summary(web_search_count=0))["passed"] is True
+    result = evaluate_row(row, _summary(web_search_count=1))
+
+    assert result["checks"]["web_search_count"] is False
+    assert result["passed"] is False
+
+
+def test_web_search_count_min_max_checks_pass_and_fail():
+    min_row = _row(expected_web_search_count={"min": 1})
+    max_row = _row(expected_web_search_count={"max": 2})
+    range_row = _row(expected_web_search_count={"min": 1, "max": 2})
+
+    assert evaluate_row(min_row, _summary(web_search_count=1))["passed"] is True
+    assert evaluate_row(min_row, _summary(web_search_count=2))["passed"] is True
+    assert evaluate_row(min_row, _summary(web_search_count=0))["passed"] is False
+    assert evaluate_row(max_row, _summary(web_search_count=2))["passed"] is True
+    assert evaluate_row(max_row, _summary(web_search_count=3))["passed"] is False
+    assert evaluate_row(range_row, _summary(web_search_count=1))["passed"] is True
+    assert evaluate_row(range_row, _summary(web_search_count=3))["passed"] is False
+
+
+def test_policy_applied_check_passes_fails_and_skips_when_no_policy():
+    matched = evaluate_row(
+        _row(web_fallback_policy="aggressive"),
+        _summary(web_fallback_policy="aggressive"),
+    )
+    mismatched = evaluate_row(
+        _row(web_fallback_policy="aggressive"),
+        _summary(web_fallback_policy="conservative"),
+    )
+    skipped = evaluate_row(_row(), _summary(web_fallback_policy="conservative"))
+
+    assert matched["checks"]["policy_applied"] is True
+    assert matched["passed"] is True
+    assert mismatched["checks"]["policy_applied"] is False
+    assert mismatched["passed"] is False
+    assert "policy_applied" not in skipped["checks"]
+
+
 def test_normalize_for_contains_folds_dashes_case_and_whitespace():
     assert normalize_for_contains("Sev‑1") == "sev-1"
     assert normalize_for_contains("  A—B \n C ") == "a-b c"
@@ -317,11 +488,37 @@ def _evaluated_fixture():
         _row(id="a", category="local_corpus", expected_stop_reason=""),
         _row(id="b", category="web_fallback"),
         _row(id="c", category="privacy_mode", web_search_enabled=False),
+        _row(id="d", category="insufficient_context", web_search_enabled=False),
+        _row(
+            id="e",
+            category="multi_document",
+            expected_source_titles=["Doc A", "Doc B"],
+            expected_min_local_sources=2,
+        ),
+        _row(
+            id="f",
+            category="policy_fallback",
+            web_fallback_policy="disabled",
+            expected_web_search_count=0,
+        ),
     ]
     summaries = [
         _summary(retries=1, llm_call_count=2),
         _summary(web_source_used=True, web_search_count=2, retries=3, llm_call_count=4),
         _summary(web_search_count=0, retries=1, llm_call_count=1),
+        _summary(
+            answer="I do not have enough information in the provided documents.",
+            web_search_count=0,
+            retries=1,
+            llm_call_count=0,
+        ),
+        _summary(local_source_titles=["Doc A", "Doc B"], retries=2, llm_call_count=2),
+        _summary(
+            web_fallback_policy="disabled",
+            web_search_count=0,
+            retries=1,
+            llm_call_count=1,
+        ),
     ]
     return [
         {"row": row, "summary": summary, **evaluate_row(row, summary)}
@@ -332,15 +529,21 @@ def _evaluated_fixture():
 def test_compute_metrics_aggregates_categories_checks_and_counters():
     metrics = compute_metrics(_evaluated_fixture())
 
-    assert metrics["total"] == 3
-    assert metrics["passed"] == 3
+    assert metrics["total"] == 6
+    assert metrics["passed"] == 6
     assert metrics["local_answerable_passed"] == (1, 1)
     assert metrics["web_fallback_passed"] == (1, 1)
     assert metrics["privacy_mode_passed"] == (1, 1)
-    assert metrics["insufficient_context_passed"] == (0, 0)
+    assert metrics["insufficient_context_passed"] == (1, 1)
+    assert metrics["multi_document_passed"] == (1, 1)
+    assert metrics["policy_fallback_passed"] == (1, 1)
     assert metrics["stop_reason_matches"] == (1, 1)
-    assert metrics["average_retries"] == round(5 / 3, 2)
-    assert metrics["average_llm_calls"] == round(7 / 3, 2)
+    assert metrics["source_titles_matches"] == (1, 1)
+    assert metrics["min_local_sources_matches"] == (1, 1)
+    assert metrics["web_search_count_matches"] == (1, 1)
+    assert metrics["policy_applied_matches"] == (1, 1)
+    assert metrics["average_retries"] == round(9 / 6, 2)
+    assert metrics["average_llm_calls"] == round(10 / 6, 2)
     assert metrics["total_web_searches"] == 2
 
 
@@ -351,7 +554,9 @@ def test_render_markdown_includes_metrics_and_every_row():
     report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
 
     assert "# Eval results" in report
-    assert "Overall passed | 3 / 3" in report
+    assert "Overall passed | 6 / 6" in report
+    assert "multi_document passed | 1 / 1" in report
+    assert "policy_fallback passed | 1 / 1" in report
     for entry in evaluated:
         assert entry["row"]["id"] in report
 
