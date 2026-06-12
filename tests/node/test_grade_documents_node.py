@@ -5,9 +5,9 @@ retrieval_grader.invoke is mocked via monkeypatch, so no real OpenAI call happen
 Relevance is driven by a content -> bool mapping for deterministic results.
 """
 
-from langchain_core.documents import Document
-
 import importlib
+
+from langchain_core.documents import Document
 
 from graph.consts import STOP_REASON_TOOL_ERROR
 from graph.nodes.grade_documents import grade_documents
@@ -114,7 +114,7 @@ def test_grader_failure_drops_ungraded_document_and_requests_web_search(monkeypa
 
     result = grade_documents({"question": "Q", "documents": [keep, ungraded]})  # must not raise
 
-    assert result["documents"] == [keep]            # ungraded content is never trusted
+    assert result["documents"] == [keep]  # ungraded content is never trusted
     assert result["web_search"] is True
     assert result["stop_reason"] == STOP_REASON_TOOL_ERROR
 

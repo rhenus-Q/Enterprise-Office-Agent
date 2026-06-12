@@ -17,13 +17,11 @@ is_grounded == False -> the answer contains unsupported / hallucinated content.
 """
 
 from functools import lru_cache
-from typing import List
-
-from pydantic import BaseModel, Field
 
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
 
 class GradeHallucination(BaseModel):
@@ -73,7 +71,7 @@ Generated answer:
 )
 
 
-def format_documents(documents: List[Document]) -> str:
+def format_documents(documents: list[Document]) -> str:
     """
     Join the List[Document] from GraphState into a single plain-text context.
     If a string is passed in, return it unchanged.
@@ -118,16 +116,3 @@ def __getattr__(name):
     if name == "hallucination_grader":
         return get_hallucination_grader()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-
-
-
-
-
-
-
-
-
-
-

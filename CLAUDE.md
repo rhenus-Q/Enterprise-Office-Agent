@@ -60,7 +60,9 @@ type, never the message.
 | `evals/` | Behavioral eval harness: `questions.jsonl` (15-row dataset; optional per-row `web_fallback_policy`), `run_eval.py` (runs the real graph via `graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Not part of CI. |
 | `docs/adr/` | Architecture Decision Records (001–011) with an index in `docs/adr/README.md`. When a documented decision changes, update or supersede the matching ADR. |
 | `tests/conftest.py` | Loads `.env` before collection; provides the `requires_openai` skip marker. |
-| `pyproject.toml` | uv project config: deps, `[dependency-groups] dev`, and `[tool.pytest.ini_options]` (`pythonpath = ["."]`, `testpaths = ["tests"]`). |
+| `pyproject.toml` | uv project config: deps, `[dependency-groups] dev` (pytest, ruff, mypy, pre-commit), `[tool.pytest.ini_options]`, `[tool.ruff]`/`[tool.ruff.lint]`/`[tool.ruff.lint.per-file-ignores]`, and `[tool.mypy]`/`[[tool.mypy.overrides]]`. |
+| `.gitattributes` | Line-ending policy: `text=auto` + explicit `*.py/md/yml/yaml/toml/json text` rules to prevent CRLF churn on Windows working copies. |
+| `.pre-commit-config.yaml` | Local hooks mirroring CI: `ruff-check --fix`, `ruff-format`, and basic hygiene hooks (`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-toml`, `check-added-large-files`, `check-merge-conflict`). |
 
 ## 3. Development Rules
 
@@ -113,6 +115,9 @@ cd "C:\Agentic AI\LangGraph\Agentic_RAG_Claude"
 # Set up the environment (creates .venv, writes uv.lock)
 uv sync --group dev
 
+# Install local pre-commit hooks (one-time per clone)
+uv run pre-commit install
+
 # Build the Chroma index (one-time, before first run)
 uv run python ingestion.py
 
@@ -127,6 +132,16 @@ uv run pytest tests/chains/ -v
 
 # Whole suite
 uv run pytest -v
+
+# Dev hygiene (mirrors the CI lint job — run before committing)
+uv run ruff check .                  # lint
+uv run ruff check --fix .            # lint + safe autofixes
+uv run ruff format .                 # format
+uv run ruff format --check .         # format check (CI mode)
+uv run mypy                          # type-check scoped modules only
+
+# Run all pre-commit hooks across every file (equivalent to what runs on commit)
+uv run pre-commit run --all-files
 
 # Syntax-only check (no test execution)
 $files = @(

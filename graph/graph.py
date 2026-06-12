@@ -76,27 +76,12 @@ from dotenv import load_dotenv
 # OPENAI_API_KEY when constructed at runtime — so load .env before anything runs.
 load_dotenv()
 
-from langgraph.graph import StateGraph, END  # noqa: E402
+from langgraph.graph import END, StateGraph
 
-from graph.state import GraphState  # noqa: E402
-from graph.consts import (  # noqa: E402
-    RETRIEVE,
-    GRADE_DOCUMENTS,
-    GENERATE,
-    WEBSEARCH,
-    WEB_SEARCH_DISABLED_NOTICE,
-    WEB_FALLBACK_DISABLED_NOTICE,
-    MAX_RETRIES_NOT_GROUNDED_NOTICE,
-    MAX_RETRIES_NOT_USEFUL_NOTICE,
-    ADD_GROUNDING_FEEDBACK,
-    REWRITE_QUERY,
-    BUDGET_EXHAUSTED_NOTICE,
-    TOOL_ERROR_NOTICE,
-    CLEAR_TRANSIENT_TOOL_ERROR,
-    STOP_REASON_GENERATION_ERROR,
-)
-
-from graph.config import (  # noqa: E402
+from graph.chains.answer_grader import get_answer_grader
+from graph.chains.hallucination_grader import get_hallucination_grader
+from graph.chains.question_router import get_question_router
+from graph.config import (
     WEB_FALLBACK_AGGRESSIVE,
     WEB_FALLBACK_DISABLED,
     max_llm_calls_per_run,
@@ -104,27 +89,38 @@ from graph.config import (  # noqa: E402
     normalize_web_fallback_policy,
     web_fallback_policy,
 )
-
-from graph.nodes import (  # noqa: E402
-    retrieve,
-    grade_documents,
+from graph.consts import (
+    ADD_GROUNDING_FEEDBACK,
+    BUDGET_EXHAUSTED_NOTICE,
+    CLEAR_TRANSIENT_TOOL_ERROR,
+    GENERATE,
+    GRADE_DOCUMENTS,
+    MAX_RETRIES_NOT_GROUNDED_NOTICE,
+    MAX_RETRIES_NOT_USEFUL_NOTICE,
+    RETRIEVE,
+    REWRITE_QUERY,
+    STOP_REASON_GENERATION_ERROR,
+    TOOL_ERROR_NOTICE,
+    WEB_FALLBACK_DISABLED_NOTICE,
+    WEB_SEARCH_DISABLED_NOTICE,
+    WEBSEARCH,
+)
+from graph.nodes import (
+    add_grounding_feedback,
+    budget_exhausted_notice,
+    clear_transient_tool_error,
     generate,
-    web_search,
-    web_search_disabled_notice,
-    web_fallback_disabled_notice,
+    grade_documents,
     max_retries_not_grounded_notice,
     max_retries_not_useful_notice,
-    add_grounding_feedback,
+    retrieve,
     rewrite_query,
-    budget_exhausted_notice,
     tool_error_notice,
-    clear_transient_tool_error,
+    web_fallback_disabled_notice,
+    web_search,
+    web_search_disabled_notice,
 )
-
-from graph.chains.question_router import get_question_router  # noqa: E402
-from graph.chains.hallucination_grader import get_hallucination_grader  # noqa: E402
-from graph.chains.answer_grader import get_answer_grader  # noqa: E402
-
+from graph.state import GraphState
 
 # Max number of generations allowed in the quality-check loop (regenerate / web search).
 # Once the limit is reached, force an end to avoid looping between "not grounded" and "not useful".
@@ -349,7 +345,9 @@ def grade_generation(state: GraphState) -> str:
                 }
             )
         except Exception as exc:
-            print(f"---USEFULNESS CHECK FAILED ({type(exc).__name__}), STOP WITH UNVERIFIED ANSWER---")
+            print(
+                f"---USEFULNESS CHECK FAILED ({type(exc).__name__}), STOP WITH UNVERIFIED ANSWER---"
+            )
             return "tool_error"
 
         if useful.answers_question:
@@ -509,9 +507,3 @@ workflow.add_edge(CLEAR_TRANSIENT_TOOL_ERROR, END)
 
 # 9. Compile into a callable app
 app = workflow.compile()
-
-
-
-
-
-

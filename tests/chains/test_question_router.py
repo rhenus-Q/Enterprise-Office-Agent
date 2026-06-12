@@ -15,11 +15,9 @@ so only unambiguous examples are used here.
 
 import pytest
 
-from tests.conftest import requires_openai
-
+from graph.chains.question_router import RouteQuery, question_router
 from graph.consts import RETRIEVE, WEBSEARCH
-from graph.chains.question_router import question_router, RouteQuery
-
+from tests.conftest import requires_openai
 
 # Questions that should go to vector retrieval (all on indexed AcmeCorp policy topics)
 RETRIEVE_QUESTIONS = [
@@ -38,7 +36,7 @@ WEBSEARCH_QUESTIONS = [
     "Who won the most recent FIFA World Cup?",
     "What is the current stock price of NVIDIA?",
     "What are the latest news headlines today?",
-     "What is today's exchange rate between the US dollar and the Chinese yuan?",
+    "What is today's exchange rate between the US dollar and the Chinese yuan?",
 ]
 
 
@@ -74,8 +72,3 @@ def test_router_routes_external_topics_to_websearch(user_question):
     assert result.datasource == WEBSEARCH, (
         f"expected websearch, got {result.datasource!r}, question: {user_question!r}"
     )
-
-
-
-
-

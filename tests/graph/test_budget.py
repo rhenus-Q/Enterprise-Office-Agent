@@ -13,7 +13,6 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
-
 from langchain_core.documents import Document
 
 import graph.graph as graph_module
@@ -29,7 +28,6 @@ from graph.consts import RETRIEVE, STOP_REASON_BUDGET_EXHAUSTED
 from graph.graph import grade_generation
 from graph.nodes.budget_exhausted_notice import budget_exhausted_notice
 from main import BUDGET_EXHAUSTED_NOTE, format_answer
-
 
 # ---------------------------------------------------------------------------
 # Config parsing
@@ -220,9 +218,7 @@ def test_existing_stop_reasons_take_their_usual_precedence(monkeypatch):
     _patch_graders(monkeypatch, grounded=True, useful=False)
 
     assert (
-        grade_generation(
-            _generation_state(web_search_enabled=False, web_search_count=1)
-        )
+        grade_generation(_generation_state(web_search_enabled=False, web_search_count=1))
         == "web_search_disabled"
     )
     assert (
@@ -296,8 +292,8 @@ def test_app_normal_success_tracks_counters_without_warnings(monkeypatch):
 
     result = graph_module.app.invoke(_initial_state())
 
-    assert result["stop_reason"] == ""             # no caveat of any kind
-    assert result["llm_call_count"] == 1           # one generation, nothing else
+    assert result["stop_reason"] == ""  # no caveat of any kind
+    assert result["llm_call_count"] == 1  # one generation, nothing else
     assert result["web_search_count"] == 0
     assert result["web_result_grading_count"] == 0
     assert web_calls == []

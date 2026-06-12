@@ -6,9 +6,9 @@ via monkeypatch, so no real OpenAI call happens. Tests focus only on how the nod
 reads state and shapes the returned state.
 """
 
-from langchain_core.documents import Document
-
 import importlib
+
+from langchain_core.documents import Document
 
 from graph.consts import STOP_REASON_GENERATION_ERROR
 from graph.nodes.generate import GENERATION_FAILED_ANSWER, generate
@@ -124,10 +124,10 @@ def test_generate_uses_safe_defaults_for_missing_keys(monkeypatch):
     state = {"question": "Q"}
     result = generate(state)
 
-    assert result["documents"] == []        # default []
-    assert calls["documents"] == []         # default [] is what gets passed onward
-    assert result["retries"] == 1           # 0 + 1
-    assert result["web_search"] is False    # default False
+    assert result["documents"] == []  # default []
+    assert calls["documents"] == []  # default [] is what gets passed onward
+    assert result["retries"] == 1  # 0 + 1
+    assert result["web_search"] is False  # default False
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +184,8 @@ def test_generation_failure_still_counts_retry_and_llm_call(monkeypatch):
     docs = [Document(page_content="chunk")]
     result = generate({"question": "Q", "documents": docs, "retries": 1, "llm_call_count": 4})
 
-    assert result["retries"] == 2           # the attempt happened
-    assert result["llm_call_count"] == 5    # the failed API call still counts
+    assert result["retries"] == 2  # the attempt happened
+    assert result["llm_call_count"] == 5  # the failed API call still counts
 
 
 def test_generation_success_does_not_write_stop_reason(monkeypatch):

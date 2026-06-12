@@ -24,14 +24,11 @@ and returns a plain string answer.
 from functools import lru_cache
 
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-
-INSUFFICIENT_CONTEXT_ANSWER = (
-    "I do not have enough information in the provided documents."
-)
+INSUFFICIENT_CONTEXT_ANSWER = "I do not have enough information in the provided documents."
 
 
 system_prompt = """
@@ -120,9 +117,7 @@ def get_generation_chain():
     )
 
 
-def generate_answer(
-    question: str, documents: list[Document], retry_feedback: str = ""
-) -> str:
+def generate_answer(question: str, documents: list[Document], retry_feedback: str = "") -> str:
     """
     Generate an answer from a question + documents.
 
@@ -141,8 +136,7 @@ def generate_answer(
     effective_question = question
     if retry_feedback:
         effective_question = (
-            f"{question}\n\n"
-            f"Important instruction for this attempt:\n{retry_feedback}"
+            f"{question}\n\nImportant instruction for this attempt:\n{retry_feedback}"
         )
 
     return get_generation_chain().invoke(

@@ -21,12 +21,10 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
-
+from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
@@ -90,9 +88,7 @@ def load_documents():
                     "source": f"data/acmecorp_internal_docs/{path.name}",
                     "title": _extract_title(text, path.stem),
                     "source_type": "local_corpus",
-                    "document_category": DOCUMENT_CATEGORIES.get(
-                        path.name, "internal_document"
-                    ),
+                    "document_category": DOCUMENT_CATEGORIES.get(path.name, "internal_document"),
                 },
             )
         )
@@ -206,9 +202,7 @@ def get_retriever():
         persist_directory=CHROMA_PATH,
     )
 
-    retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 3}
-    )
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
     return retriever
 

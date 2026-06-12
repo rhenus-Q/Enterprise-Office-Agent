@@ -18,10 +18,9 @@ answers_question == False -> the answer is off-topic or does not address it.
 
 from functools import lru_cache
 
-from pydantic import BaseModel, Field
-
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
 
 class GradeAnswer(BaseModel):
@@ -69,6 +68,7 @@ Generated answer:
         ),
     ]
 )
+
 
 @lru_cache(maxsize=1)
 def get_answer_grader():

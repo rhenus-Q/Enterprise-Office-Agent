@@ -1,9 +1,8 @@
 from functools import lru_cache
 
-from pydantic import BaseModel, Field
-
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
 
 class RetrievalGrade(BaseModel):
@@ -49,6 +48,7 @@ Retrieved document:
         ),
     ]
 )
+
 
 @lru_cache(maxsize=1)
 def get_retrieval_grader():

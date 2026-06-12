@@ -13,7 +13,6 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
-
 from langchain_core.documents import Document
 
 import graph.graph as graph_module
@@ -35,7 +34,6 @@ from main import (
     WEB_SEARCH_ERROR_NOTE,
     format_answer,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers (mirrors the other graph test files)
@@ -224,7 +222,11 @@ def test_degraded_stop_reasons_do_not_skip_grading(monkeypatch):
     # still get a fully graded answer; only generation_error skips grading.
     _patch_graders(monkeypatch, grounded=True, useful=True)
 
-    for reason in (STOP_REASON_RETRIEVAL_ERROR, STOP_REASON_WEB_SEARCH_ERROR, STOP_REASON_TOOL_ERROR):
+    for reason in (
+        STOP_REASON_RETRIEVAL_ERROR,
+        STOP_REASON_WEB_SEARCH_ERROR,
+        STOP_REASON_TOOL_ERROR,
+    ):
         assert grade_generation(_generation_state(stop_reason=reason)) == "useful"
 
 
@@ -290,8 +292,8 @@ def test_app_survives_retriever_failure_and_falls_back_to_web(monkeypatch):
     result = graph_module.app.invoke(_initial_state())  # must not raise
 
     assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
-    assert len(web_calls) == 1                      # degraded to web search
-    assert result["generation"] == "FINAL ANSWER"   # web context still produced an answer
+    assert len(web_calls) == 1  # degraded to web search
+    assert result["generation"] == "FINAL ANSWER"  # web context still produced an answer
 
 
 def test_app_survives_retriever_failure_in_privacy_mode_without_web_calls(monkeypatch):
@@ -301,8 +303,8 @@ def test_app_survives_retriever_failure_in_privacy_mode_without_web_calls(monkey
     result = graph_module.app.invoke(_initial_state(web_search_enabled=False))
 
     assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
-    assert web_calls == []                          # privacy guarantee survives the failure
-    assert result["documents"] == []                # empty context -> safe deterministic answer
+    assert web_calls == []  # privacy guarantee survives the failure
+    assert result["documents"] == []  # empty context -> safe deterministic answer
 
 
 def test_app_survives_tavily_failure_and_answers_from_local_documents(monkeypatch):
@@ -317,19 +319,19 @@ def test_app_survives_tavily_failure_and_answers_from_local_documents(monkeypatc
     assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_ERROR
     assert len(web_calls) == 1
     assert all(d.metadata.get("source") != "web_search" for d in result["documents"])
-    assert result["web_search_count"] == 1          # the failed attempt is budgeted
+    assert result["web_search_count"] == 1  # the failed attempt is budgeted
 
 
 def test_app_stops_safely_when_generation_fails(monkeypatch):
     _patch_router(monkeypatch, RETRIEVE)
-    _patch_graders_to_fail_if_called(monkeypatch)   # a failed generation is never graded
+    _patch_graders_to_fail_if_called(monkeypatch)  # a failed generation is never graded
     _patch_all_node_seams(monkeypatch, generation_raises=True)
 
     result = graph_module.app.invoke(_initial_state())  # must not raise
 
     assert result["stop_reason"] == STOP_REASON_GENERATION_ERROR
     assert result["generation"] == GENERATION_FAILED_ANSWER
-    assert result["retries"] == 1                   # stopped on the first failure, no retry loop
+    assert result["retries"] == 1  # stopped on the first failure, no retry loop
 
 
 def test_app_stops_with_tool_error_when_hallucination_grader_fails(monkeypatch):
@@ -340,7 +342,7 @@ def test_app_stops_with_tool_error_when_hallucination_grader_fails(monkeypatch):
     result = graph_module.app.invoke(_initial_state())  # must not raise
 
     assert result["stop_reason"] == STOP_REASON_TOOL_ERROR
-    assert result["generation"] == "FINAL ANSWER"   # answer delivered, flagged unverified
+    assert result["generation"] == "FINAL ANSWER"  # answer delivered, flagged unverified
 
 
 # ---------------------------------------------------------------------------
@@ -349,18 +351,19 @@ def test_app_stops_with_tool_error_when_hallucination_grader_fails(monkeypatch):
 
 
 def test_clear_node_clears_only_transient_tool_error():
-    assert clear_transient_tool_error(
-        _generation_state(stop_reason=STOP_REASON_TOOL_ERROR)
-    ) == {"stop_reason": ""}
+    assert clear_transient_tool_error(_generation_state(stop_reason=STOP_REASON_TOOL_ERROR)) == {
+        "stop_reason": ""
+    }
 
     # Clean runs and source-unavailable degradations pass through untouched.
     assert clear_transient_tool_error(_generation_state(stop_reason="")) == {}
-    assert clear_transient_tool_error(
-        _generation_state(stop_reason=STOP_REASON_RETRIEVAL_ERROR)
-    ) == {}
-    assert clear_transient_tool_error(
-        _generation_state(stop_reason=STOP_REASON_WEB_SEARCH_ERROR)
-    ) == {}
+    assert (
+        clear_transient_tool_error(_generation_state(stop_reason=STOP_REASON_RETRIEVAL_ERROR)) == {}
+    )
+    assert (
+        clear_transient_tool_error(_generation_state(stop_reason=STOP_REASON_WEB_SEARCH_ERROR))
+        == {}
+    )
 
 
 def test_app_successful_web_answer_clears_transient_grading_tool_error(monkeypatch):
@@ -380,9 +383,7 @@ def test_app_successful_web_answer_clears_transient_grading_tool_error(monkeypat
     monkeypatch.setattr(
         web_module,
         "get_web_search_tool",
-        lambda: SimpleNamespace(
-            invoke=lambda p: [{"content": "boom"}, {"content": "good"}]
-        ),
+        lambda: SimpleNamespace(invoke=lambda p: [{"content": "boom"}, {"content": "good"}]),
     )
 
     class FlakyGrader:
@@ -396,10 +397,10 @@ def test_app_successful_web_answer_clears_transient_grading_tool_error(monkeypat
     result = graph_module.app.invoke(_initial_state())
 
     assert result["generation"] == "FINAL ANSWER"
-    assert result["stop_reason"] == ""              # stale transient warning cleared
+    assert result["stop_reason"] == ""  # stale transient warning cleared
     assert any(
         d.metadata.get("source") == "web_search" for d in result["documents"]
-    )                                               # the vetted result was used
+    )  # the vetted result was used
 
 
 def test_app_unrecovered_tool_error_still_ends_with_tool_error(monkeypatch):

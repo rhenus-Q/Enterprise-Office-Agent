@@ -13,16 +13,15 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
-
 from langchain_core.documents import Document
 
 import graph.graph as graph_module
 from graph.config import web_search_enabled
 from graph.consts import (
-    RETRIEVE,
     GENERATE,
-    WEBSEARCH,
+    RETRIEVE,
     STOP_REASON_WEB_SEARCH_DISABLED,
+    WEBSEARCH,
 )
 from graph.graph import (
     MAX_RETRIES,
@@ -32,7 +31,6 @@ from graph.graph import (
 )
 from graph.nodes.web_search_disabled_notice import web_search_disabled_notice
 from main import WEB_SEARCH_DISABLED_NOTE, format_answer
-
 
 # ---------------------------------------------------------------------------
 # graph.config.web_search_enabled -- env parsing
@@ -207,9 +205,7 @@ def test_grade_not_useful_disabled_stops_instead_of_websearch(monkeypatch):
 def test_grade_not_useful_enabled_at_retry_limit_stops(monkeypatch):
     _patch_graders(monkeypatch, grounded=True, useful=False)
 
-    result = grade_generation(
-        _generation_state(web_search_enabled=True, retries=MAX_RETRIES)
-    )
+    result = grade_generation(_generation_state(web_search_enabled=True, retries=MAX_RETRIES))
 
     assert result == "max_retries_not_useful"
 
@@ -225,9 +221,7 @@ def test_grade_not_grounded_regenerates_regardless_of_toggle(monkeypatch):
 def test_grade_not_grounded_at_retry_limit_stops(monkeypatch):
     _patch_graders(monkeypatch, grounded=False, useful=True)
 
-    result = grade_generation(
-        _generation_state(web_search_enabled=False, retries=MAX_RETRIES)
-    )
+    result = grade_generation(_generation_state(web_search_enabled=False, retries=MAX_RETRIES))
 
     assert result == "max_retries_not_grounded"
 

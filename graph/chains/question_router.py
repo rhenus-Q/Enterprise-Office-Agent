@@ -19,10 +19,9 @@ and returns a RouteQuery object with `.datasource` == "retrieve" or "websearch".
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, Field
-
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
 
 class RouteQuery(BaseModel):
@@ -68,6 +67,7 @@ prompt = ChatPromptTemplate.from_messages(
         ("human", "User question:\n{question}"),
     ]
 )
+
 
 @lru_cache(maxsize=1)
 def get_question_router():

@@ -96,9 +96,7 @@ def _web_doc_with_pages(*entries, content="web content", search_query="some quer
 
 
 def test_web_doc_with_pages_shows_title_and_url():
-    sources = format_sources(
-        [_web_doc_with_pages({"title": "Page A", "url": "https://a.example"})]
-    )
+    sources = format_sources([_web_doc_with_pages({"title": "Page A", "url": "https://a.example"})])
 
     assert sources == f"{SOURCES_HEADER}\n- Web search: Page A — https://a.example"
 
@@ -121,18 +119,14 @@ def test_web_doc_with_pages_lists_each_page_once():
 
 
 def test_web_page_without_title_falls_back_to_url():
-    sources = format_sources(
-        [_web_doc_with_pages({"title": "", "url": "https://a.example"})]
-    )
+    sources = format_sources([_web_doc_with_pages({"title": "", "url": "https://a.example"})])
 
     assert sources == f"{SOURCES_HEADER}\n- Web search: https://a.example"
 
 
 def test_web_doc_with_empty_web_sources_falls_back_to_query():
     # No usable URLs -> the existing query-level citation.
-    sources = format_sources(
-        [_web_doc_with_pages(search_query="fallback query")]
-    )
+    sources = format_sources([_web_doc_with_pages(search_query="fallback query")])
 
     assert sources == f'{SOURCES_HEADER}\n- Web search: "fallback query"'
 
@@ -214,9 +208,7 @@ def test_format_answer_appends_sources_after_the_answer():
         "documents": [_local_doc(title="RAG Concepts")],
     }
 
-    assert format_answer(result) == (
-        "The answer.\n\nSources:\n- Local corpus: RAG Concepts"
-    )
+    assert format_answer(result) == ("The answer.\n\nSources:\n- Local corpus: RAG Concepts")
 
 
 def test_format_answer_without_documents_is_unchanged():
@@ -364,7 +356,11 @@ def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch)
         lambda: SimpleNamespace(
             invoke=lambda p: {
                 "results": [
-                    {"content": "web result", "url": "https://news.example/story", "title": "Big Story"}
+                    {
+                        "content": "web result",
+                        "url": "https://news.example/story",
+                        "title": "Big Story",
+                    }
                 ]
             }
         ),

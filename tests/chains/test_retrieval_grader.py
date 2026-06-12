@@ -13,10 +13,8 @@ doc.page_content per document.
 
 import pytest
 
+from graph.chains.retrieval_grader import RetrievalGrade, retrieval_grader
 from tests.conftest import requires_openai
-
-from graph.chains.retrieval_grader import retrieval_grader, RetrievalGrade
-
 
 # (question, document) document helps answer the question -> expect is_relevant == True
 RELEVANT_CASES = [
@@ -54,8 +52,7 @@ IRRELEVANT_CASES = [
     ),
     (
         "Why do we split documents into chunks?",
-        "The 2018 FIFA World Cup was held in Russia and won by the French "
-        "national football team.",
+        "The 2018 FIFA World Cup was held in Russia and won by the French national football team.",
     ),
 ]
 

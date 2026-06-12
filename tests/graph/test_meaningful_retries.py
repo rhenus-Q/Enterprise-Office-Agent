@@ -21,7 +21,6 @@ from graph.consts import RETRIEVE, WEBSEARCH
 from graph.nodes.add_grounding_feedback import GROUNDING_FEEDBACK, add_grounding_feedback
 from graph.nodes.rewrite_query import rewrite_query
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -44,9 +43,7 @@ def _patch_graders_sequence(monkeypatch, grounded_seq, useful_seq):
     monkeypatch.setattr(
         graph_module,
         "get_hallucination_grader",
-        lambda: SimpleNamespace(
-            invoke=lambda p: SimpleNamespace(is_grounded=next(grounded_iter))
-        ),
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_grounded=next(grounded_iter))),
     )
     monkeypatch.setattr(
         graph_module,
@@ -57,7 +54,9 @@ def _patch_graders_sequence(monkeypatch, grounded_seq, useful_seq):
     )
 
 
-def _patch_all_node_seams(monkeypatch, *, docs_relevant=True, rewritten_query="more specific query"):
+def _patch_all_node_seams(
+    monkeypatch, *, docs_relevant=True, rewritten_query="more specific query"
+):
     """
     Mock every external seam. Returns recorders:
     - web_calls: payloads sent to the web search tool
@@ -148,14 +147,14 @@ def test_rewrite_query_calls_rewriter_with_question_and_previous_answer(monkeypa
     monkeypatch.setattr(
         rewrite_module,
         "get_query_rewriter",
-        lambda: SimpleNamespace(invoke=lambda p: (calls.append(p) or "  new query  ")),
+        lambda: SimpleNamespace(invoke=lambda p: calls.append(p) or "  new query  "),
     )
 
     result = rewrite_query({"question": "Q", "generation": "bad answer"})
 
     assert calls == [{"question": "Q", "previous_answer": "bad answer"}]
     assert result["search_query"] == "new query"  # output is stripped
-    assert result["llm_call_count"] == 1          # the rewrite is a counted LLM call
+    assert result["llm_call_count"] == 1  # the rewrite is a counted LLM call
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +169,7 @@ def test_generate_answer_folds_feedback_into_question_input(monkeypatch):
     monkeypatch.setattr(
         generation_module,
         "get_generation_chain",
-        lambda: SimpleNamespace(invoke=lambda p: (payloads.append(p) or "ok")),
+        lambda: SimpleNamespace(invoke=lambda p: payloads.append(p) or "ok"),
     )
 
     docs = [Document(page_content="d")]
@@ -187,7 +186,7 @@ def test_generate_answer_without_feedback_keeps_question_unchanged(monkeypatch):
     monkeypatch.setattr(
         generation_module,
         "get_generation_chain",
-        lambda: SimpleNamespace(invoke=lambda p: (payloads.append(p) or "ok")),
+        lambda: SimpleNamespace(invoke=lambda p: payloads.append(p) or "ok"),
     )
 
     generation_module.generate_answer("Q", [Document(page_content="d")])

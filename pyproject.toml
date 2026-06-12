@@ -26,7 +26,10 @@ package = false
 # Install with `uv sync --group dev`.
 [dependency-groups]
 dev = [
+    "mypy>=2.1.0",
+    "pre-commit>=4.6.0",
     "pytest",
+    "ruff>=0.15.17",
 ]
 
 # Let pytest import the graph package from the project root (pythonpath="."),
@@ -34,3 +37,45 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9",  # pycodestyle errors (default scope)
+    "F",               # pyflakes
+    "W",               # pycodestyle warnings
+    "I",               # isort (import sorting)
+    "UP",              # pyupgrade (py311+ idioms)
+    "B",               # flake8-bugbear
+]
+ignore = [
+    "E501",  # long lines: prose-heavy comments; revisit later
+]
+
+[tool.ruff.lint.per-file-ignores]
+"main.py" = ["F401", "E402"]         # intentional re-exports after load_dotenv()
+"graph/graph.py" = ["E402"]          # imports after load_dotenv()
+"evals/run_eval.py" = ["E402"]       # imports after sys.path insert
+"tests/**" = ["E731"]                # monkeypatch lambdas are the house style
+
+[tool.mypy]
+python_version = "3.11"
+files = [
+    "graph/engine.py",
+    "graph/config.py",
+    "graph/formatting.py",
+    "graph/state.py",
+    "graph/consts.py",
+]
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["graph.graph", "graph.nodes.*", "graph.chains.*", "ingestion"]
+follow_imports = "silent"

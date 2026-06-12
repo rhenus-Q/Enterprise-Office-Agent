@@ -18,7 +18,6 @@ from graph.consts import (
     RETRIEVE,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL,
-    STOP_REASON_WEB_SEARCH_DISABLED,
 )
 from graph.graph import MAX_RETRIES, grade_generation
 from graph.nodes.max_retries_notice import (
@@ -30,7 +29,6 @@ from main import (
     MAX_RETRIES_NOT_USEFUL_NOTE,
     format_answer,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers (mirrors test_web_search_toggle.py)
@@ -150,9 +148,7 @@ def test_not_grounded_at_limit_same_outcome_in_privacy_mode(monkeypatch):
     # The regenerate loop doesn't involve web search; the toggle must not change this.
     _patch_graders(monkeypatch, grounded=False, useful=True)
 
-    result = grade_generation(
-        _generation_state(retries=MAX_RETRIES, web_search_enabled=False)
-    )
+    result = grade_generation(_generation_state(retries=MAX_RETRIES, web_search_enabled=False))
 
     assert result == "max_retries_not_grounded"
 
@@ -170,9 +166,7 @@ def test_not_useful_at_limit_in_privacy_mode_keeps_web_search_disabled_reason(mo
     # of retries, so the privacy-mode outcome (and its caveat) wins.
     _patch_graders(monkeypatch, grounded=True, useful=False)
 
-    result = grade_generation(
-        _generation_state(retries=MAX_RETRIES, web_search_enabled=False)
-    )
+    result = grade_generation(_generation_state(retries=MAX_RETRIES, web_search_enabled=False))
 
     assert result == "web_search_disabled"
 

@@ -24,15 +24,21 @@ def rewrite_query(state: GraphState):
     previous_answer = state.get("generation", "")
 
     try:
-        new_query = get_query_rewriter().invoke(
-            {
-                "question": question,
-                "previous_answer": previous_answer,
-            }
-        ).strip()
+        new_query = (
+            get_query_rewriter()
+            .invoke(
+                {
+                    "question": question,
+                    "previous_answer": previous_answer,
+                }
+            )
+            .strip()
+        )
     except Exception as exc:
         # Log only the exception type: messages may carry secrets.
-        print(f"---QUERY REWRITE FAILED ({type(exc).__name__}): FALLING BACK TO THE ORIGINAL QUESTION---")
+        print(
+            f"---QUERY REWRITE FAILED ({type(exc).__name__}): FALLING BACK TO THE ORIGINAL QUESTION---"
+        )
         return {
             "search_query": "",
             # The failed attempt was still a real API call; count it.

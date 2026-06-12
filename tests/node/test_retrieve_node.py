@@ -5,9 +5,9 @@ The retriever is mocked via monkeypatch (patching get_node_retriever), so no rea
 Chroma / embeddings call happens. Tests focus on node state input/output.
 """
 
-from langchain_core.documents import Document
-
 import importlib
+
+from langchain_core.documents import Document
 
 from graph.consts import STOP_REASON_RETRIEVAL_ERROR
 from graph.nodes.retrieve import retrieve

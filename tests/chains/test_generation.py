@@ -17,15 +17,13 @@ plain string answer.
 
 from langchain_core.documents import Document
 
-from tests.conftest import requires_openai
-
 from graph.chains.generation import (
     INSUFFICIENT_CONTEXT_ANSWER,
     format_documents,
     generate_answer,
     generation_chain,
 )
-
+from tests.conftest import requires_openai
 
 # ---------------------------------------------------------------------------
 # format_documents -- pure function, no LLM, no API key required
@@ -138,8 +136,7 @@ def test_generation_chain_answer_uses_unique_context_fact():
     result = generation_chain.invoke(
         {
             "question": (
-                "According to the documents, what method describes "
-                "Retrieval-Augmented Generation?"
+                "According to the documents, what method describes Retrieval-Augmented Generation?"
             ),
             "documents": unique_docs,
         }

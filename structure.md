@@ -460,7 +460,12 @@ Future improvements (rough priority): LangSmith tracing evidence + structured
 logging; grader-scored (LLM-as-judge) metrics on top of the deterministic
 eval harness; rationale-bearing grounding feedback; batched grading.
 
-GitHub Actions CI (`.github/workflows/ci.yml`) runs the fully mocked suites
-(`tests/node/` + `tests/graph/` + `tests/evals/`) on every push and pull
-request with no API keys configured; the key-gated `tests/chains/` suite and
-the full eval run are excluded.
+GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every
+push and pull request — both keys-free:
+
+- **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` +
+  `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run
+  are excluded.
+- **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
+  engine-API surface: `graph/engine.py`, `graph/config.py`,
+  `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).

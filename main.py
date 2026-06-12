@@ -9,13 +9,13 @@ from dotenv import load_dotenv
 # constructed at runtime, so .env must be loaded before the graph runs.
 load_dotenv()
 
-from graph.config import web_search_enabled  # noqa: E402
-from graph.engine import answer_question  # noqa: E402
+from graph.config import web_search_enabled
+from graph.engine import answer_question
 
 # Presentation lives in graph/formatting.py (shared with the eval harness and
 # the engine). Re-exported here so existing imports `from main import ...`
 # keep working.
-from graph.formatting import (  # noqa: E402,F401
+from graph.formatting import (
     BUDGET_EXHAUSTED_NOTE,
     GENERATION_ERROR_NOTE,
     LOCAL_SOURCE_FALLBACK_LABEL,
@@ -41,8 +41,10 @@ def main():
     # Privacy mode toggle: when WEB_SEARCH_ENABLED=false, questions are never
     # sent to an external web search service (Tavily).
     if not web_search_enabled():
-        print("Web search is DISABLED (WEB_SEARCH_ENABLED=false). "
-              "Answers come from the local knowledge base only.\n")
+        print(
+            "Web search is DISABLED (WEB_SEARCH_ENABLED=false). "
+            "Answers come from the local knowledge base only.\n"
+        )
 
     while True:
         question = input("Enter your question:\n> ").strip()

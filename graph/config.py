@@ -10,7 +10,6 @@ side-effect-free and easy to test: no client construction, no .env loading
 
 import os
 
-
 # Values (case-insensitive, whitespace-stripped) that disable a boolean flag.
 _FALSY_VALUES = {"false", "0", "no", "off"}
 
@@ -32,9 +31,13 @@ def web_search_enabled() -> bool:
 # WEB_SEARCH_ENABLED privacy switch: the switch decides whether external web
 # search is allowed at all; the policy decides WHEN the system chooses
 # retrieval-triggered web fallback while web search is otherwise allowed.
-WEB_FALLBACK_CONSERVATIVE = "conservative"  # web only when zero relevant local docs remain (default)
-WEB_FALLBACK_AGGRESSIVE = "aggressive"      # legacy CRAG behavior: any irrelevant doc triggers web fallback
-WEB_FALLBACK_DISABLED = "disabled"          # local retrieval paths never fall back to the web
+WEB_FALLBACK_CONSERVATIVE = (
+    "conservative"  # web only when zero relevant local docs remain (default)
+)
+WEB_FALLBACK_AGGRESSIVE = (
+    "aggressive"  # legacy CRAG behavior: any irrelevant doc triggers web fallback
+)
+WEB_FALLBACK_DISABLED = "disabled"  # local retrieval paths never fall back to the web
 
 _WEB_FALLBACK_POLICIES = {
     WEB_FALLBACK_CONSERVATIVE,
@@ -110,14 +113,10 @@ def max_llm_calls_per_run() -> int:
 def max_web_searches_per_run() -> int:
     """Budget for Tavily searches per graph run (MAX_WEB_SEARCHES_PER_RUN)."""
 
-    return _positive_int_from_env(
-        "MAX_WEB_SEARCHES_PER_RUN", DEFAULT_MAX_WEB_SEARCHES_PER_RUN
-    )
+    return _positive_int_from_env("MAX_WEB_SEARCHES_PER_RUN", DEFAULT_MAX_WEB_SEARCHES_PER_RUN)
 
 
 def max_web_results_to_grade() -> int:
     """Budget for web results graded for relevance per run (MAX_WEB_RESULTS_TO_GRADE)."""
 
-    return _positive_int_from_env(
-        "MAX_WEB_RESULTS_TO_GRADE", DEFAULT_MAX_WEB_RESULTS_TO_GRADE
-    )
+    return _positive_int_from_env("MAX_WEB_RESULTS_TO_GRADE", DEFAULT_MAX_WEB_RESULTS_TO_GRADE)
