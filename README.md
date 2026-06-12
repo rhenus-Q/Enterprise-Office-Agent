@@ -105,7 +105,8 @@ State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the wor
 │   └── workflows/ci.yml     # CI: runs the fully mocked suites (node, graph, evals) — no API keys
 ├── graph/
 │   ├── graph.py             # StateGraph assembly, routing/decision functions, MAX_RETRIES, compiled `app`
-│   ├── engine.py            # Canonical engine API: answer_question(), AnswerOptions/AnswerResult, seed_state()
+│   ├── engine.py            # Canonical engine API: answer_question(), AnswerOptions/AnswerResult, seed_state(),
+│   │                        #   lightweight observability (run_id, node path, timings, optional trace JSON)
 │   ├── formatting.py        # Shared presentation: stop-reason caveats + deterministic Sources section
 │   ├── state.py             # GraphState TypedDict
 │   ├── config.py            # Env-driven runtime flags: WEB_SEARCH_ENABLED, WEB_FALLBACK_POLICY,
@@ -226,12 +227,41 @@ result.sources                 # deduplicated citation lines
 result.tracked_llm_calls       # budgeted operational counter (not total LLM usage)
 result.web_fallback_policy     # the policy this run actually used
 result.raw_state               # full final GraphState for internal callers
+result.run_id                  # always set: preserved if provided, generated otherwise
+result.node_path               # executed nodes in order, e.g. ["retrieve", "grade_documents", ...]
+result.node_timings_ms         # one {"node", "duration_ms"} entry per step (approximate)
+result.total_duration_ms       # wall-clock duration of the whole graph run
 ```
 
 Options left as `None` fall back to the environment defaults
 (`WEB_SEARCH_ENABLED` / `WEB_FALLBACK_POLICY`). The hard privacy guarantee is
 unchanged: `web_search_enabled=False` — per run or via the environment —
 means zero external web searches regardless of the fallback policy.
+
+#### Run traces (optional, metadata-only)
+
+Every run carries lightweight observability: a `run_id`, the executed node
+path, per-step timings, and the total duration, collected centrally in the
+engine by streaming the graph's node updates — no node or routing changes.
+Pass `trace_path` to also write a trace JSON file:
+
+```python
+from graph.engine import AnswerOptions, answer_question
+
+result = answer_question(
+    "How do I request VPN access?",
+    AnswerOptions(run_id="demo-1", trace_path="traces/demo-1.json"),
+)
+```
+
+The trace contains `run_id`, `generated_at`, `question`, `node_path`,
+`total_duration_ms`, `node_timings_ms`, `stop_reason`, the run counters
+(`retries`, `tracked_llm_calls`, `web_search_count`,
+`web_result_grading_count`), `web_search_enabled`, `web_fallback_policy`,
+and the citation lines (`sources`). It deliberately **never** contains
+document `page_content`, prompts, raw graph state, or API keys. By default
+(`trace_path=None`) no file is written. Note that the question text itself
+is part of the trace — store trace files accordingly.
 
 ### Retry-exhaustion warnings
 

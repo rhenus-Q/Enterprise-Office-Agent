@@ -124,6 +124,13 @@ class _FakeApp:
         self.invoked_with = state
         return {**state, **self.final_state}
 
+    def stream(self, state, stream_mode="updates"):
+        # Mirrors LangGraph's update stream: one chunk per completed node,
+        # holding that node's partial state update.
+        self.invoked_with = state
+        yield {"retrieve": {}}
+        yield {"generate": dict(self.final_state)}
+
 
 def _install_fake_app(monkeypatch, final_state):
     fake = _FakeApp(final_state)
@@ -203,7 +210,8 @@ def test_answer_question_without_options_uses_environment_defaults(monkeypatch):
     assert fake.invoked_with["web_search_enabled"] is False
     assert result.web_search_enabled is False
     assert result.web_fallback_policy == WEB_FALLBACK_DISABLED
-    assert result.run_id is None
+    # No caller-provided run_id: the engine generates one (observability).
+    assert isinstance(result.run_id, str) and result.run_id
 
 
 # ---------------------------------------------------------------------------
