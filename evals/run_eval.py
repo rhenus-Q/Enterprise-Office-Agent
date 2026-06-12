@@ -34,6 +34,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from graph.consts import WEB_SEARCH_SOURCE  # noqa: E402  (pure constants, side-effect-free)
+from graph.config import (  # noqa: E402  (pure env helpers, side-effect-free)
+    WEB_FALLBACK_AGGRESSIVE,
+    WEB_FALLBACK_CONSERVATIVE,
+    WEB_FALLBACK_DISABLED,
+)
 
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
@@ -41,6 +46,11 @@ DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
 CATEGORIES = ("local_corpus", "web_fallback", "insufficient_context", "privacy_mode")
 REQUIRED_FIELDS = ("id", "category", "question", "web_search_enabled", "expected_behavior")
 SOURCE_TYPES = ("local_corpus", "web", "none")
+WEB_FALLBACK_POLICIES = (
+    WEB_FALLBACK_CONSERVATIVE,
+    WEB_FALLBACK_AGGRESSIVE,
+    WEB_FALLBACK_DISABLED,
+)
 
 # Substring marking a non-confident answer. Matches the graph's deterministic
 # insufficient-context answer and the usual phrasing of an honest decline.
@@ -137,6 +147,13 @@ def validate_dataset(rows):
         expected_source = row.get("expected_source_type")
         if expected_source is not None and expected_source not in SOURCE_TYPES:
             errors.append(f"{label}: expected_source_type must be null or one of {SOURCE_TYPES}")
+
+        # Optional per-row fallback-policy override (existing rows omit it).
+        policy = row.get("web_fallback_policy")
+        if policy is not None and policy not in WEB_FALLBACK_POLICIES:
+            errors.append(
+                f"{label}: web_fallback_policy must be null or one of {WEB_FALLBACK_POLICIES}"
+            )
 
         contains = row.get("expected_contains")
         if contains is not None and not (
@@ -336,38 +353,27 @@ def render_markdown(evaluated, metrics, dataset_path):
 # ---------------------------------------------------------------------------
 
 
-def _initial_state(question, web_search_enabled):
-    """Seed the full GraphState exactly as main.py does (no env mutation)."""
-
-    return {
-        "question": question,
-        "documents": [],
-        "generation": "",
-        "web_search": False,
-        "web_search_enabled": web_search_enabled,
-        "retries": 0,
-        "stop_reason": "",
-        "insufficient_context": False,
-        "retry_feedback": "",
-        "search_query": "",
-        "llm_call_count": 0,
-        "web_search_count": 0,
-        "web_result_grading_count": 0,
-    }
-
-
 def run_eval(rows, output_path, dataset_path):
     """Run rows through the real graph (REAL API calls) and write the report."""
 
-    # Imported here so --validate-only never touches the graph or main.
-    from graph.graph import app
-    from main import format_answer
+    # Imported here so --validate-only never touches the graph. State seeding
+    # and per-run config resolution live in the engine (graph/engine.py) —
+    # the same entry point main.py uses — so the harness never mutates env.
+    from graph.engine import AnswerOptions, answer_question
+    from graph.formatting import format_answer
 
     evaluated = []
     for index, row in enumerate(rows, 1):
         print(f"[{index}/{len(rows)}] {row['id']} ({row['category']}) ...")
         try:
-            result = app.invoke(_initial_state(row["question"], row["web_search_enabled"]))
+            answer = answer_question(
+                row["question"],
+                AnswerOptions(
+                    web_search_enabled=row["web_search_enabled"],
+                    web_fallback_policy=row.get("web_fallback_policy"),
+                ),
+            )
+            result = answer.raw_state
             summary = summarize_result(result, format_answer(result))
             entry = {"row": row, "summary": summary, **evaluate_row(row, summary)}
         except Exception as exc:

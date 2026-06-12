@@ -42,10 +42,14 @@ module imports side-effect-free (no API keys, no network at import time):
 
 Supporting modules: `graph/state.py` (the state schema), `graph/consts.py`
 (node names, `stop_reason` values, the `WEB_SEARCH_SOURCE` metadata marker),
-`graph/config.py` (env-driven flags), `ingestion.py` (offline, idempotent
-Chroma build of the local Markdown corpus: collection reset + deterministic
-chunk ids, provenance metadata per document), `main.py` (CLI, state seeding,
-caveat + Sources presentation).
+`graph/config.py` (env-driven flags), `graph/engine.py` (the canonical
+programmatic entry point: `answer_question()` / `AnswerOptions` /
+`AnswerResult`, plus `seed_state()` — the single state-seeding helper used by
+the CLI, the eval harness, and tests), `graph/formatting.py` (shared
+presentation: stop-reason caveats + Sources section), `ingestion.py`
+(offline, idempotent Chroma build of the local Markdown corpus: collection
+reset + deterministic chunk ids, provenance metadata per document),
+`main.py` (thin CLI over the engine).
 
 **Design grammar** (applied consistently):
 - Conditional edge functions are **pure** — they read state and chains, never write.
@@ -54,13 +58,15 @@ caveat + Sources presentation).
 - Every retry cycle passes through `generate`, which increments the `retries`
   counter that `MAX_RETRIES` caps.
 - Shared string constants live in `consts.py`; user-facing presentation lives
-  in `main.py`.
+  in `graph/formatting.py` (re-exported by `main.py` for backward
+  compatibility).
 
 ## 3. GraphState
 
-Defined in `graph/state.py` (`TypedDict`). `main.py` seeds every field per
-question; all readers use safe defaults so partial states behave like today's
-defaults.
+Defined in `graph/state.py` (`TypedDict`). `graph/engine.py` (`seed_state()`)
+seeds every field per question — the single seeding site shared by the CLI,
+the eval harness, and tests; all readers use safe defaults so partial states
+behave like today's defaults.
 
 | Field | Type | Purpose |
 |---|---|---|
@@ -68,7 +74,8 @@ defaults.
 | `documents` | `List[Document]` | Working context: filtered Chroma chunks + at most one web supplement. |
 | `generation` | `str` | The latest generated answer. |
 | `web_search` | `bool` | Set by `grade_documents` when any retrieved chunk was irrelevant → fall back to web search. |
-| `web_search_enabled` | `bool` | Privacy toggle, seeded from `WEB_SEARCH_ENABLED`. `False` = never call external search. |
+| `web_search_enabled` | `bool` | Privacy toggle, seeded from `WEB_SEARCH_ENABLED` (or a per-run engine option). `False` = never call external search. |
+| `web_fallback_policy` | `str` | Resolved per-run fallback policy (`conservative` / `aggressive` / `disabled`), seeded once by the engine from `WEB_FALLBACK_POLICY` or a per-run option; graph decisions read it from state, never from `os.environ` mid-run. |
 | `retries` | `int` | Number of generations so far; caps the quality-check loops. |
 | `stop_reason` | `str` | Why the run ended early (`""` = normal finish); drives user-facing caveats. |
 | `insufficient_context` | `bool` | Set by `generate` when the latest generation is the deterministic insufficient-context answer (no usable documents); `grade_generation` then skips the graders, which have nothing to verify. |
@@ -111,7 +118,9 @@ Three pure decision functions in `graph/graph.py`:
 - Any chunk irrelevant (or retrieval failed) → privacy mode wins first:
   with `web_search_enabled=False`, `generate` proceeds with whatever relevant
   chunks remain (possibly none → the deterministic insufficient-context
-  answer). Otherwise `WEB_FALLBACK_POLICY` (see ADR 011) decides:
+  answer). Otherwise the per-run policy in `state["web_fallback_policy"]`
+  (seeded from `WEB_FALLBACK_POLICY` or a per-run engine option; see ADR 011)
+  decides:
   - `conservative` (default): `generate` when at least one relevant chunk
     remains; `websearch` only with zero relevant chunks left.
   - `aggressive` (legacy): always `websearch`.
@@ -257,7 +266,8 @@ generation in that run keeps the stricter instruction.
 For deployments where user questions must never reach an external search
 service. Parsed by `graph/config.py` (`false`/`0`/`no`/`off`, case-insensitive,
 disable; anything else — including unset — preserves full behavior) and seeded
-into state by `main.py`. When disabled:
+into state by `graph/engine.py` (`seed_state()`; a per-run `AnswerOptions`
+value wins over the environment). When disabled:
 
 - `route_question` always returns `retrieve` and skips the router LLM.
 - `decide_to_generate` never falls back to web search; generation proceeds
@@ -278,9 +288,9 @@ from the same empty context cannot improve it (see §5).
 ## 10. stop_reason and user-facing caveats
 
 Terminal notice nodes record *why* a run ended without a passing answer;
-`main.py` maps each reason to a caveat appended after the answer
-(`STOP_REASON_NOTES`). Successful answers are printed without any caveat, in
-both modes.
+`graph/formatting.py` maps each reason to a caveat appended after the answer
+(`STOP_REASON_NOTES`; `main.py` re-exports the names). Successful answers are
+printed without any caveat, in both modes.
 
 | `stop_reason` | Meaning | User-facing caveat (summary) |
 |---|---|---|
@@ -312,9 +322,11 @@ exception).
 
 ### Answer provenance (Sources section)
 
-After the caveat (if any), `main.py` appends a deterministic `Sources:`
-section built by `format_sources(result["documents"])` — pure post-run
-formatting of `Document` metadata, never an LLM call, never document content:
+After the caveat (if any), the CLI appends a deterministic `Sources:`
+section built by `format_sources(result["documents"])` (`graph/formatting.py`)
+— pure post-run formatting of `Document` metadata, never an LLM call, never
+document content (the engine exposes the same lines as
+`AnswerResult.sources`):
 
 - **Local corpus documents** (anything not marked as the web supplement) are
   cited as `- Local corpus: <title>` (falling back to the `source` path, then
@@ -418,9 +430,12 @@ a 15-question JSONL dataset (local-corpus / web-fallback /
 insufficient-context / privacy-mode categories) run through the real compiled
 graph by `evals/run_eval.py`, scored with deterministic checks (stop reasons,
 source provenance, counters, expected substrings) and reported to
-`evals/results.md`. Privacy-mode rows seed `web_search_enabled=False` through
-graph state (the same seam `main.py` uses) and hard-assert
-`web_search_count == 0`. The full run needs real API keys and is deliberately
+`evals/results.md`. The harness runs each row through
+`graph.engine.answer_question()` — the same entry point `main.py` uses — so
+state seeding is never duplicated; privacy-mode rows pass
+`web_search_enabled=False` per run (no env mutation) and hard-assert
+`web_search_count == 0`, and rows may optionally pin a per-row
+`web_fallback_policy`. The full run needs real API keys and is deliberately
 excluded from CI; `--validate-only` checks the dataset with no API calls.
 
 Run the mocked suites with `uv run pytest tests/node/ tests/graph/ tests/evals/ -v`

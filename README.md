@@ -105,6 +105,8 @@ State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the wor
 │   └── workflows/ci.yml     # CI: runs the fully mocked suites (node, graph, evals) — no API keys
 ├── graph/
 │   ├── graph.py             # StateGraph assembly, routing/decision functions, MAX_RETRIES, compiled `app`
+│   ├── engine.py            # Canonical engine API: answer_question(), AnswerOptions/AnswerResult, seed_state()
+│   ├── formatting.py        # Shared presentation: stop-reason caveats + deterministic Sources section
 │   ├── state.py             # GraphState TypedDict
 │   ├── config.py            # Env-driven runtime flags: WEB_SEARCH_ENABLED, WEB_FALLBACK_POLICY,
 │   │                        #   per-run budgets (MAX_LLM_CALLS_PER_RUN, MAX_WEB_SEARCHES_PER_RUN, MAX_WEB_RESULTS_TO_GRADE)
@@ -199,8 +201,37 @@ fallback while web search is otherwise allowed.
   relevant local documents the assistant declines honestly instead of
   searching.
 
-Invalid values fall back to `conservative`. Rationale and trade-offs:
-[ADR 011](docs/adr/011-web-fallback-policy.md).
+Invalid values fall back to `conservative`. The environment variable is the
+*default* source only: the engine resolves the effective policy into per-run
+graph state at run start, so callers (evals, tests, future automation) can
+pass a different policy per run without touching the environment. Rationale
+and trade-offs: [ADR 011](docs/adr/011-web-fallback-policy.md).
+
+### Programmatic engine API
+
+The CLI, the eval harness, and tests all run questions through the same
+entry point, `graph.engine.answer_question()` — state seeding and per-run
+config resolution live in one place:
+
+```python
+from graph.engine import AnswerOptions, answer_question
+
+result = answer_question(
+    "How do I request VPN access?",
+    AnswerOptions(web_search_enabled=True, web_fallback_policy="conservative"),
+)
+result.answer                  # raw generation
+result.stop_reason             # "" = clean finish
+result.sources                 # deduplicated citation lines
+result.tracked_llm_calls       # budgeted operational counter (not total LLM usage)
+result.web_fallback_policy     # the policy this run actually used
+result.raw_state               # full final GraphState for internal callers
+```
+
+Options left as `None` fall back to the environment defaults
+(`WEB_SEARCH_ENABLED` / `WEB_FALLBACK_POLICY`). The hard privacy guarantee is
+unchanged: `web_search_enabled=False` — per run or via the environment —
+means zero external web searches regardless of the fallback policy.
 
 ### Retry-exhaustion warnings
 

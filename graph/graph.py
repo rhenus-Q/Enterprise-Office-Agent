@@ -30,8 +30,10 @@ temperature=0. Both extra nodes are linear pass-throughs inside the existing
 retry cycles; every cycle still passes through generate, which increments
 the retries counter that MAX_RETRIES caps.
 
-Web-fallback policy: WEB_FALLBACK_POLICY (graph/config.py) tunes when document
-grading triggers web fallback while web search is otherwise allowed.
+Web-fallback policy: the per-run policy in state["web_fallback_policy"]
+(seeded by graph/engine.py; the WEB_FALLBACK_POLICY env var is the default
+source) tunes when document grading triggers web fallback while web search
+is otherwise allowed.
 "conservative" (default) generates from the remaining relevant local documents
 and uses the web only when none remain; "aggressive" restores the legacy
 any-irrelevant-doc-triggers-web behavior; "disabled" keeps local retrieval
@@ -99,6 +101,7 @@ from graph.config import (  # noqa: E402
     WEB_FALLBACK_DISABLED,
     max_llm_calls_per_run,
     max_web_searches_per_run,
+    normalize_web_fallback_policy,
     web_fallback_policy,
 )
 
@@ -133,6 +136,23 @@ MAX_RETRIES = 5
 # These functions don't modify state; they only read it (or call chains) to decide
 # the next node. The returned string must be a key in the add_conditional_edges mapping.
 # ---------------------------------------------------------------------------
+
+
+def _resolve_web_fallback_policy(state: GraphState) -> str:
+    """
+    Effective web-fallback policy for this run.
+
+    The engine (graph/engine.py) resolves the policy into
+    state["web_fallback_policy"] once at seed time, so decisions never read
+    os.environ mid-run and callers can pass a per-run policy. Legacy callers
+    that seed state without the field (or with an empty value) fall back to
+    the env-driven default, preserving the pre-engine behavior.
+    """
+
+    raw = state.get("web_fallback_policy")
+    if not raw:
+        return web_fallback_policy()
+    return normalize_web_fallback_policy(raw)
 
 
 def route_question(state: GraphState) -> str:
@@ -189,7 +209,7 @@ def decide_to_generate(state: GraphState) -> str:
             print("---DECISION: SOME DOCS NOT RELEVANT, WEB SEARCH DISABLED, GENERATE---")
             return GENERATE
 
-        policy = web_fallback_policy()
+        policy = _resolve_web_fallback_policy(state)
 
         if policy == WEB_FALLBACK_AGGRESSIVE:
             print("---DECISION: SOME DOCS NOT RELEVANT, GO TO WEB SEARCH (AGGRESSIVE POLICY)---")
@@ -352,7 +372,7 @@ def grade_generation(state: GraphState) -> str:
         # own search. Checked before the retry limit because, like privacy
         # mode, improvement was impossible regardless of retries.
         if (
-            web_fallback_policy() == WEB_FALLBACK_DISABLED
+            _resolve_web_fallback_policy(state) == WEB_FALLBACK_DISABLED
             and state.get("web_search_count", 0) == 0
         ):
             print("---DECISION: ANSWER NOT USEFUL, WEB FALLBACK DISABLED BY POLICY, STOP---")

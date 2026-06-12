@@ -117,6 +117,20 @@ def test_validate_flags_bad_optional_field_types():
     assert len(errors) == 4
 
 
+def test_validate_accepts_optional_web_fallback_policy():
+    # Existing rows omit the field entirely; new rows may pin a policy.
+    assert validate_dataset([_row()]) == []
+    assert validate_dataset([_row(web_fallback_policy=None)]) == []
+    for policy in ("conservative", "aggressive", "disabled"):
+        assert validate_dataset([_row(web_fallback_policy=policy)]) == []
+
+
+def test_validate_flags_invalid_web_fallback_policy():
+    errors = validate_dataset([_row(web_fallback_policy="bogus")])
+
+    assert any("web_fallback_policy" in e for e in errors)
+
+
 # ---------------------------------------------------------------------------
 # Result summarization
 # ---------------------------------------------------------------------------

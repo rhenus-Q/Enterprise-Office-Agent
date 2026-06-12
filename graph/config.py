@@ -43,17 +43,34 @@ _WEB_FALLBACK_POLICIES = {
 }
 
 
-def web_fallback_policy() -> str:
+def normalize_web_fallback_policy(value) -> str:
     """
-    Read the WEB_FALLBACK_POLICY from the environment (case-insensitive,
-    whitespace-stripped). Unknown or missing values fall back to
+    Normalize a web-fallback policy value (case-insensitive,
+    whitespace-stripped). Unknown, missing, or None values fall back to
     "conservative" — for an enterprise internal-document assistant the safe
     default is to answer from the curated local corpus first and use the web
     only when nothing relevant remains.
+
+    Shared by the env reader below and by per-run callers (graph/engine.py)
+    that pass an explicit policy, so both resolve values identically.
     """
 
-    raw = os.getenv("WEB_FALLBACK_POLICY", WEB_FALLBACK_CONSERVATIVE).strip().lower()
-    return raw if raw in _WEB_FALLBACK_POLICIES else WEB_FALLBACK_CONSERVATIVE
+    if value is None:
+        return WEB_FALLBACK_CONSERVATIVE
+
+    cleaned = str(value).strip().lower()
+    return cleaned if cleaned in _WEB_FALLBACK_POLICIES else WEB_FALLBACK_CONSERVATIVE
+
+
+def web_fallback_policy() -> str:
+    """
+    Read the WEB_FALLBACK_POLICY default from the environment. This is the
+    default source only: the engine resolves the effective policy into
+    GraphState["web_fallback_policy"] once per run, and graph decisions read
+    it from state.
+    """
+
+    return normalize_web_fallback_policy(os.getenv("WEB_FALLBACK_POLICY"))
 
 
 # Per-run budget defaults. Sized above the worst case the MAX_RETRIES loop can
