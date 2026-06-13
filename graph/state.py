@@ -4,6 +4,10 @@ from langchain_core.documents import Document
 
 
 class GraphState(TypedDict):
+    # All fields are plain last-value channels (no typing.Annotated reducers).
+    # graph/engine.py::_run_graph_with_trace merges streamed node updates with
+    # dict.update(), which reproduces app.invoke() only for last-value channels.
+    # If a reducer / accumulating channel is ever added here, revisit that merge.
     question: str
     documents: list[Document]
     generation: str

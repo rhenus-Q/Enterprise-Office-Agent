@@ -41,7 +41,7 @@ paths local entirely — including the post-generation not-useful retry, which
 ends through the web_fallback_disabled notice on local-only runs.
 
 Privacy mode: when state["web_search_enabled"] is False (seeded from the
-WEB_SEARCH_ENABLED env var by main.py), every websearch route above is disabled —
+WEB_SEARCH_ENABLED env var by graph/engine.py::seed_state()), every websearch route above is disabled —
 questions are never sent to an external search service. Routing falls back to
 vector retrieval / direct generation, and "grounded but not useful" ends the run
 with the grounded answer instead of searching the web.
@@ -138,11 +138,22 @@ def _resolve_web_fallback_policy(state: GraphState) -> str:
     """
     Effective web-fallback policy for this run.
 
-    The engine (graph/engine.py) resolves the policy into
-    state["web_fallback_policy"] once at seed time, so decisions never read
-    os.environ mid-run and callers can pass a per-run policy. Legacy callers
-    that seed state without the field (or with an empty value) fall back to
-    the env-driven default, preserving the pre-engine behavior.
+    Ownership: graph/engine.py::seed_state() is the canonical entry point.
+    It resolves the policy once — from AnswerOptions.web_fallback_policy or
+    the WEB_FALLBACK_POLICY env var — normalizes it, and writes the result
+    into state["web_fallback_policy"] before the graph starts. For every
+    engine-driven run (answer_question() or seed_state()) the re-normalization
+    here is a no-op: the value is already valid and re-normalizing a valid
+    value is stable (idempotent).
+
+    Compatibility: callers that invoke app.invoke() / app.stream() directly
+    without going through answer_question() may omit web_fallback_policy from
+    their seed state or pass an empty string. In that case this helper falls
+    back to config.web_fallback_policy() (the env-driven default), preserving
+    the pre-engine behavior. This path is intentional and does not affect
+    engine-driven runs — it exists purely for direct-graph / legacy callers.
+    See tests/graph/test_engine.py::test_missing_state_policy_falls_back_to_environment
+    and tests/graph/test_web_fallback_policy.py for the coverage.
     """
 
     raw = state.get("web_fallback_policy")
