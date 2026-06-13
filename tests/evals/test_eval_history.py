@@ -631,7 +631,10 @@ def test_write_and_load_history_record_round_trip(tmp_path):
 
     assert loaded["run_id"] == rec["run_id"]
     assert loaded["schema_version"] == 1
-    assert loaded["dataset_fingerprint"]["dataset_sha256"] == rec["dataset_fingerprint"]["dataset_sha256"]
+    assert (
+        loaded["dataset_fingerprint"]["dataset_sha256"]
+        == rec["dataset_fingerprint"]["dataset_sha256"]
+    )
 
 
 def test_write_history_record_filename_is_sortable(tmp_path):
