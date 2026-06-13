@@ -15,6 +15,8 @@ Usage:
     uv run python evals/run_eval.py --limit 3        # first N rows only
     uv run python evals/run_eval.py --output path.md # custom report path
     uv run python evals/run_eval.py --validate-only  # dataset checks, no API calls
+    uv run python evals/run_eval.py --no-history      # skip writing history record
+    uv run python evals/run_eval.py --baseline evals/history/<file>.json
 
 NOT part of CI: the full run drives the real router/graders/generation
 (OpenAI) and possibly Tavily, so it needs API keys, costs money, and is
@@ -22,9 +24,11 @@ nondeterministic. Run it deliberately. --validate-only is always safe.
 """
 
 import argparse
+import hashlib
 import json
 import sys
 import unicodedata
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -42,6 +46,7 @@ from graph.consts import WEB_SEARCH_SOURCE
 
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
+DEFAULT_HISTORY_DIR = Path(__file__).parent / "history"
 
 CATEGORIES = (
     "local_corpus",
@@ -87,6 +92,10 @@ _DASH_VARIANTS = (
     "－"  # fullwidth hyphen-minus
 )
 _DASH_TRANSLATION = str.maketrans({c: "-" for c in _DASH_VARIANTS})
+
+
+class HistoryBaselineError(Exception):
+    """Raised when an explicit --baseline file is missing, invalid, or incompatible."""
 
 
 def normalize_for_contains(text):
@@ -411,6 +420,274 @@ def compute_metrics(evaluated):
 
 
 # ---------------------------------------------------------------------------
+# History and delta (pure helpers — no file I/O)
+# ---------------------------------------------------------------------------
+
+
+def read_dataset_content(path):
+    """Read raw bytes from path. Thin I/O wrapper that feeds dataset_fingerprint."""
+    return Path(path).read_bytes()
+
+
+def dataset_fingerprint(rows, dataset_content):
+    """Pure: compute a fingerprint from already-loaded rows and raw dataset bytes.
+
+    dataset_content must be bytes. The SHA-256 covers file content so edits that
+    leave ids unchanged still change the hash. No file I/O is performed here.
+    """
+    ids = [row.get("id") for row in rows]
+    sha = hashlib.sha256(dataset_content).hexdigest()
+    return {"row_count": len(rows), "ids": ids, "dataset_sha256": sha}
+
+
+def build_history_record(evaluated, metrics, dataset_path, fingerprint, *, timestamp, run_id):
+    """Pure: build a metadata-only, JSON-serializable history record.
+
+    Never stores answer text, page_content, prompts, or raw graph state.
+    The caller supplies the already-built fingerprint dict.
+    """
+    rows = []
+    for entry in evaluated:
+        row = entry["row"]
+        checks = entry.get("checks", {})
+        failed_checks = [name for name, ok in checks.items() if not ok]
+        summary = entry.get("summary", {})
+        rows.append(
+            {
+                "id": row.get("id"),
+                "category": row.get("category"),
+                "passed": bool(entry["passed"]),
+                "failed_checks": failed_checks,
+                "stop_reason": summary.get("stop_reason", ""),
+                "retries": summary.get("retries", 0),
+                "llm_call_count": summary.get("llm_call_count", 0),
+                "web_search_count": summary.get("web_search_count", 0),
+            }
+        )
+    return {
+        "schema_version": 1,
+        "run_id": run_id,
+        "generated": timestamp,
+        "dataset": str(dataset_path),
+        "dataset_fingerprint": fingerprint,
+        "metrics": metrics,
+        "rows": rows,
+    }
+
+
+def _as_pair(value):
+    """Normalize a (passed, total) tuple or [passed, total] list to (int, int).
+
+    compute_metrics emits tuples; JSON round-trips them to lists. Both forms
+    must be treated equivalently by compute_delta.
+    """
+    if isinstance(value, (tuple, list)) and len(value) == 2:
+        return int(value[0]), int(value[1])
+    return 0, 0
+
+
+def compute_delta(baseline_record, current_record):
+    """Pure: compute run-over-run differences between two history records."""
+    b_fp = baseline_record.get("dataset_fingerprint", {})
+    c_fp = current_record.get("dataset_fingerprint", {})
+
+    dataset_changed = (
+        b_fp.get("row_count") != c_fp.get("row_count")
+        or b_fp.get("ids") != c_fp.get("ids")
+        or b_fp.get("dataset_sha256") != c_fp.get("dataset_sha256")
+    )
+
+    b_metrics = baseline_record.get("metrics", {})
+    c_metrics = current_record.get("metrics", {})
+
+    b_passed = b_metrics.get("passed", 0)
+    c_passed = c_metrics.get("passed", 0)
+    b_total = b_metrics.get("total", 0)
+    c_total = c_metrics.get("total", 0)
+    overall = {
+        "passed": (b_passed, c_passed, c_passed - b_passed),
+        "total": (b_total, c_total, c_total - b_total),
+    }
+
+    categories = {}
+    for cat_key in CATEGORY_METRIC_KEYS.values():
+        b_p, _b_t = _as_pair(b_metrics.get(cat_key, (0, 0)))
+        c_p, _c_t = _as_pair(c_metrics.get(cat_key, (0, 0)))
+        categories[cat_key] = (b_p, c_p, c_p - b_p)
+
+    check_keys = (
+        "stop_reason_matches",
+        "source_type_matches",
+        "expected_contains_matches",
+        "expected_not_contains_matches",
+        "source_titles_matches",
+        "min_local_sources_matches",
+        "web_search_count_matches",
+        "policy_applied_matches",
+    )
+    checks = {}
+    for check_key in check_keys:
+        b_p, _b_t = _as_pair(b_metrics.get(check_key, (0, 0)))
+        c_p, _c_t = _as_pair(c_metrics.get(check_key, (0, 0)))
+        checks[check_key] = (b_p, c_p, c_p - b_p)
+
+    b_rows = {r["id"]: r for r in baseline_record.get("rows", [])}
+    c_rows = {r["id"]: r for r in current_record.get("rows", [])}
+    b_ids = set(b_rows)
+    c_ids = set(c_rows)
+    common = b_ids & c_ids
+
+    return {
+        "baseline_run_id": baseline_record.get("run_id"),
+        "baseline_generated": baseline_record.get("generated"),
+        "dataset_changed": dataset_changed,
+        "overall": overall,
+        "categories": categories,
+        "checks": checks,
+        "rows": {
+            "newly_passing": sorted(
+                rid for rid in common if not b_rows[rid]["passed"] and c_rows[rid]["passed"]
+            ),
+            "newly_failing": sorted(
+                rid for rid in common if b_rows[rid]["passed"] and not c_rows[rid]["passed"]
+            ),
+            "still_failing": sorted(
+                rid for rid in common if not b_rows[rid]["passed"] and not c_rows[rid]["passed"]
+            ),
+            "added": sorted(c_ids - b_ids),
+            "removed": sorted(b_ids - c_ids),
+        },
+    }
+
+
+def render_delta_section(delta):
+    """Pure: render a 'Delta vs. previous run' Markdown section as a list of lines.
+
+    Pass delta=None for the no-baseline (first-run) case.
+    """
+    if delta is None:
+        return [
+            "## Delta vs. previous run",
+            "",
+            "No previous run found — this is the first recorded run.",
+            "",
+        ]
+
+    lines = [
+        "## Delta vs. previous run",
+        "",
+        f"Baseline: `{delta['baseline_run_id']}` — {delta['baseline_generated']}",
+        "",
+    ]
+
+    if delta["dataset_changed"]:
+        lines += [
+            "> **Warning:** the dataset fingerprint changed between runs. Aggregate",
+            "> deltas mix dataset changes with behavior changes and may be misleading.",
+            "",
+        ]
+
+    o = delta["overall"]
+    b_p, c_p, d_p = o["passed"]
+    b_t, c_t, d_t = o["total"]
+    sign_p = "+" if d_p >= 0 else ""
+    sign_t = "+" if d_t >= 0 else ""
+    lines += [
+        "### Overall",
+        "",
+        "| Metric | Baseline | Current | Delta |",
+        "|---|---|---|---|",
+        f"| Overall passed | {b_p} | {c_p} | {sign_p}{d_p} |",
+        f"| Total rows | {b_t} | {c_t} | {sign_t}{d_t} |",
+        "",
+        "### Categories",
+        "",
+        "| Category | Baseline passed | Current passed | Delta |",
+        "|---|---|---|---|",
+    ]
+    for cat_key, (b_v, c_v, d_v) in delta["categories"].items():
+        sign = "+" if d_v >= 0 else ""
+        lines.append(f"| {cat_key} | {b_v} | {c_v} | {sign}{d_v} |")
+    lines += [
+        "",
+        "### Checks",
+        "",
+        "| Check | Baseline matches | Current matches | Delta |",
+        "|---|---|---|---|",
+    ]
+    for check_key, (b_v, c_v, d_v) in delta["checks"].items():
+        sign = "+" if d_v >= 0 else ""
+        lines.append(f"| {check_key} | {b_v} | {c_v} | {sign}{d_v} |")
+
+    rows = delta["rows"]
+
+    def _ids_line(ids, label):
+        if ids:
+            return [f"**{label}:** " + ", ".join(f"`{r}`" for r in ids), ""]
+        return [f"**{label}:** (none)", ""]
+
+    lines += ["", "### Row transitions", ""]
+    lines += _ids_line(rows["newly_passing"], "Newly passing")
+    lines += _ids_line(rows["newly_failing"], "Newly failing")
+    lines += _ids_line(rows["still_failing"], "Still failing")
+    lines += _ids_line(rows["added"], "Added rows")
+    lines += _ids_line(rows["removed"], "Removed rows")
+
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# History I/O (thin wrappers — separated from pure logic above)
+# ---------------------------------------------------------------------------
+
+
+def write_history_record(record, history_dir):
+    """Write a history record as UTF-8 JSON to history_dir. Returns the Path written.
+
+    Filename is derived from the ISO-8601 generated timestamp + run_id so that
+    lexicographic sort equals chronological sort, e.g.
+    "20260613T141005Z__<run_id>.json".
+    """
+    history_dir = Path(history_dir)
+    history_dir.mkdir(parents=True, exist_ok=True)
+    stamp = record["generated"].replace("-", "").replace(":", "")
+    path = history_dir / f"{stamp}__{record['run_id']}.json"
+    path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    return path
+
+
+def load_history_record(path):
+    """Load and return a history record dict. Raises on missing/invalid/incompatible."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if data.get("schema_version") != 1:
+        raise ValueError(f"Incompatible schema_version {data.get('schema_version')!r} in {path}")
+    return data
+
+
+def load_latest_history_record(history_dir, *, exclude=None):
+    """Return the latest valid history record in history_dir, or None.
+
+    Iterates candidates newest-first (lexicographic filename == chronological order).
+    Skips unreadable, invalid-JSON, or schema-incompatible files with a type-only
+    warning. The exclude path (if given) is skipped — used to prevent a freshly
+    written record from being its own baseline.
+    """
+    history_dir = Path(history_dir)
+    if not history_dir.exists():
+        return None
+    candidates = sorted(history_dir.glob("*.json"), reverse=True)
+    exclude_path = Path(exclude).resolve() if exclude is not None else None
+    for candidate in candidates:
+        if exclude_path is not None and candidate.resolve() == exclude_path:
+            continue
+        try:
+            return load_history_record(candidate)
+        except Exception as exc:
+            print(f"  WARNING: skipping history record {candidate.name} ({type(exc).__name__})")
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
 
@@ -422,8 +699,13 @@ def _table_cell(text, limit=200):
     return flattened[:limit] + ("…" if len(flattened) > limit else "")
 
 
-def render_markdown(evaluated, metrics, dataset_path):
-    """Render the full eval report as Markdown."""
+def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
+    """Render the full eval report as Markdown.
+
+    When delta_lines is provided (a list of strings from render_delta_section),
+    the delta section is inserted after the Metrics section. When None, the
+    output is byte-identical to the pre-history format.
+    """
 
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
@@ -461,6 +743,12 @@ def render_markdown(evaluated, metrics, dataset_path):
         "calls are not individually tracked, so this is not total LLM usage "
         "and not billing-accurate cost accounting.",
         "",
+    ]
+
+    if delta_lines is not None:
+        lines.extend(delta_lines)
+
+    lines += [
         "## Per-question results",
         "",
         "| id | category | passed | stop_reason | retries | tracked llm | web | failed checks |",
@@ -496,8 +784,13 @@ def render_markdown(evaluated, metrics, dataset_path):
 # ---------------------------------------------------------------------------
 
 
-def run_eval(rows, output_path, dataset_path):
-    """Run rows through the real graph (REAL API calls) and write the report."""
+def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None, no_history=False):
+    """Run rows through the real graph (REAL API calls) and write the report.
+
+    history_dir: if set, reads/writes history records and renders a delta section.
+    baseline: explicit path to a baseline record (overrides auto-discovery).
+    no_history: if True, renders the delta section but skips writing the record.
+    """
 
     # Imported here so --validate-only never touches the graph. State seeding
     # and per-run config resolution live in the engine (graph/engine.py) —
@@ -532,8 +825,65 @@ def run_eval(rows, output_path, dataset_path):
         evaluated.append(entry)
 
     metrics = compute_metrics(evaluated)
+
+    # --- History and delta ---
+    delta = None
+    history_write_status = None
+    written_path = None
+
+    if history_dir is not None:
+        run_id = str(uuid.uuid4())
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        try:
+            content = read_dataset_content(dataset_path)
+            fingerprint = dataset_fingerprint(rows, content)
+        except Exception as exc:
+            print(f"  WARNING: could not compute dataset fingerprint ({type(exc).__name__})")
+            fingerprint = {
+                "row_count": len(rows),
+                "ids": [r.get("id") for r in rows],
+                "dataset_sha256": "",
+            }
+
+        current_record = build_history_record(
+            evaluated,
+            metrics,
+            dataset_path,
+            fingerprint,
+            timestamp=timestamp,
+            run_id=run_id,
+        )
+
+        # Select baseline BEFORE writing so the new record is never its own baseline.
+        if baseline is not None:
+            try:
+                baseline_record = load_history_record(baseline)
+            except Exception as exc:
+                raise HistoryBaselineError(
+                    f"--baseline {baseline!r}: {type(exc).__name__}: {exc}"
+                ) from exc
+        else:
+            baseline_record = load_latest_history_record(history_dir)
+
+        if baseline_record is not None:
+            delta = compute_delta(baseline_record, current_record)
+
+        if no_history:
+            history_write_status = "skipped_by_no_history"
+        else:
+            try:
+                written_path = write_history_record(current_record, history_dir)
+                history_write_status = "written"
+            except Exception as exc:
+                print(f"  WARNING: history write failed ({type(exc).__name__})")
+                history_write_status = "failed"
+
+    # Render report (with delta section when history is enabled).
+    delta_lines = render_delta_section(delta) if history_dir is not None else None
     Path(output_path).write_text(
-        render_markdown(evaluated, metrics, dataset_path), encoding="utf-8"
+        render_markdown(evaluated, metrics, dataset_path, delta_lines=delta_lines),
+        encoding="utf-8",
     )
 
     print()
@@ -546,6 +896,9 @@ def run_eval(rows, output_path, dataset_path):
         f"average tracked LLM calls: {metrics['average_llm_calls']}, "
         f"total web searches: {metrics['total_web_searches']}"
     )
+    if history_write_status is not None:
+        status_note = f" → {written_path}" if written_path else ""
+        print(f"  history: {history_write_status}{status_note}")
     print(f"Report written to {output_path}")
     return metrics
 
@@ -562,7 +915,24 @@ def main(argv=None):
     parser.add_argument(
         "--validate-only",
         action="store_true",
-        help="Validate the dataset format and exit (no API calls).",
+        help="Validate the dataset format and exit (no API calls, no history I/O).",
+    )
+    parser.add_argument(
+        "--no-history",
+        action="store_true",
+        help="Run and render the delta section but do not write a history record.",
+    )
+    parser.add_argument(
+        "--baseline",
+        default=None,
+        metavar="PATH",
+        help="Compare against a specific history record instead of auto-discovering the latest.",
+    )
+    parser.add_argument(
+        "--history-dir",
+        default=str(DEFAULT_HISTORY_DIR),
+        metavar="PATH",
+        help="Directory for history records (default: evals/history/).",
     )
     args = parser.parse_args(argv)
 
@@ -582,7 +952,18 @@ def main(argv=None):
     if args.limit is not None:
         rows = rows[: args.limit]
 
-    run_eval(rows, args.output, args.dataset)
+    try:
+        run_eval(
+            rows,
+            args.output,
+            args.dataset,
+            history_dir=args.history_dir,
+            baseline=args.baseline,
+            no_history=args.no_history,
+        )
+    except HistoryBaselineError as exc:
+        print(f"ERROR: {exc}")
+        return 1
     return 0
 
 

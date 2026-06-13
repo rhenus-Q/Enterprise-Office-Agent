@@ -50,4 +50,10 @@ dist/
 .DS_Store
 Thumbs.db
 
+# ---- Eval history records ----
+# Generated at runtime — gitignored by default so history files do not bloat
+# the repo. The directory itself is tracked via evals/history/.gitkeep.
+# To share a specific baseline, force-add it: git add -f evals/history/<file>.json
+evals/history/*.json
+
 # ---- Local planning / roadmap drafts ----
