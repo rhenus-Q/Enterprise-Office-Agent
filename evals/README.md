@@ -32,9 +32,18 @@ Optional check fields (`null`/absent = not checked):
 
 - `expected_stop_reason` - string or list; `""` means the run must end clean.
 - `expected_source_type` - `local_corpus` | `web` | `none`.
-- `expected_contains` - case-insensitive substrings that must appear in the
-  formatted answer (caveats and Sources included). All listed substrings must
-  match.
+- `expected_contains` - substrings that must appear in the formatted answer
+  (caveats and Sources included). Each item is either a plain string (must
+  appear) or a list of strings (at least one must appear — an any-of group).
+  The AND/OR semantics: all items must pass (AND across items), but within a
+  list item any one member is sufficient (OR within the group). Matching is
+  case-insensitive with typographic-hyphen folding. Example:
+  `["manager", ["opt_a", "opt_b"]]` requires "manager" to appear AND at
+  least one of "opt_a" / "opt_b" to appear.
+- `expected_not_contains` - substrings that must **not** appear in the
+  formatted answer. The check passes only when none of the listed substrings
+  are found after normalization. Useful for asserting that a known-wrong fact
+  is absent from the answer. Example: `["hallucinated_value"]`.
 - `expected_source_titles` - local corpus document titles that must appear
   among the final documents' provenance metadata.
 - `expected_min_local_sources` - minimum number of distinct local corpus
@@ -45,6 +54,25 @@ Optional check fields (`null`/absent = not checked):
   (`conservative`, `aggressive`, or `disabled`); when set, the harness also
   checks that the effective graph policy matches the requested value.
 - `notes` - rationale for the row.
+
+Example row using both new features (any-of group + not-contains):
+
+```json
+{
+  "id": "example-row",
+  "category": "local_corpus",
+  "question": "What is the on-call escalation policy?",
+  "web_search_enabled": false,
+  "expected_behavior": "Answers from the on-call policy doc.",
+  "expected_contains": ["manager", ["Sev-1", "severity 1"]],
+  "expected_not_contains": ["hallucinated_phone_number"]
+}
+```
+
+`"expected_contains": ["manager", ["Sev-1", "severity 1"]]` means: "manager"
+must appear AND at least one of "Sev-1" / "severity 1" must appear.
+`"expected_not_contains": ["hallucinated_phone_number"]` means: that substring
+must not appear anywhere in the formatted answer.
 
 ## Checks
 

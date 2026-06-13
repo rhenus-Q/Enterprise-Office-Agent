@@ -209,6 +209,54 @@ def test_validate_flags_invalid_web_fallback_policy():
     assert any("web_fallback_policy" in e for e in errors)
 
 
+def test_validate_accepts_mixed_contains_group():
+    assert validate_dataset([_row(expected_contains=["text", ["option_a", "option_b"]])]) == []
+
+
+def test_validate_flat_contains_list_is_still_valid():
+    assert validate_dataset([_row(expected_contains=["foo", "bar"])]) == []
+
+
+def test_validate_flags_empty_group_in_contains():
+    errors = validate_dataset([_row(expected_contains=[[]])])
+    assert any("expected_contains" in e for e in errors)
+
+
+def test_validate_flags_empty_string_in_contains():
+    errors = validate_dataset([_row(expected_contains=[""])])
+    assert any("expected_contains" in e for e in errors)
+
+
+def test_validate_flags_empty_string_in_group():
+    errors = validate_dataset([_row(expected_contains=[["valid", ""]])])
+    assert any("expected_contains" in e for e in errors)
+
+
+def test_validate_flags_non_string_group_member():
+    errors = validate_dataset([_row(expected_contains=[[42, "valid"]])])
+    assert any("expected_contains" in e for e in errors)
+
+
+def test_validate_flags_doubly_nested_group():
+    errors = validate_dataset([_row(expected_contains=[[["deep"]]])])
+    assert any("expected_contains" in e for e in errors)
+
+
+def test_validate_accepts_expected_not_contains():
+    assert validate_dataset([_row(expected_not_contains=["wrong_fact"])]) == []
+    assert validate_dataset([_row(expected_not_contains=None)]) == []
+
+
+def test_validate_flags_non_list_expected_not_contains():
+    errors = validate_dataset([_row(expected_not_contains="wrong_fact")])
+    assert any("expected_not_contains" in e for e in errors)
+
+
+def test_validate_flags_empty_string_in_not_contains():
+    errors = validate_dataset([_row(expected_not_contains=[""])])
+    assert any("expected_not_contains" in e for e in errors)
+
+
 # ---------------------------------------------------------------------------
 # Result summarization
 # ---------------------------------------------------------------------------
@@ -478,6 +526,80 @@ def test_insufficient_context_passes_on_decline_or_stop_reason():
     assert confident["passed"] is False
 
 
+def test_expected_contains_group_passes_on_any_one_member():
+    row = _row(expected_contains=[["no_match", "present"]])
+
+    result = evaluate_row(row, _summary(formatted_answer="present in the answer"))
+
+    assert result["checks"]["expected_contains"] is True
+    assert result["passed"] is True
+
+
+def test_expected_contains_group_fails_when_no_member_matches():
+    row = _row(expected_contains=[["absent_a", "absent_b"]])
+
+    result = evaluate_row(row, _summary(formatted_answer="nothing here"))
+
+    assert result["checks"]["expected_contains"] is False
+    assert result["passed"] is False
+
+
+def test_expected_contains_mixed_and_or_passes():
+    # AND: "required" (plain) AND at least one of ["opt_a", "opt_b"] must appear.
+    row = _row(expected_contains=["required", ["opt_a", "opt_b"]])
+
+    present = evaluate_row(row, _summary(formatted_answer="required and opt_b are here"))
+    missing_required = evaluate_row(row, _summary(formatted_answer="only opt_a here"))
+    missing_group = evaluate_row(row, _summary(formatted_answer="required but neither option"))
+
+    assert present["passed"] is True
+    assert missing_required["passed"] is False
+    assert missing_group["passed"] is False
+
+
+def test_expected_not_contains_passes_when_substring_absent():
+    row = _row(expected_not_contains=["wrong_fact"])
+
+    result = evaluate_row(row, _summary(formatted_answer="Correct information only."))
+
+    assert result["checks"]["expected_not_contains"] is True
+    assert result["passed"] is True
+
+
+def test_expected_not_contains_fails_when_substring_present():
+    row = _row(expected_not_contains=["wrong_fact"])
+
+    result = evaluate_row(row, _summary(formatted_answer="This contains wrong_fact here."))
+
+    assert result["checks"]["expected_not_contains"] is False
+    assert result["passed"] is False
+
+
+def test_expected_not_contains_not_in_checks_when_field_absent():
+    result = evaluate_row(_row(), _summary())
+
+    assert "expected_not_contains" not in result["checks"]
+
+
+def test_expected_contains_group_normalization():
+    # Case-insensitivity and typographic hyphens apply inside any-of groups.
+    row = _row(expected_contains=[["SEV-1", "ESCALATE"]])
+
+    result = evaluate_row(row, _summary(formatted_answer="Escalate to Sev‑1 immediately"))
+
+    assert result["checks"]["expected_contains"] is True
+
+
+def test_expected_not_contains_normalization():
+    # "SEV-1" in the needle matches the typographic "Sev‑1" in the text — so
+    # the not-contains check must fail (the substring is present after normalization).
+    row = _row(expected_not_contains=["SEV-1"])
+
+    result = evaluate_row(row, _summary(formatted_answer="Escalate to Sev‑1 immediately"))
+
+    assert result["checks"]["expected_not_contains"] is False
+
+
 # ---------------------------------------------------------------------------
 # Metrics and report
 # ---------------------------------------------------------------------------
@@ -582,3 +704,36 @@ def test_render_markdown_includes_partial_counter_note():
 
     assert "Router and grader calls are not individually tracked" in report
     assert "not billing-accurate" in report
+
+
+# ---------------------------------------------------------------------------
+# Richer expected_contains groups and expected_not_contains — metrics/rendering
+# ---------------------------------------------------------------------------
+
+
+def _evaluated_fixture_with_not_contains():
+    row = _row(id="nc1", expected_not_contains=["hallucinated_fact"])
+    summary = _summary(formatted_answer="Correct answer without hallucinated content.")
+    return [{"row": row, "summary": summary, **evaluate_row(row, summary)}]
+
+
+def test_compute_metrics_includes_expected_not_contains_matches():
+    metrics = compute_metrics(_evaluated_fixture_with_not_contains())
+
+    assert metrics["expected_not_contains_matches"] == (1, 1)
+
+
+def test_compute_metrics_expected_not_contains_counts_only_rows_with_check():
+    # Rows without the field must not contribute to the denominator.
+    metrics = compute_metrics(_evaluated_fixture())
+
+    assert metrics["expected_not_contains_matches"] == (0, 0)
+
+
+def test_render_markdown_includes_expected_not_contains_row():
+    evaluated = _evaluated_fixture_with_not_contains()
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+
+    assert "expected_not_contains matches" in report

@@ -123,6 +123,14 @@ def load_dataset(path):
     return rows
 
 
+def _valid_expected_contains_item(item):
+    if isinstance(item, str):
+        return bool(item)
+    if isinstance(item, list):
+        return bool(item) and all(isinstance(s, str) and bool(s) for s in item)
+    return False
+
+
 def validate_dataset(rows):
     """Return a list of human-readable problems ([] = dataset is valid)."""
 
@@ -174,9 +182,18 @@ def validate_dataset(rows):
 
         contains = row.get("expected_contains")
         if contains is not None and not (
-            isinstance(contains, list) and all(isinstance(s, str) for s in contains)
+            isinstance(contains, list)
+            and all(_valid_expected_contains_item(item) for item in contains)
         ):
-            errors.append(f"{label}: expected_contains must be a list of strings")
+            errors.append(
+                f"{label}: expected_contains must be a list of non-empty strings or non-empty string groups"
+            )
+
+        not_contains = row.get("expected_not_contains")
+        if not_contains is not None and not (
+            isinstance(not_contains, list) and all(isinstance(s, str) and s for s in not_contains)
+        ):
+            errors.append(f"{label}: expected_not_contains must be a list of non-empty strings")
 
         expected_titles = row.get("expected_source_titles")
         if expected_titles is not None and not (
@@ -299,7 +316,17 @@ def evaluate_row(row, summary):
     if contains:
         text = normalize_for_contains(summary["formatted_answer"])
         checks["expected_contains"] = all(
-            normalize_for_contains(needle) in text for needle in contains
+            normalize_for_contains(item) in text
+            if isinstance(item, str)
+            else any(normalize_for_contains(s) in text for s in item)
+            for item in contains
+        )
+
+    not_contains = row.get("expected_not_contains") or []
+    if not_contains:
+        text = normalize_for_contains(summary["formatted_answer"])
+        checks["expected_not_contains"] = all(
+            normalize_for_contains(needle) not in text for needle in not_contains
         )
 
     expected_titles = row.get("expected_source_titles") or []
@@ -368,6 +395,7 @@ def compute_metrics(evaluated):
         "stop_reason_matches": check_counts("stop_reason"),
         "source_type_matches": check_counts("source_type"),
         "expected_contains_matches": check_counts("expected_contains"),
+        "expected_not_contains_matches": check_counts("expected_not_contains"),
         "source_titles_matches": check_counts("source_titles"),
         "min_local_sources_matches": check_counts("min_local_sources"),
         "web_search_count_matches": check_counts("web_search_count"),
@@ -419,6 +447,7 @@ def render_markdown(evaluated, metrics, dataset_path):
         f"| stop_reason matches | {metrics['stop_reason_matches'][0]} / {metrics['stop_reason_matches'][1]} |",
         f"| source_type matches | {metrics['source_type_matches'][0]} / {metrics['source_type_matches'][1]} |",
         f"| expected_contains matches | {metrics['expected_contains_matches'][0]} / {metrics['expected_contains_matches'][1]} |",
+        f"| expected_not_contains matches | {metrics['expected_not_contains_matches'][0]} / {metrics['expected_not_contains_matches'][1]} |",
         f"| source_titles matches | {metrics['source_titles_matches'][0]} / {metrics['source_titles_matches'][1]} |",
         f"| min_local_sources matches | {metrics['min_local_sources_matches'][0]} / {metrics['min_local_sources_matches'][1]} |",
         f"| web_search_count matches | {metrics['web_search_count_matches'][0]} / {metrics['web_search_count_matches'][1]} |",
