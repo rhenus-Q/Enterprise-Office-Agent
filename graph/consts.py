@@ -13,8 +13,9 @@ TOOL_ERROR_NOTICE = "tool_error_notice"
 CLEAR_TRANSIENT_TOOL_ERROR = "clear_transient_tool_error"
 
 # Metadata "source" marker identifying the merged web-search supplement
-# Document. Shared by the web_search node (which writes it) and main.py
-# (which reads it for the Sources section), so the two can never drift.
+# Document. Shared by the web_search node (which writes it),
+# graph/formatting.py (which reads it for the Sources section), and the
+# eval harness (which inspects source metadata), so they never drift.
 WEB_SEARCH_SOURCE = "web_search"
 
 # Values for GraphState["stop_reason"] ("" = normal finish).
