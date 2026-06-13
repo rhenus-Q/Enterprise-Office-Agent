@@ -451,6 +451,33 @@ def test_graphstate_has_no_reducer_channels():
         )
 
 
+def test_trace_stream_merge_final_state_equals_invoke():
+    """Regression: _run_graph_with_trace must reproduce app.invoke() on the
+    same seed.  The merge is correct only while every GraphState channel is a
+    plain last-value overwrite (no reducers). Uses the same _FakeApp already
+    exercised above so there is no extra mocking surface.
+    """
+    from graph.engine import _run_graph_with_trace
+
+    seed = seed_state("Q")
+    final_fields = {
+        "generation": "The answer.",
+        "retries": 1,
+        "stop_reason": "",
+        "llm_call_count": 2,
+    }
+
+    # Streamed / traced path (the production code path).
+    streamed_state, node_path, timings = _run_graph_with_trace(_FakeApp(final_fields), seed)
+
+    # Direct invoke path (the reference).
+    invoked_state = _FakeApp(final_fields).invoke(seed)
+
+    assert streamed_state == invoked_state
+    assert node_path == ["retrieve", "generate"]
+    assert len(timings) == 2
+
+
 def test_answer_question_privacy_env_overrides_aggressive_policy(monkeypatch):
     # WEB_SEARCH_ENABLED=false in the environment guarantees zero web
     # searches as well, with no per-run override needed.

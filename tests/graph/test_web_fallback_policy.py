@@ -212,6 +212,25 @@ def test_useful_answers_are_unaffected_by_the_policy(monkeypatch):
     assert grade_generation(_generation_state()) == "useful"
 
 
+def test_direct_graph_caller_without_policy_field_falls_back_to_env_in_grade_generation(
+    monkeypatch,
+):
+    # Compatibility: a direct app.invoke() caller that seeds state without
+    # web_fallback_policy gets the env-driven default from
+    # _resolve_web_fallback_policy(), exactly as callers that predate the
+    # engine did. Engine-driven runs (answer_question / seed_state) always
+    # have the field pre-populated so this path is a no-op for them.
+    # The parallel decide_to_generate case is in test_engine.py::
+    # test_missing_state_policy_falls_back_to_environment.
+    monkeypatch.setenv("WEB_FALLBACK_POLICY", "disabled")
+    _patch_graders(monkeypatch, grounded=True, useful=False)
+
+    state = _generation_state(web_search_count=0)
+    assert "web_fallback_policy" not in state  # direct-caller state, field absent
+
+    assert grade_generation(state) == "web_fallback_disabled"
+
+
 # ---------------------------------------------------------------------------
 # Notice node + caveat formatting
 # ---------------------------------------------------------------------------
