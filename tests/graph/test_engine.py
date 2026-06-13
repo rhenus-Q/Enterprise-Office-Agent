@@ -429,6 +429,28 @@ def test_answer_question_privacy_option_overrides_aggressive_policy(monkeypatch)
     assert result.answer == INSUFFICIENT_CONTEXT_ANSWER
 
 
+# ---------------------------------------------------------------------------
+# GraphState channel-type invariant (guards _run_graph_with_trace merge)
+# ---------------------------------------------------------------------------
+
+
+def test_graphstate_has_no_reducer_channels():
+    import typing
+
+    # _run_graph_with_trace merges streamed node updates with dict.update(),
+    # which reproduces app.invoke() only when every GraphState channel is a
+    # plain last-value overwrite. A LangGraph reducer channel is declared as
+    # typing.Annotated[type, reducer_fn]; dict.update() would overwrite rather
+    # than accumulate, silently diverging from invoke(). This test fails loudly
+    # if any field gains a reducer annotation.
+    for field_name, annotation in GraphState.__annotations__.items():
+        assert typing.get_origin(annotation) is not typing.Annotated, (
+            f"GraphState.{field_name!r} is typing.Annotated — potential reducer channel. "
+            "_run_graph_with_trace merges streamed updates with dict.update(); "
+            "an accumulating reducer would silently diverge from app.invoke()."
+        )
+
+
 def test_answer_question_privacy_env_overrides_aggressive_policy(monkeypatch):
     # WEB_SEARCH_ENABLED=false in the environment guarantees zero web
     # searches as well, with no per-run override needed.
