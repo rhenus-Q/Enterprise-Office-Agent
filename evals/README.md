@@ -101,7 +101,7 @@ would test routing rather than fabrication resistance.
 ## Running
 
 ```powershell
-# Validate the dataset only - no API calls, always safe
+# Validate the dataset only - no API calls, no history I/O, always safe
 uv run python evals/run_eval.py --validate-only
 
 # Full eval - REAL OpenAI (and Tavily) calls; requires keys in .env
@@ -110,7 +110,106 @@ uv run python evals/run_eval.py
 # Variants
 uv run python evals/run_eval.py --limit 3
 uv run python evals/run_eval.py --output evals/results.md
+
+# Run without writing a history record (still renders the delta section)
+uv run python evals/run_eval.py --no-history
+
+# Compare against a specific history record instead of auto-discovering the latest
+uv run python evals/run_eval.py --baseline evals/history/<file>.json
+
+# Use a custom history directory
+uv run python evals/run_eval.py --history-dir /path/to/history/
 ```
+
+## History and delta reporting
+
+Each full eval run persists a compact, machine-readable JSON record to
+`evals/history/`, one file per run. On subsequent runs the harness loads the
+most recent prior record as a baseline and renders a "Delta vs. previous run"
+section in the Markdown report. This makes run-over-run movement in pass counts
+and per-row status explicit without manual git archaeology.
+
+### History directory
+
+`evals/history/` is **append-only**: the harness only writes new records, never
+edits or deletes existing ones. Files are gitignored by default (see
+[Git convention](#git-convention-for-history-records) below) so they do not
+bloat the repository. The directory itself is tracked via a `.gitkeep` so it
+exists in a fresh clone.
+
+### Record schema
+
+Each record is a UTF-8 JSON file named by a sortable UTC timestamp + run id,
+e.g. `20260613T141005Z__<run-id>.json`, so lexicographic sort equals chronological
+sort.
+
+| Field | Description |
+|---|---|
+| `schema_version` | Always `1`. Used to detect incompatible records. |
+| `run_id` | UUID generated at eval start. |
+| `generated` | ISO-8601 UTC timestamp of the run. |
+| `dataset` | Path to the dataset file used. |
+| `dataset_fingerprint` | `row_count`, ordered `ids`, and `dataset_sha256` (SHA-256 of raw file bytes). |
+| `metrics` | Full `compute_metrics` output (overall, per-category, per-check, averages). |
+| `rows` | Per-row list of `{id, category, passed, failed_checks, stop_reason, retries, llm_call_count, web_search_count}`. |
+
+Records are **metadata-only**: they never store answer text, `page_content`,
+prompts, or raw graph state.
+
+### Delta section
+
+The "Delta vs. previous run" Markdown section is inserted after the Metrics
+table. It shows:
+
+- Baseline run id and timestamp.
+- A `dataset_changed` warning when any fingerprint component differs (i.e.,
+  the dataset was edited between runs — aggregate deltas then mix dataset changes
+  with behavior changes and should be read cautiously).
+- Signed (+/-) overall passed/total counts.
+- Per-category and per-check pass-count changes.
+- Per-row transitions: **newly passing**, **newly failing**, **still failing**,
+  **added** (rows not in baseline), **removed** (baseline rows absent now).
+
+On the first-ever run (no prior record) the section renders a single line:
+"No previous run found — this is the first recorded run."
+
+> **Caveat:** because the eval drives real router/graders/generation, two runs
+> of identical code can differ. Deltas reflect run-to-run variation as well as
+> genuine code changes — treat them as "run vs. run", not proof of regression.
+
+### CLI flags
+
+| Flag | Description |
+|---|---|
+| `--no-history` | Render the delta section against any existing baseline but **do not write** the current record. Status: `skipped_by_no_history`. |
+| `--baseline PATH` | Compare against a specific record instead of auto-discovering the latest. A missing, invalid-JSON, or schema-incompatible file **fails fast** with a clear error. |
+| `--history-dir PATH` | Directory for history records (default: `evals/history/`). |
+
+### History write status
+
+After each run the console prints `history: <status>`:
+
+| Status | Meaning |
+|---|---|
+| `written` | Record persisted to `history_dir`. |
+| `skipped_by_no_history` | `--no-history` was set. |
+| `failed` | The write raised; a type-only warning is printed and the Markdown report is still produced (the run does not abort). |
+
+### Git convention for history records
+
+Generated history JSON is **gitignored by default** (`evals/history/*.json`).
+This keeps history files off the remote and prevents repo bloat.
+
+To share a specific baseline (e.g. a known-good run to use as a reference on
+other machines), **force-add** it:
+
+```powershell
+git add -f evals/history/<selected-baseline>.json
+git commit -m "Add shared eval baseline for <purpose>"
+```
+
+A "missing" baseline on a freshly cloned machine is expected — that first run
+will render "No previous run found" and write a new record. It is not a bug.
 
 ## Why this is not in CI
 
