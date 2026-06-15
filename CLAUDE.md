@@ -57,8 +57,11 @@ type, never the message.
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
 | `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
 | `tests/evals/` | Mocked unit tests for the eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
-| `evals/` | Behavioral eval harness: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Not part of CI. |
+| `evals/` | Behavioral eval harness: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. Not part of CI. |
+| `evals/history/` | Append-only, metadata-only eval history records (one JSON per full run; never answer text, `page_content`, prompts, or raw state). The harness only writes new records — never edits/deletes. `evals/history/*.json` is gitignored by default (the dir is tracked via `.gitkeep`); force-add (`git add -f`) to share a known-good baseline. |
 | `docs/adr/` | Architecture Decision Records (001–011) with an index in `docs/adr/README.md`. When a documented decision changes, update or supersede the matching ADR. |
+| `docs/roadmap/` | Tracked process artifacts (see `docs/roadmap/README.md`): `spec/`, `plan/`, `implementation/`, `commands-review/`, `architecture-review/`. Specs/plans/reports use a short feature slug; architecture reviews use a dated `<YYYY-MM-DD>-<focus-slug>-architecture-review.md` filename so multiple reviews coexist and sort chronologically. |
+| `.claude/commands/` | Claude Code slash-command workflow files (spec → plan → implement → review-diff; plus `arch-review`, command-authoring/review, and `update-claude-md`). Each has YAML frontmatter (`description`, `argument-hint`, `allowed-tools`); keep `allowed-tools` minimal and scoped (e.g. `Bash(git status:*)`, not blanket `Bash`). |
 | `tests/conftest.py` | Loads `.env` before collection; provides the `requires_openai` skip marker. |
 | `pyproject.toml` | uv project config: deps, `[dependency-groups] dev` (pytest, ruff, mypy, pre-commit), `[tool.pytest.ini_options]`, `[tool.ruff]`/`[tool.ruff.lint]`/`[tool.ruff.lint.per-file-ignores]`, and `[tool.mypy]`/`[[tool.mypy.overrides]]`. |
 | `.gitattributes` | Line-ending policy: `text=auto` + explicit `*.py/md/yml/yaml/toml/json text` rules to prevent CRLF churn on Windows working copies. |
@@ -70,6 +73,9 @@ type, never the message.
   model names (`gpt-5-mini`), `temperature=0`, chain input variables, or node return
   structures unless explicitly asked.
 - **No broad architecture changes.** Avoid restructuring the graph or rewriting modules wholesale.
+- **`GraphState` fields are plain last-value channels.** Do not add `typing.Annotated` reducers /
+  accumulating channels: `graph/engine.py` merges streamed node updates with `dict.update()`, which
+  only reproduces `app.invoke()` for last-value channels. If a reducer is ever needed, revisit that merge first.
 - **Refactors should be small, mechanical, and reviewable.** Prefer minimal diffs.
 - **Lazy external clients (required pattern).** `ChatOpenAI`, `OpenAIEmbeddings`,
   `TavilySearchResults`, `Chroma`, retrievers, and any API-backed tool must be constructed
