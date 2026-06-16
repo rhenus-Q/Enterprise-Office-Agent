@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(git ls-files:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python evals/run_eval.py --validate-only:*)
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(git ls-files:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -147,6 +147,25 @@ Prefer the plan file as the source of truth.
 Do not do a broad architecture review unless the plan or spec asks for it.
 
 Do not read unrelated files unless needed to implement the requested change safely.
+
+## Optional LangChain Docs MCP documentation check
+
+This step is conditional. Use it only when the implementation depends on current external documentation. Do this before editing code.
+
+If the implementation depends on current LangChain / LangGraph / LangSmith / langchain-mcp-adapters / MCP integration behavior (for example LangChain retrievers, tools, document loaders, vector stores, OpenAI/Chroma/Tavily integration through LangChain, or other version-sensitive ecosystem APIs), consult the installed LangChain Docs MCP server (`mcp__docs-langchain__search_docs_by_lang_chain` / `mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain`) before editing code.
+
+* Keep the documentation query narrow and tied to the specific API or integration being implemented.
+* Use docs to avoid stale API usage, deprecated imports, outdated LangGraph patterns, or incorrect LangChain integration assumptions.
+* Do not paste large documentation dumps into code, comments, reports, or final responses. Summarize only the relevant API assumptions or constraints.
+* If LangChain Docs MCP is unavailable, fails, or returns no relevant docs, continue without blocking and mention that external docs were unavailable or not consulted.
+* Do not use LangChain Docs MCP for project-local rules already covered by `CLAUDE.md`, source code, tests, evals, or roadmap docs.
+* Do not let LangChain Docs MCP override local project contracts. Project-local sources remain authoritative.
+
+If LangChain Docs MCP is consulted while implementing, briefly mention it in the final response, for example:
+
+`External docs consulted: LangChain Docs MCP, <library/topic>`
+
+Do not dump raw MCP output, and do not mention LangChain Docs MCP if it was not used.
 
 ## Step 7. Implement the planned scope
 

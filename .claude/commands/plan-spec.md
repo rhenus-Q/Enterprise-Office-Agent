@@ -1,7 +1,7 @@
 ---
 description: Create an implementation plan from an existing spec
 argument-hint: Path to spec file, for example docs/roadmap/spec/eval-history-delta-reporting.md
-allowed-tools: Read, Write, Glob, Bash(git status:*), Bash(mkdir:*)
+allowed-tools: Read, Write, Glob, Bash(git status:*), Bash(mkdir:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are creating an implementation plan from an existing spec for this Agentic RAG project.
@@ -106,6 +106,25 @@ Example:
 `Eval History and Delta Reporting`
 
 If you cannot infer a sensible title and slug, ask the user to clarify instead of guessing.
+
+## Optional LangChain Docs MCP documentation check
+
+This step is conditional. Use it only when the plan depends on current external documentation.
+
+If the implementation plan depends on current LangChain / LangGraph / LangSmith / langchain-mcp-adapters / MCP integration behavior (for example LangChain retrievers, tools, document loaders, vector stores, OpenAI/Chroma/Tavily integration through LangChain, or other version-sensitive ecosystem APIs), consult the installed LangChain Docs MCP server (`mcp__docs-langchain__search_docs_by_lang_chain` / `mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain`).
+
+* Keep the documentation query narrow and tied to the planned implementation.
+* Use docs to clarify current API assumptions, deprecations, integration patterns, or version-sensitive behavior.
+* Do not paste large documentation dumps into the plan. Summarize only the relevant API assumptions or constraints.
+* If LangChain Docs MCP is unavailable, fails, or returns no relevant docs, continue without blocking and mention that external docs were unavailable or not consulted.
+* Do not use LangChain Docs MCP for project-local rules already covered by `CLAUDE.md`, source code, tests, evals, or roadmap docs.
+* Do not let LangChain Docs MCP override local project contracts. Project-local sources remain authoritative.
+
+If LangChain Docs MCP is consulted while creating the plan, add a small note in the most appropriate existing plan section, for example:
+
+`External docs consulted: LangChain Docs MCP, <library/topic>`
+
+Do not add a large new section to the plan, do not dump raw MCP output, and do not mention LangChain Docs MCP if it was not used.
 
 ## Step 4. Create the plan file
 
