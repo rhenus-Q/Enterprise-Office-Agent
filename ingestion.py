@@ -8,8 +8,6 @@ Purpose:
 - Store them in a Chroma vector database (idempotent rebuild)
 - Expose a retriever for the LangGraph retrieve node
 
-This file prepares the knowledge base for the Agentic RAG workflow.
-
 The corpus under data/acmecorp_internal_docs/ is entirely fictional synthetic
 content (no real company data) — replace it with real internal documents in
 an actual deployment. Each document carries provenance metadata (source,
@@ -29,8 +27,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 load_dotenv()
 
 
-# 1. Synthetic enterprise corpus: AcmeCorp internal Markdown documents.
-# Anchored to this file's directory so ingestion works from any CWD.
+# Corpus location, anchored to this file's directory so ingestion works from any CWD.
 CORPUS_DIR = Path(__file__).parent / "data" / "acmecorp_internal_docs"
 
 # document_category metadata per file (provenance / future filtering).
@@ -45,12 +42,7 @@ DOCUMENT_CATEGORIES = {
 }
 
 
-# 2. Chroma local persistence directory
-# The vector database is stored in this folder
 CHROMA_PATH = "chroma_db"
-
-
-# 3. Chroma collection name
 COLLECTION_NAME = "agentic_rag_docs"
 
 
@@ -99,12 +91,7 @@ def load_documents():
 
 def split_documents(documents):
     """
-    Split large documents into smaller chunks.
-
-    Why split?
-    - LLM context is limited
-    - Vector search works better with smaller semantic chunks
-    - Retrieval can return only the most relevant chunks
+    Split documents into overlapping chunks sized for embedding and retrieval.
 
     Returns:
         List[Document]: Chunked documents (metadata is copied to every chunk).
@@ -187,8 +174,6 @@ def get_retriever():
 
     Cached so the Chroma client / embeddings are constructed only once, and only
     when first called at runtime (not at import time).
-
-    This retriever will be used by the retrieve node.
 
     Returns:
         VectorStoreRetriever
