@@ -26,6 +26,7 @@ architecture.
 | [009](009-eval-harness.md) | Deterministic eval harness | Behavioral evals with deterministic checks (stop reasons, provenance, counters, substrings); not run in CI. |
 | [010](010-prompt-injection-defense.md) | Prompt-injection defense | The generation prompt explicitly treats retrieved content as untrusted evidence, never as instructions — a first-line mitigation, not a complete solution. |
 | [011](011-web-fallback-policy.md) | Configurable web-fallback policy | `WEB_FALLBACK_POLICY` (conservative/aggressive/disabled, default conservative): answer from remaining relevant local docs first; web fallback only when none remain. |
+| [012](012-prompt-injection-hardening.md) | Prompt-injection hardening | Extends ADR 010: Security rules on the control-plane chains (router/graders/rewriter), explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters in the generation context, and deterministic graph-level containment tests. |
 
 ## Conventions
 

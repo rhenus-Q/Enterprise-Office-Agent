@@ -4,6 +4,11 @@ Status: Accepted
 
 Date: 2026-06-11
 
+> Extended by [ADR 012](012-prompt-injection-hardening.md), which hardens the
+> control-plane chains (router / graders / rewriter), adds explicit
+> `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters to the generation context, and
+> pins graph-level containment with deterministic behavior tests.
+
 ## Context
 
 The generation chain places retrieved content — local corpus chunks and,
