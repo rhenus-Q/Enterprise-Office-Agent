@@ -21,9 +21,9 @@ from graph.consts import RETRIEVE
 from graph.engine import (
     QUESTION_PREVIEW_MAX_CHARS,
     AnswerOptions,
+    _redact_secrets,
     answer_question,
     build_trace,
-    trace_safe_question,
 )
 
 # ---------------------------------------------------------------------------
@@ -212,6 +212,7 @@ def test_trace_json_contains_the_expected_metadata(monkeypatch, tmp_path):
     assert "question" not in payload
     assert payload["question_redacted"] == "How do I request VPN access?"
     assert payload["question_sha256"] == hashlib.sha256(b"How do I request VPN access?").hexdigest()
+    assert payload["input_redacted"] is False  # a normal question is not redacted
     assert payload["node_path"] == result.node_path
     assert payload["total_duration_ms"] == result.total_duration_ms
     assert payload["node_timings_ms"] == result.node_timings_ms
@@ -267,54 +268,74 @@ def test_failed_trace_write_does_not_lose_the_answer(monkeypatch, tmp_path, caps
 
 
 # ---------------------------------------------------------------------------
-# Trace-safe question redaction
+# Input-level secret redaction (redacted before the question enters the graph)
 # ---------------------------------------------------------------------------
 
-
-def test_trace_safe_question_hash_is_stable_for_same_input():
-    expected = hashlib.sha256(b"What is the VPN policy?").hexdigest()
-
-    first = trace_safe_question("What is the VPN policy?")
-    second = trace_safe_question("What is the VPN policy?")
-
-    assert first["question_sha256"] == second["question_sha256"] == expected
-    # Different text -> different hash.
-    assert trace_safe_question("Other question")["question_sha256"] != expected
-
-
-def test_trace_safe_question_truncates_long_questions():
-    long_question = "word " * 100  # well over the preview cap
-
-    meta = trace_safe_question(long_question)
-
-    assert len(meta["question_redacted"]) <= QUESTION_PREVIEW_MAX_CHARS
-    assert meta["question_redacted"] == long_question[:QUESTION_PREVIEW_MAX_CHARS]
-    # The hash is over the ORIGINAL full text, not the truncated preview.
-    assert meta["question_sha256"] == hashlib.sha256(long_question.encode()).hexdigest()
+# Secret-bearing questions and the raw fragment each must never leak.
+_SECRET_QUESTIONS = [
+    ("my key is sk-ABC123def456GHI789", "sk-ABC123def456GHI789"),  # OpenAI-style
+    ("anthropic sk-ant-API03-xyz_abc-123", "sk-ant-API03-xyz_abc-123"),  # Anthropic-style
+    ("token ghp_0123456789abcdefABCDEF", "ghp_0123456789abcdefABCDEF"),  # GitHub classic
+    ("github_pat_11ABCDEFG0_secrettokenvalue", "github_pat_11ABCDEFG0_secrettokenvalue"),  # PAT
+    ("api_key=supersecretvalue", "supersecretvalue"),  # generic key=value
+    ("password=hunter2", "hunter2"),  # generic key=value
+]
 
 
-def test_trace_safe_question_redacts_secret_like_values():
-    secrets = [
-        "my key is sk-ABC123def456GHI789",  # OpenAI-style
-        "anthropic sk-ant-API03-xyz_abc-123",  # Anthropic-style
-        "token ghp_0123456789abcdefABCDEF",  # GitHub classic
-        "github_pat_11ABCDEFG0_secrettokenvalue",  # GitHub fine-grained PAT
-        "api_key=supersecretvalue",  # generic key=value
-        "password=hunter2",  # generic key=value
-    ]
-    leaked_fragments = [
-        "sk-ABC123def456GHI789",
-        "sk-ant-API03-xyz_abc-123",
-        "ghp_0123456789abcdefABCDEF",
-        "github_pat_11ABCDEFG0_secrettokenvalue",
-        "supersecretvalue",
-        "hunter2",
-    ]
+def test_redact_secrets_replaces_secret_like_values():
+    for question, leaked in _SECRET_QUESTIONS:
+        redacted = _redact_secrets(question)
+        assert "[REDACTED]" in redacted, question
+        assert leaked not in redacted, question
 
-    for question, leaked in zip(secrets, leaked_fragments, strict=True):
-        preview = trace_safe_question(question)["question_redacted"]
-        assert "[REDACTED]" in preview, question
-        assert leaked not in preview, question
+
+def test_non_secret_question_passes_through_unchanged(monkeypatch):
+    _install_fake_app(monkeypatch)
+
+    result = answer_question("How do I request VPN access?")
+
+    # Identical to the original: no redaction happened.
+    assert result.question == "How do I request VPN access?"
+    assert result.input_redacted is False
+    assert result.raw_state["question"] == "How do I request VPN access?"
+    assert result.question_sha256 == hashlib.sha256(b"How do I request VPN access?").hexdigest()
+
+
+def test_input_redaction_hashes_original_and_sets_flag(monkeypatch):
+    _install_fake_app(monkeypatch)
+    question = "use api_key=sk-LIVE-SECRET please"
+
+    result = answer_question(question)
+
+    # The stored question is the redacted runtime question; the raw secret is gone.
+    assert result.input_redacted is True
+    assert "sk-LIVE-SECRET" not in result.question
+    assert "[REDACTED]" in result.question
+    # Hash is over the ORIGINAL input, not the redacted form.
+    assert result.question_sha256 == hashlib.sha256(question.encode()).hexdigest()
+    assert result.question_sha256 != hashlib.sha256(result.question.encode()).hexdigest()
+
+
+def test_graph_receives_redacted_question_not_raw_secret(monkeypatch):
+    # The compiled graph (and thus retriever/router/generator/graders) must see
+    # the redacted question, never the raw secret.
+    captured = {}
+
+    class _CapturingApp:
+        def invoke(self, state):
+            captured["question"] = state["question"]
+            return {**state, "generation": "A"}
+
+    monkeypatch.setattr(graph_module, "app", _CapturingApp())
+    question = "api_key=sk-RAW " + ("x" * 200)
+
+    result = answer_question(question)
+
+    assert captured["question"] == _redact_secrets(question)
+    assert "sk-RAW" not in captured["question"]
+    # Nothing user-visible or in raw_state carries the raw secret.
+    assert "sk-RAW" not in result.question
+    assert "sk-RAW" not in result.raw_state["question"]
 
 
 def test_trace_file_does_not_contain_a_raw_secret_question(monkeypatch, tmp_path):
@@ -328,33 +349,79 @@ def test_trace_file_does_not_contain_a_raw_secret_question(monkeypatch, tmp_path
     payload = json.loads(text)
     assert "sk-LIVE-SECRET-do-not-store" not in text
     assert "[REDACTED]" in payload["question_redacted"]
+    assert payload["input_redacted"] is True
+    # Hash in the trace is over the original input.
     assert payload["question_sha256"] == hashlib.sha256(question.encode()).hexdigest()
 
 
-def test_runtime_receives_original_question_not_the_redacted_preview(monkeypatch, tmp_path):
-    # A long, secret-bearing question must reach the graph verbatim; only the
-    # on-disk trace is redacted/truncated.
-    captured = {}
-
-    class _CapturingApp:
-        def invoke(self, state):
-            captured["question"] = state["question"]
-            return {**state, "generation": "A"}
-
-    monkeypatch.setattr(graph_module, "app", _CapturingApp())
+def test_trace_preview_is_truncated_to_max_chars(monkeypatch, tmp_path):
+    _install_fake_app(monkeypatch)
     trace_file = tmp_path / "run.json"
-    question = "api_key=sk-RAW " + ("x" * 200)
+    long_question = "word " * 100  # well over the preview cap
 
-    result = answer_question(question, AnswerOptions(trace_path=trace_file))
+    result = answer_question(long_question, AnswerOptions(trace_path=trace_file))
 
-    # Runtime answering used the full, unredacted question.
-    assert captured["question"] == question
-    assert result.question == question
-    assert result.raw_state["question"] == question
-    # The persisted trace did not.
     payload = json.loads(trace_file.read_text(encoding="utf-8"))
-    assert payload["question_redacted"] != question
-    assert "sk-RAW" not in trace_file.read_text(encoding="utf-8")
+    assert len(payload["question_redacted"]) <= QUESTION_PREVIEW_MAX_CHARS
+    # The hash still covers the full original text, not the truncated preview.
+    assert result.question_sha256 == hashlib.sha256(long_question.encode()).hexdigest()
+
+
+def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
+    # A secret in the question must not reach the outbound web-search query, and
+    # redaction must not flip web_search_enabled or the fallback policy.
+    from graph.consts import WEBSEARCH
+
+    web_module = importlib.import_module("graph.nodes.web_search")
+    generate_module = importlib.import_module("graph.nodes.generate")
+
+    web_calls = []
+
+    class FakeWebTool:
+        def invoke(self, payload):
+            web_calls.append(payload)
+            return [{"content": "web result"}]
+
+    monkeypatch.setattr(
+        graph_module,
+        "get_question_router",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(datasource=WEBSEARCH)),
+    )
+    monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
+    monkeypatch.setattr(
+        web_module,
+        "get_retrieval_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=True)),
+    )
+    monkeypatch.setattr(
+        generate_module,
+        "generate_answer",
+        lambda question, documents, retry_feedback="": "FINAL ANSWER",
+    )
+    monkeypatch.setattr(
+        graph_module,
+        "get_hallucination_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_grounded=True)),
+    )
+    monkeypatch.setattr(
+        graph_module,
+        "get_answer_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(answers_question=True)),
+    )
+
+    question = "look up api_key=sk-WEBSECRET-123 online"
+    result = answer_question(
+        question,
+        AnswerOptions(web_search_enabled=True, web_fallback_policy="conservative"),
+    )
+
+    assert web_calls, "the web tool should have been invoked"
+    for payload in web_calls:
+        assert "sk-WEBSECRET-123" not in payload["query"]
+        assert "[REDACTED]" in payload["query"]
+    # Policy/privacy unchanged by redaction.
+    assert result.web_search_enabled is True
+    assert result.web_fallback_policy == "conservative"
 
 
 # ---------------------------------------------------------------------------
