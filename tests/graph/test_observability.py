@@ -9,6 +9,7 @@ change, and no document page_content / raw state in the trace file.
 All external seams are mocked -- no API keys or network required.
 """
 
+import hashlib
 import importlib
 import json
 from types import SimpleNamespace
@@ -17,7 +18,13 @@ from langchain_core.documents import Document
 
 import graph.graph as graph_module
 from graph.consts import RETRIEVE
-from graph.engine import AnswerOptions, answer_question, build_trace
+from graph.engine import (
+    QUESTION_PREVIEW_MAX_CHARS,
+    AnswerOptions,
+    answer_question,
+    build_trace,
+    trace_safe_question,
+)
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -201,7 +208,10 @@ def test_trace_json_contains_the_expected_metadata(monkeypatch, tmp_path):
     payload = json.loads(trace_file.read_text(encoding="utf-8"))
 
     assert payload["run_id"] == "trace-run-1"
-    assert payload["question"] == "How do I request VPN access?"
+    # The raw question is never stored; only a redacted preview + a hash.
+    assert "question" not in payload
+    assert payload["question_redacted"] == "How do I request VPN access?"
+    assert payload["question_sha256"] == hashlib.sha256(b"How do I request VPN access?").hexdigest()
     assert payload["node_path"] == result.node_path
     assert payload["total_duration_ms"] == result.total_duration_ms
     assert payload["node_timings_ms"] == result.node_timings_ms
@@ -254,6 +264,97 @@ def test_failed_trace_write_does_not_lose_the_answer(monkeypatch, tmp_path, caps
 
     assert result.answer == "The answer."
     assert "---TRACE WRITE FAILED" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Trace-safe question redaction
+# ---------------------------------------------------------------------------
+
+
+def test_trace_safe_question_hash_is_stable_for_same_input():
+    expected = hashlib.sha256(b"What is the VPN policy?").hexdigest()
+
+    first = trace_safe_question("What is the VPN policy?")
+    second = trace_safe_question("What is the VPN policy?")
+
+    assert first["question_sha256"] == second["question_sha256"] == expected
+    # Different text -> different hash.
+    assert trace_safe_question("Other question")["question_sha256"] != expected
+
+
+def test_trace_safe_question_truncates_long_questions():
+    long_question = "word " * 100  # well over the preview cap
+
+    meta = trace_safe_question(long_question)
+
+    assert len(meta["question_redacted"]) <= QUESTION_PREVIEW_MAX_CHARS
+    assert meta["question_redacted"] == long_question[:QUESTION_PREVIEW_MAX_CHARS]
+    # The hash is over the ORIGINAL full text, not the truncated preview.
+    assert meta["question_sha256"] == hashlib.sha256(long_question.encode()).hexdigest()
+
+
+def test_trace_safe_question_redacts_secret_like_values():
+    secrets = [
+        "my key is sk-ABC123def456GHI789",  # OpenAI-style
+        "anthropic sk-ant-API03-xyz_abc-123",  # Anthropic-style
+        "token ghp_0123456789abcdefABCDEF",  # GitHub classic
+        "github_pat_11ABCDEFG0_secrettokenvalue",  # GitHub fine-grained PAT
+        "api_key=supersecretvalue",  # generic key=value
+        "password=hunter2",  # generic key=value
+    ]
+    leaked_fragments = [
+        "sk-ABC123def456GHI789",
+        "sk-ant-API03-xyz_abc-123",
+        "ghp_0123456789abcdefABCDEF",
+        "github_pat_11ABCDEFG0_secrettokenvalue",
+        "supersecretvalue",
+        "hunter2",
+    ]
+
+    for question, leaked in zip(secrets, leaked_fragments, strict=True):
+        preview = trace_safe_question(question)["question_redacted"]
+        assert "[REDACTED]" in preview, question
+        assert leaked not in preview, question
+
+
+def test_trace_file_does_not_contain_a_raw_secret_question(monkeypatch, tmp_path):
+    _install_fake_app(monkeypatch)
+    trace_file = tmp_path / "run.json"
+    question = "use api_key=sk-LIVE-SECRET-do-not-store please"
+
+    answer_question(question, AnswerOptions(trace_path=trace_file))
+
+    text = trace_file.read_text(encoding="utf-8")
+    payload = json.loads(text)
+    assert "sk-LIVE-SECRET-do-not-store" not in text
+    assert "[REDACTED]" in payload["question_redacted"]
+    assert payload["question_sha256"] == hashlib.sha256(question.encode()).hexdigest()
+
+
+def test_runtime_receives_original_question_not_the_redacted_preview(monkeypatch, tmp_path):
+    # A long, secret-bearing question must reach the graph verbatim; only the
+    # on-disk trace is redacted/truncated.
+    captured = {}
+
+    class _CapturingApp:
+        def invoke(self, state):
+            captured["question"] = state["question"]
+            return {**state, "generation": "A"}
+
+    monkeypatch.setattr(graph_module, "app", _CapturingApp())
+    trace_file = tmp_path / "run.json"
+    question = "api_key=sk-RAW " + ("x" * 200)
+
+    result = answer_question(question, AnswerOptions(trace_path=trace_file))
+
+    # Runtime answering used the full, unredacted question.
+    assert captured["question"] == question
+    assert result.question == question
+    assert result.raw_state["question"] == question
+    # The persisted trace did not.
+    payload = json.loads(trace_file.read_text(encoding="utf-8"))
+    assert payload["question_redacted"] != question
+    assert "sk-RAW" not in trace_file.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

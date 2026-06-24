@@ -30,7 +30,9 @@ constructed (graph.graph builds clients lazily), so importing this module
 needs no API keys and no network.
 """
 
+import hashlib
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -187,6 +189,52 @@ def _run_graph_with_trace(
     return final_state, node_path, node_timings
 
 
+# Maximum length of the redacted question preview stored in trace output.
+QUESTION_PREVIEW_MAX_CHARS = 80
+
+# Obvious secret-like values scrubbed from the question before it is previewed
+# in trace output. Each entry is (pattern, replacement). Prefix-style keys are
+# matched before the generic key=value form so e.g. `api_key=sk-...` is fully
+# redacted regardless of which rule fires first. This is best-effort hygiene for
+# debug artifacts, not a guarantee that every possible secret shape is caught.
+_SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"sk-ant-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # Anthropic-style keys
+    (re.compile(r"sk-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # OpenAI-style keys
+    (re.compile(r"github_pat_[A-Za-z0-9_]+"), "[REDACTED]"),  # GitHub fine-grained PAT
+    (re.compile(r"ghp_[A-Za-z0-9]+"), "[REDACTED]"),  # GitHub classic token
+    # Generic key=value secrets (api_key / token / password / secret), case-insensitive.
+    (re.compile(r"(?i)\b(api_key|apikey|token|password|secret)\s*=\s*\S+"), r"\1=[REDACTED]"),
+)
+
+
+def _redact_secrets(text: str) -> str:
+    """Replace obvious secret-like substrings with `[REDACTED]`."""
+
+    redacted = text
+    for pattern, replacement in _SECRET_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
+
+
+def trace_safe_question(question: str) -> dict[str, str]:
+    """
+    Build the trace-safe representation of a user question.
+
+    Returns a redacted, truncated preview plus a stable SHA-256 hash of the
+    ORIGINAL full question. The raw question is never stored in trace output:
+    the preview scrubs obvious secrets and is capped at
+    QUESTION_PREVIEW_MAX_CHARS, while the hash (computed from the untouched
+    input) lets identical questions be correlated across runs without keeping
+    the text. The runtime state["question"] is unaffected — this is only the
+    on-disk debug artifact.
+    """
+
+    return {
+        "question_redacted": _redact_secrets(question)[:QUESTION_PREVIEW_MAX_CHARS],
+        "question_sha256": hashlib.sha256(question.encode("utf-8")).hexdigest(),
+    }
+
+
 def build_trace(result: AnswerResult) -> dict[str, Any]:
     """
     Metadata-only trace payload for one run (what AnswerOptions.trace_path
@@ -194,13 +242,15 @@ def build_trace(result: AnswerResult) -> dict[str, Any]:
 
     Safe by construction: node names, timings, counters, flags, and the
     deduplicated citation lines — never document page_content, prompts,
-    raw graph state, or secrets. `generated_at` is UTC ISO-8601.
+    raw graph state, or secrets. The user question is stored only as a
+    redacted/truncated preview plus a SHA-256 hash (see trace_safe_question),
+    never as raw text. `generated_at` is UTC ISO-8601.
     """
 
     return {
         "run_id": result.run_id,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "question": result.question,
+        **trace_safe_question(result.question),
         "node_path": list(result.node_path),
         "total_duration_ms": result.total_duration_ms,
         "node_timings_ms": [dict(entry) for entry in result.node_timings_ms],
