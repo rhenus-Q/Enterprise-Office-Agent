@@ -82,6 +82,14 @@ class AnswerResult:
     run actually used, after per-run options and environment defaults were
     resolved.
 
+    Input redaction: `question` is the redacted runtime question that the
+    graph actually executed — secret-like values are replaced with
+    [REDACTED] before the question enters GraphState, so the original raw
+    input is never stored here or in `raw_state`. `question_sha256` is the
+    SHA-256 of the ORIGINAL (pre-redaction) input, so identical inputs still
+    correlate across runs; `input_redacted` is True when redaction changed
+    the input.
+
     Observability fields: `run_id` is always set (caller-provided or
     generated). `node_path` is the executed node sequence in order (repeats
     on retries); `node_timings_ms` is one `{"node", "duration_ms"}` entry per
@@ -107,6 +115,8 @@ class AnswerResult:
     node_path: list[str] = field(default_factory=list)
     node_timings_ms: list[dict[str, Any]] = field(default_factory=list)
     total_duration_ms: float = 0.0
+    question_sha256: str = ""
+    input_redacted: bool = False
 
 
 def seed_state(
@@ -216,23 +226,10 @@ def _redact_secrets(text: str) -> str:
     return redacted
 
 
-def trace_safe_question(question: str) -> dict[str, str]:
-    """
-    Build the trace-safe representation of a user question.
+def _question_sha256(question: str) -> str:
+    """Stable SHA-256 of a question string (computed from the original input)."""
 
-    Returns a redacted, truncated preview plus a stable SHA-256 hash of the
-    ORIGINAL full question. The raw question is never stored in trace output:
-    the preview scrubs obvious secrets and is capped at
-    QUESTION_PREVIEW_MAX_CHARS, while the hash (computed from the untouched
-    input) lets identical questions be correlated across runs without keeping
-    the text. The runtime state["question"] is unaffected — this is only the
-    on-disk debug artifact.
-    """
-
-    return {
-        "question_redacted": _redact_secrets(question)[:QUESTION_PREVIEW_MAX_CHARS],
-        "question_sha256": hashlib.sha256(question.encode("utf-8")).hexdigest(),
-    }
+    return hashlib.sha256(question.encode("utf-8")).hexdigest()
 
 
 def build_trace(result: AnswerResult) -> dict[str, Any]:
@@ -243,14 +240,20 @@ def build_trace(result: AnswerResult) -> dict[str, Any]:
     Safe by construction: node names, timings, counters, flags, and the
     deduplicated citation lines — never document page_content, prompts,
     raw graph state, or secrets. The user question is stored only as a
-    redacted/truncated preview plus a SHA-256 hash (see trace_safe_question),
-    never as raw text. `generated_at` is UTC ISO-8601.
+    redacted/truncated preview (`question_redacted`, capped at
+    QUESTION_PREVIEW_MAX_CHARS) plus the SHA-256 of the original input
+    (`question_sha256`); `input_redacted` flags whether the input was
+    scrubbed. `result.question` is already the redacted runtime question; the
+    preview re-redacts defensively before truncating so a directly-constructed
+    result can never leak a raw secret. `generated_at` is UTC ISO-8601.
     """
 
     return {
         "run_id": result.run_id,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        **trace_safe_question(result.question),
+        "question_redacted": _redact_secrets(result.question)[:QUESTION_PREVIEW_MAX_CHARS],
+        "question_sha256": result.question_sha256,
+        "input_redacted": result.input_redacted,
         "node_path": list(result.node_path),
         "total_duration_ms": result.total_duration_ms,
         "node_timings_ms": [dict(entry) for entry in result.node_timings_ms],
@@ -304,6 +307,14 @@ def answer_question(
     Observability: a missing run_id is generated, the executed node path and
     timings are collected, and when options.trace_path is set a
     metadata-only trace JSON is written after the run (see build_trace).
+
+    Input redaction: secret-like values in `question` are scrubbed to
+    [REDACTED] before the question enters GraphState, so no secret reaches the
+    retriever, router, generator, graders, or the outbound web-search query.
+    The original input is used only to compute `question_sha256` (so identical
+    inputs still correlate) and the `input_redacted` flag; it is never stored
+    in the result, raw_state, or trace. Redaction does not change routing,
+    privacy mode, or the fallback policy.
     """
 
     if options is None:
@@ -313,8 +324,17 @@ def answer_question(
 
     run_id = options.run_id if options.run_id else uuid.uuid4().hex
 
+    # Redact the input up front: everything downstream (state, chains, web
+    # query, result, trace) sees only the redacted runtime question. The hash
+    # and the redaction flag are derived from the original, then the original
+    # is dropped — not stored anywhere.
+    original_question = question
+    runtime_question = _redact_secrets(original_question)
+    input_redacted = runtime_question != original_question
+    question_sha256 = _question_sha256(original_question)
+
     initial_state = seed_state(
-        question,
+        runtime_question,
         web_search_enabled=options.web_search_enabled,
         web_fallback_policy=options.web_fallback_policy,
     )
@@ -325,7 +345,7 @@ def answer_question(
     total_duration_ms = round((time.perf_counter() - started) * 1000.0, 2)
 
     answer_result = AnswerResult(
-        question=question,
+        question=runtime_question,
         answer=result.get("generation", ""),
         stop_reason=result.get("stop_reason", ""),
         sources=source_lines(result.get("documents", [])),
@@ -340,6 +360,8 @@ def answer_question(
         node_path=node_path,
         node_timings_ms=node_timings,
         total_duration_ms=total_duration_ms,
+        question_sha256=question_sha256,
+        input_redacted=input_redacted,
     )
 
     if options.trace_path is not None:
