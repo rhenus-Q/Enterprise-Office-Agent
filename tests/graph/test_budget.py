@@ -17,9 +17,11 @@ from langchain_core.documents import Document
 
 import graph.graph as graph_module
 from graph.config import (
+    DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
     DEFAULT_MAX_LLM_CALLS_PER_RUN,
     DEFAULT_MAX_WEB_RESULTS_TO_GRADE,
     DEFAULT_MAX_WEB_SEARCHES_PER_RUN,
+    llm_request_timeout_seconds,
     max_llm_calls_per_run,
     max_web_results_to_grade,
     max_web_searches_per_run,
@@ -58,6 +60,31 @@ def test_budget_invalid_or_nonpositive_values_fall_back_to_default(monkeypatch, 
     monkeypatch.setenv("MAX_LLM_CALLS_PER_RUN", value)
 
     assert max_llm_calls_per_run() == DEFAULT_MAX_LLM_CALLS_PER_RUN
+
+
+# ---------------------------------------------------------------------------
+# Per-request LLM timeout config (shares _positive_int_from_env with the budgets)
+# ---------------------------------------------------------------------------
+
+
+def test_llm_request_timeout_default_when_env_unset(monkeypatch):
+    monkeypatch.delenv("LLM_REQUEST_TIMEOUT_SECONDS", raising=False)
+
+    assert llm_request_timeout_seconds() == DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS
+
+
+def test_llm_request_timeout_env_override(monkeypatch):
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", " 15 ")  # whitespace-tolerant
+
+    assert llm_request_timeout_seconds() == 15
+
+
+@pytest.mark.parametrize("value", ["not-a-number", "", "0", "-3"])
+def test_llm_request_timeout_invalid_or_nonpositive_falls_back_to_default(monkeypatch, value):
+    # A malformed or non-positive timeout must never disable the backstop.
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", value)
+
+    assert llm_request_timeout_seconds() == DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS
 
 
 # ---------------------------------------------------------------------------
