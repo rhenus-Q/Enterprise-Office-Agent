@@ -120,3 +120,18 @@ def max_web_results_to_grade() -> int:
     """Budget for web results graded for relevance per run (MAX_WEB_RESULTS_TO_GRADE)."""
 
     return _positive_int_from_env("MAX_WEB_RESULTS_TO_GRADE", DEFAULT_MAX_WEB_RESULTS_TO_GRADE)
+
+
+# Per-request timeout (seconds) for an individual LLM call. Bounds wall-clock
+# time on a single ChatOpenAI request so a hung dependency cannot stall a run;
+# the existing per-call exception handlers map a timeout to the right *_error
+# stop_reason, so the success path is unchanged.
+DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS = 60
+
+
+def llm_request_timeout_seconds() -> int:
+    """Per-request timeout in seconds for LLM calls (LLM_REQUEST_TIMEOUT_SECONDS)."""
+
+    return _positive_int_from_env(
+        "LLM_REQUEST_TIMEOUT_SECONDS", DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS
+    )

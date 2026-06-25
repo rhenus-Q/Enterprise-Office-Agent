@@ -4,6 +4,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from graph.config import llm_request_timeout_seconds
+
 
 class RetrievalGrade(BaseModel):
     """
@@ -68,6 +70,7 @@ def get_retrieval_grader():
     llm = ChatOpenAI(
         model="gpt-5-mini",
         temperature=0,
+        timeout=llm_request_timeout_seconds(),
     )
     structured_llm = llm.with_structured_output(RetrievalGrade)
     return prompt | structured_llm
