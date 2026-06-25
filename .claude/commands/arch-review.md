@@ -1,7 +1,7 @@
 ---
 description: Review the project architecture and write a timestamped architecture review report
 argument-hint: Optional review focus, for example "eval harness" or "graph flow"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(date:*)
 ---
 
 You are reviewing the architecture of this Agentic RAG project.
@@ -50,7 +50,19 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project architecture is clean, maintainable, testable, and suitable as a portfolio-grade Agentic RAG / LangGraph project.
+Review whether the current project architecture is clean, maintainable, testable, observable, safe to continue building on, and suitable as a portfolio-grade Agentic RAG / LangGraph project.
+
+This review should cover:
+
+* architecture quality
+* separation of concerns
+* graph design
+* configuration and side effects
+* observability architecture
+* production readiness
+* eval architecture
+* test architecture
+* documentation and workflow quality
 
 Write a new architecture review report under:
 
@@ -67,8 +79,11 @@ Create a unique report filename using this format:
 Where:
 
 * `<YYYY-MM-DD>` is today's date.
+
 * `<focus-slug>` is derived from `$ARGUMENTS`.
+
 * If `$ARGUMENTS` is empty, use `overall`.
+
 * Convert the focus to a lowercase slug:
 
   * trim whitespace
@@ -76,6 +91,7 @@ Where:
   * remove quotes
   * remove characters that are unsafe for filenames
   * keep only letters, numbers, and hyphens where possible
+
 * If `$ARGUMENTS` is not empty but sanitizing it produces an empty slug, use `overall`.
 
 Examples:
@@ -99,7 +115,9 @@ Before writing, select the report path by checking candidate paths for existence
 3. then `docs/roadmap/architecture-review/<YYYY-MM-DD>-<focus-slug>-architecture-review-3.md`
 4. continue incrementing the numeric suffix until a candidate path does not exist
 
-Check each candidate with `Glob` (or an equivalent path-existence check) before selecting it. Do not overwrite any existing architecture review report.
+Check each candidate with `Glob` or an equivalent path-existence check before selecting it.
+
+Do not overwrite any existing architecture review report.
 
 Use `Write` only for the selected unique report file.
 
@@ -121,18 +139,21 @@ Run:
 git status --short
 ```
 
+If today's date is needed for the report filename, use a minimal date command.
+
 Then inspect only architecture-relevant files.
 
 Prefer targeted reads over broad file reading.
 
 ## Step 2. Inspect architecture-relevant areas
 
-Inspect these areas as needed:
+Inspect these areas as needed.
 
 ### Project entry points and configuration
 
 * `pyproject.toml`
 * `.github/workflows/ci.yml`
+* `.github/workflows/CI.yml`
 * `.gitignore`
 * `CLAUDE.md`
 * `README.md`
@@ -168,7 +189,7 @@ Do not inspect `tests/chains/` unless the user explicitly asks.
 
 * `.claude/commands/`
 
-Inspect roadmap artifacts only when needed for the workflow review.
+Inspect roadmap artifacts only when needed for workflow review.
 
 Do not inspect `.env`.
 
@@ -176,7 +197,7 @@ Do not inspect generated runtime artifacts unless needed.
 
 ## Step 3. Review architecture quality
 
-Evaluate:
+Evaluate the following areas.
 
 ### Graph design
 
@@ -186,6 +207,8 @@ Evaluate:
 * Are loop limits and retry behavior safe?
 * Are stop reasons consistent?
 * Are fallback policies clear and testable?
+* Are terminal paths clear?
+* Are quality gates such as document grading, hallucination grading, and answer usefulness grading placed in the right layer?
 
 ### Configuration and side effects
 
@@ -194,14 +217,18 @@ Evaluate:
 * Is environment/config access centralized?
 * Are expensive operations avoided at import time?
 * Are `.env` and secrets protected?
+* Can tests import modules without API keys?
+* Are runtime policies resolved once per run rather than read inconsistently across nodes?
 
 ### Separation of concerns
 
 * Is graph execution separated from formatting?
 * Is eval logic separated from graph logic?
-* Are node/chains responsibilities separated?
+* Are node and chain responsibilities separated?
+* Are nodes responsible for GraphState updates while chains handle LLM/prompt logic?
 * Is persistence/history logic isolated enough?
 * Are docs and tests aligned with behavior?
+* Is business behavior separated from observability and reporting?
 
 ### Eval architecture
 
@@ -211,6 +238,19 @@ Evaluate:
 * Is full eval clearly separated from safe validation?
 * Are generated history files correctly ignored?
 * Is `validate-only` safe?
+* Are eval expectations readable and maintainable?
+
+### Observability architecture
+
+* Are `run_id`, `node_path`, node timings, counters, and trace outputs useful for debugging graph runs?
+* Is observability additive and non-behavior-changing?
+* Are trace files metadata-only?
+* Are raw documents, prompts, raw graph state, user secrets, and API keys excluded from trace output?
+* Are trace write failures handled safely without losing the answer?
+* Are `stop_reason`, retry counters, web search counters, and grading counters sufficient to understand why a run ended?
+* Are observability fields exposed in a structured way through `AnswerResult`?
+* Are generated trace/debug artifacts safe to persist or share?
+* Does the observability design help diagnose graph failures without making the graph harder to reason about?
 
 ### Testability
 
@@ -219,6 +259,21 @@ Evaluate:
 * Are API-key-requiring tests avoided by default?
 * Are there brittle tests or under-tested seams?
 * Are recent features covered by unit tests?
+* Are privacy mode, fallback policies, budget limits, stop reasons, and failure paths covered?
+* Are monkeypatch seams clean and intentional?
+
+### Production readiness
+
+* Are runtime configuration, privacy controls, and fallback policies clear and centralized?
+* Are LLM call budgets, web search limits, and web result grading limits enforced consistently?
+* Are external dependency failures handled safely, including LLM, retriever, vector store, web search, and grading failures?
+* Are import-time side effects avoided so tests and tooling can run without API keys?
+* Are logs, traces, eval history, and generated reports safe for local development and CI?
+* Are `.env`, secrets, generated artifacts, vector stores, and runtime outputs protected from accidental commit?
+* Are CI checks sufficient for safe development without requiring paid API calls?
+* Is the project easy to run, test, debug, and explain as a portfolio-grade system?
+* Are production-like risks documented clearly enough without overengineering the demo?
+* Is cleanup needed before adding more features?
 
 ### Documentation quality
 
@@ -226,6 +281,8 @@ Evaluate:
 * Are command workflows documented enough?
 * Are eval docs accurate?
 * Are roadmap artifacts useful rather than noisy?
+* Do docs explain how to run safe tests versus API-key-requiring workflows?
+* Do docs clearly describe the architecture without overstating production readiness?
 
 ### Portfolio quality
 
@@ -233,6 +290,8 @@ Evaluate:
 * Are there signs of overengineering?
 * Are there signs of underengineering?
 * What would make the project look more production-ready?
+* Is the project explainable in a clear interview narrative?
+* Does the architecture demonstrate real engineering judgment rather than only LLM demo behavior?
 
 ## Step 4. Look for risks and improvement opportunities
 
@@ -248,6 +307,9 @@ Flag:
 * excessive command/template complexity
 * missing tests around important behavior
 * architecture that makes future features harder
+* observability that leaks too much or explains too little
+* production-readiness gaps that could cause fragile demos
+* places where security, privacy, fallback, budget, or stop_reason semantics are unclear
 
 Do not rewrite the architecture.
 
@@ -300,6 +362,7 @@ Briefly describe the current system architecture:
 * Config/runtime setup
 * Eval harness
 * Test structure
+* Observability structure
 * Docs/workflow structure
 
 ## 4. What is strong
@@ -333,7 +396,36 @@ Explicitly assess whether these are protected:
 * `ingestion.py`
 * `tests/chains/`
 
-## 7. Eval architecture review
+## 7. Observability architecture review
+
+Assess:
+
+* run_id design
+* node_path visibility
+* node timing usefulness
+* operational counters
+* trace JSON safety
+* metadata-only guarantees
+* trace failure behavior
+* whether observability helps debug graph failures without changing behavior
+* whether any observability artifact could leak raw documents, prompts, raw state, or secrets
+
+## 8. Production readiness review
+
+Assess:
+
+* runtime configuration
+* privacy controls
+* fallback policies
+* budget limits
+* external dependency failure handling
+* CI safety
+* import-time side effects
+* generated artifact hygiene
+* whether the system is safe to keep building on
+* whether production-readiness gaps should be fixed before adding more features
+
+## 9. Eval architecture review
 
 Assess:
 
@@ -345,7 +437,7 @@ Assess:
 * validate-only workflow
 * test coverage
 
-## 8. Test architecture review
+## 10. Test architecture review
 
 Assess:
 
@@ -356,7 +448,7 @@ Assess:
 * missing tests
 * risky tests
 
-## 9. Documentation and workflow review
+## 11. Documentation and workflow review
 
 Assess:
 
@@ -366,7 +458,7 @@ Assess:
 * Claude commands
 * roadmap artifacts
 
-## 10. Recommended next actions
+## 12. Recommended next actions
 
 Separate recommendations into:
 
@@ -376,7 +468,7 @@ Separate recommendations into:
 
 ### Optional improvements
 
-## 11. Portfolio-readiness verdict
+## 13. Portfolio-readiness verdict
 
 Give one of:
 
@@ -386,9 +478,11 @@ Give one of:
 
 Explain why.
 
-## 12. Overall recommendation
+## 14. Overall recommendation
 
-Do not restate the executive summary or the portfolio-readiness verdict here. Instead, give a short, action-oriented recommendation that answers:
+Do not restate the executive summary or the portfolio-readiness verdict here.
+
+Instead, give a short, action-oriented recommendation that answers:
 
 * Is the architecture safe to continue building on?
 * Is cleanup needed before adding more features?
