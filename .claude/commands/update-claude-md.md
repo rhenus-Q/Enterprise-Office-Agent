@@ -1,10 +1,10 @@
 ---
-description: Update CLAUDE.md with durable project rules from a completed change
+description: Update CLAUDE.md durable project rules and docs/roadmap/README.md artifact conventions
 argument-hint: Implementation report path, spec/plan path, or short feature description
 allowed-tools: Read, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*)
 ---
 
-You are updating `CLAUDE.md` with durable project guidance after a completed implementation.
+You are updating durable project documentation after a completed change: durable rules in `CLAUDE.md`, and durable roadmap artifact-directory conventions in `docs/roadmap/README.md`.
 
 User input: $ARGUMENTS
 
@@ -12,9 +12,10 @@ This is a documentation-only task.
 
 Modify only:
 
-`CLAUDE.md`
+* `CLAUDE.md`
+* `docs/roadmap/README.md`
 
-Use `Edit` only for `CLAUDE.md`.
+Use `Edit` only for `CLAUDE.md` and `docs/roadmap/README.md`.
 
 Do not edit any other file.
 
@@ -26,11 +27,11 @@ Do not modify tests.
 
 Do not modify eval files.
 
-Do not modify README.
+Do not modify README files outside `docs/roadmap/README.md`.
 
-Do not modify roadmap files.
+Do not modify roadmap report files (specs, plans, implementation reports, or review reports).
 
-Do not modify prompts.
+Do not modify prompts other than this command file, and only when explicitly requested.
 
 Do not modify model names.
 
@@ -56,7 +57,7 @@ Use as few tools as possible.
 
 ## Goal
 
-Update `CLAUDE.md` only if the completed change introduced durable project rules, architecture conventions, testing conventions, safety constraints, generated-file rules, or workflow rules that future Claude Code agents need to know.
+Update `CLAUDE.md` only if the completed change introduced durable project rules, architecture conventions, testing conventions, safety constraints, generated-file rules, or workflow rules that future Claude Code agents need to know. Likewise, update `docs/roadmap/README.md` only to record durable roadmap artifact-directory conventions (which folders exist and what they hold, and their filename rules) — never individual reports. This is a narrow maintainer for these two files only: not a broad documentation updater, and it must not make broad roadmap edits.
 
 Do not summarize the implementation.
 
@@ -185,8 +186,8 @@ Run:
 
 ```powershell
 git status --short
-git diff -- CLAUDE.md
-git diff --stat -- CLAUDE.md
+git diff -- CLAUDE.md docs/roadmap/README.md
+git diff --stat -- CLAUDE.md docs/roadmap/README.md
 ```
 
 Do not run tests.
@@ -207,13 +208,15 @@ Report in this fixed format:
 
 CLAUDE.md updated: `<yes / no>`
 
-Durable rules added: `<short description of the rules added, or "none — <why no update was needed>">`
+docs/roadmap/README.md updated: `<yes / no>`
 
-Confirm: no code, tests, eval files, README, or roadmap files were changed.
+Durable rules / conventions added: `<short description of the rules or artifact-directory conventions added, or "none — <why no update was needed>">`
+
+Confirm: no code, tests, eval files, README files outside `docs/roadmap/README.md`, or roadmap report files were changed.
 
 Then include:
 
 * `git status --short`
-* `git diff --stat -- CLAUDE.md`
+* `git diff --stat -- CLAUDE.md docs/roadmap/README.md`
 
 Do not commit.
