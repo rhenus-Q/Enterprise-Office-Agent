@@ -22,6 +22,8 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+from graph.config import llm_request_timeout_seconds
+
 system_prompt = """
 You are a web search query rewriter for an enterprise RAG system.
 
@@ -74,5 +76,6 @@ def get_query_rewriter():
     llm = ChatOpenAI(
         model="gpt-5-mini",
         temperature=0,
+        timeout=llm_request_timeout_seconds(),
     )
     return prompt | llm | StrOutputParser()
