@@ -11,7 +11,7 @@ built alongside it.
 
 | Module | Status | What it is |
 |---|---|---|
-| [`enterprise_rag/`](enterprise_rag/README.md) | ✅ **Implemented** | **Enterprise Document Q&A Engine** (企业文档问答引擎) — a self-correcting Agentic RAG (CRAG-style) LangGraph workflow that answers questions from an ingested internal-document knowledge base, with web-search fallback, privacy mode, quality gates, bounded self-correction, per-run budgets, graceful degradation, and deterministic provenance. |
+| [`enterprise_rag/`](enterprise_rag/README.md) | ✅ **Implemented** | **Enterprise Document Q&A Engine** — a self-correcting Agentic RAG (CRAG-style) LangGraph workflow that answers questions from an ingested internal-document knowledge base, with web-search fallback, privacy mode, quality gates, bounded self-correction, per-run budgets, graceful degradation, and deterministic provenance. |
 | [`office_agent/`](office_agent/) | ✅ **v1.5 (Phase 6)** | The **Enterprise Office Agent**. A deterministic intent router over six local, LLM-free capabilities: a **Knowledge Q&A** tool that adapts the `enterprise_rag` engine, a **mock Email Summary** tool, a **mock Calendar Lookup** tool (today/tomorrow/next meeting/conflicts), a **mock Task / Ticket Assistant** (ticket views + simulated task creation), a **mock Daily Briefing** that aggregates the email/calendar/ticket mock data, and a **mock Meeting Agent / Meeting Prep** (v1.5) that composes the calendar/email/ticket data into a per-meeting prep sheet (`office_agent.engine.answer_office_request()`); unsupported requests return a clear guidance message. |
 
 The completed engine is fully documented in **[`enterprise_rag/README.md`](enterprise_rag/README.md)**
@@ -23,7 +23,7 @@ failure handling, evals). This root document is the repository-level overview.
 ```
 .
 ├── main.py                      # CLI entry point: interactive Q&A loop over the enterprise_rag engine
-├── enterprise_rag/              # ✅ Enterprise Document Q&A Engine (企业文档问答引擎) — see enterprise_rag/README.md
+├── enterprise_rag/              # ✅ Enterprise Document Q&A Engine — see enterprise_rag/README.md
 │   ├── README.md                #   Module docs: detailed setup, usage, API, budgets, failure handling
 │   ├── ingestion.py             #   KB build: load local Markdown corpus → split → embed → persist to Chroma
 │   ├── data/acmecorp_internal_docs/  #   Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
