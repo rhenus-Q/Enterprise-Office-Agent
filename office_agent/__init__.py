@@ -1,9 +1,16 @@
 """
-office_agent — placeholder package for the future Enterprise Office Agent.
+office_agent — the initial Enterprise Office Agent shell (Phase 1).
 
-Intentionally empty for now. This package reserves the module path so the
-enterprise document Q&A engine (:mod:`enterprise_rag`) and the upcoming office
-agent can evolve side by side. No office-agent features are implemented yet;
-adding them here must follow the same rules as the rest of the repo
-(side-effect-free imports, lazy external clients — see CLAUDE.md).
+Phase 1 establishes the foundation only: a lightweight schema layer
+(:mod:`office_agent.schemas`), a deterministic rule-based router
+(:mod:`office_agent.router`), a single Knowledge Q&A tool that adapts the
+completed enterprise document Q&A engine (:mod:`office_agent.tools.knowledge`
+over :mod:`enterprise_rag`), and a thin dispatch entry point
+(:func:`office_agent.engine.answer_office_request`).
+
+Email summary, calendar lookup, tickets, tasks, and the daily briefing are
+intentionally NOT implemented yet — they are reserved for later phases. Anything
+added here must follow the same rules as the rest of the repo (side-effect-free
+imports, lazy external clients) and must not change or regress `enterprise_rag`
+behavior or its tests (see CLAUDE.md).
 """
