@@ -3,14 +3,16 @@ office_agent.router — deterministic intent router.
 
 A rule-based keyword matcher, ordered by priority: inbox/email requests route to
 `email_summary`, calendar/meeting/schedule requests route to `calendar_lookup`,
-ticket/task requests route to `ticket_assistant`, enterprise knowledge / policy /
-document questions route to `knowledge_qa`, and everything else routes to
-`unknown`. No LLM is involved (that is a later phase) — this keeps routing fast,
-free, offline, and fully deterministic for tests.
+ticket/task requests route to `ticket_assistant`, whole-day "briefing / what
+should I focus on" requests route to `daily_briefing`, enterprise knowledge /
+policy / document questions route to `knowledge_qa`, and everything else routes
+to `unknown`. No LLM is involved — this keeps routing fast, free, offline, and
+fully deterministic for tests.
 """
 
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
+    INTENT_DAILY_BRIEFING,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
     INTENT_TICKET_ASSISTANT,
@@ -57,6 +59,18 @@ _TICKET_KEYWORDS = (
     "blocked",
 )
 
+# Substrings that mark a whole-day "brief me / what should I focus on" request.
+# Checked after the specific channel keywords (email/calendar/ticket) so an
+# explicit single-tool request still wins, but before the broad knowledge
+# keywords so "what should I focus on today?" is a briefing, not a policy lookup.
+_BRIEFING_KEYWORDS = (
+    "briefing",
+    "brief me",
+    "focus",
+    "my day",
+    "on my plate",
+)
+
 # Substrings that mark an enterprise knowledge-base / policy / document question.
 # Drawn from the AcmeCorp corpus domains (VPN, expenses, incident response,
 # on-call, data retention, onboarding) plus a few generic policy/document terms.
@@ -87,11 +101,13 @@ _KNOWLEDGE_KEYWORDS = (
 
 # Ordered routing rules: the first intent whose keyword set matches wins.
 # Channel-specific requests (email, then calendar, then ticket/task) take
-# precedence over the broader knowledge keywords.
+# precedence over the whole-day briefing, which in turn precedes the broad
+# knowledge keywords.
 _INTENT_RULES = (
     (INTENT_EMAIL_SUMMARY, _EMAIL_KEYWORDS),
     (INTENT_CALENDAR_LOOKUP, _CALENDAR_KEYWORDS),
     (INTENT_TICKET_ASSISTANT, _TICKET_KEYWORDS),
+    (INTENT_DAILY_BRIEFING, _BRIEFING_KEYWORDS),
     (INTENT_KNOWLEDGE_QA, _KNOWLEDGE_KEYWORDS),
 )
 

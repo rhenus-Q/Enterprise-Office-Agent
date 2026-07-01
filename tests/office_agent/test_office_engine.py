@@ -10,13 +10,14 @@ from office_agent import engine
 from office_agent.formatting import UNSUPPORTED_INTENT_NOTE
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
+    INTENT_DAILY_BRIEFING,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     ToolResult,
 )
-from office_agent.tools import calendar, email, knowledge, tickets
+from office_agent.tools import briefing, calendar, email, knowledge, tickets
 
 
 def _guard(tool_label):
@@ -45,6 +46,7 @@ def test_knowledge_qa_request_dispatches_to_knowledge_tool(monkeypatch):
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
+    monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
 
     response = engine.answer_office_request("What is the VPN access policy?")
 
@@ -67,6 +69,7 @@ def test_email_summary_request_dispatches_to_email_tool(monkeypatch):
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
+    monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
 
     response = engine.answer_office_request("summarize my unread emails")
 
@@ -87,6 +90,7 @@ def test_calendar_lookup_request_dispatches_to_calendar_tool(monkeypatch):
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
+    monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
 
     response = engine.answer_office_request("what meetings do I have today?")
 
@@ -107,6 +111,7 @@ def test_ticket_assistant_request_dispatches_to_ticket_tool(monkeypatch):
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
+    monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
 
     response = engine.answer_office_request("show open tickets")
 
@@ -116,13 +121,35 @@ def test_ticket_assistant_request_dispatches_to_ticket_tool(monkeypatch):
     assert response.content == "TICKET SUMMARY"
 
 
-def test_unknown_request_returns_unsupported_message_without_calling_any_tool(monkeypatch):
+def test_daily_briefing_request_dispatches_to_briefing_tool(monkeypatch):
+    calls = []
+
+    def fake_tool(query):
+        calls.append(query)
+        return ToolResult(tool=INTENT_DAILY_BRIEFING, content="DAILY BRIEFING")
+
+    monkeypatch.setattr(briefing, "generate_daily_briefing", fake_tool)
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
 
-    response = engine.answer_office_request("Give me my daily briefing.")
+    response = engine.answer_office_request("give me my daily briefing")
+
+    assert calls == ["give me my daily briefing"]
+    assert response.intent == INTENT_DAILY_BRIEFING
+    assert response.tool == INTENT_DAILY_BRIEFING
+    assert response.content == "DAILY BRIEFING"
+
+
+def test_unknown_request_returns_unsupported_message_without_calling_any_tool(monkeypatch):
+    monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
+    monkeypatch.setattr(email, "summarize_emails", _guard("email"))
+    monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
+    monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
+    monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
+
+    response = engine.answer_office_request("order lunch for the team")
 
     assert response.intent == INTENT_UNKNOWN
     assert response.tool is None
