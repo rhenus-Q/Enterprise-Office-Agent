@@ -52,7 +52,7 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project is secure enough for a portfolio-grade Agentic RAG / LangGraph system, with special attention to:
+Review whether the current project is secure enough for a production-oriented Agentic RAG / LangGraph system, with special attention to:
 
 * prompt injection
 * untrusted retrieved context
@@ -348,7 +348,7 @@ Report file: <selected unique report path>
 
 State whether the security posture is:
 
-* Strong / portfolio-ready
+* Strong / production-oriented
 * Good but needs minor cleanup
 * Needs significant improvement
 
@@ -488,7 +488,7 @@ Separate recommendations into:
 
 Give one of:
 
-* Security-ready for portfolio use
+* Security-ready / production-oriented
 * Security-ready after minor cleanup
 * Not security-ready yet
 

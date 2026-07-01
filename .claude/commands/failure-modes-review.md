@@ -52,7 +52,7 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project handles failures safely and predictably enough for a portfolio-grade Agentic RAG / LangGraph system.
+Review whether the current project handles failures safely and predictably enough for a production-oriented Agentic RAG / LangGraph system.
 
 This review should cover:
 
@@ -297,8 +297,8 @@ Evaluate the following areas.
 * Are operational counters sufficient for debugging?
 * Are CI checks enough to prevent regressions in failure handling?
 * Are generated artifacts and runtime outputs controlled?
-* Is the demo robust enough to show to a hiring manager or senior engineer?
-* Are production-like risks acknowledged without pretending the project is fully production-hardened?
+* Is the system robust enough to demonstrate to a senior engineer?
+* Are production-like risks acknowledged while being explicit that the project is not fully production-hardened?
 
 ### Failure-related test coverage
 
@@ -331,7 +331,7 @@ Flag:
 * exception messages that may leak paths, prompts, raw documents, or secrets
 * observability that is too weak to debug failures
 * tests that only cover happy paths
-* production-readiness gaps that could cause fragile demos
+* production-readiness gaps that could cause fragile behavior
 * documentation that overstates reliability
 
 Do not rewrite the architecture.
@@ -366,7 +366,7 @@ Report file: <selected unique report path>
 
 State whether the failure-handling posture is:
 
-* Strong / portfolio-ready
+* Strong / production-oriented
 * Good but needs minor cleanup
 * Needs significant improvement
 
@@ -521,7 +521,7 @@ Separate recommendations into:
 
 Give one of:
 
-* Failure-ready for portfolio use
+* Failure-ready / production-oriented
 * Failure-ready after minor cleanup
 * Not failure-ready yet
 

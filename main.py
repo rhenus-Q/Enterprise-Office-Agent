@@ -35,7 +35,7 @@ from graph.formatting import (
 
 
 def main():
-    print("Enterprise Knowledge Assistant")
+    print("Agentic RAG Assistant for Enterprise Document Q&A")
     print("Type 'exit' to quit.\n")
 
     # Privacy mode toggle: when WEB_SEARCH_ENABLED=false, questions are never

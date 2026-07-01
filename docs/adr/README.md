@@ -6,7 +6,7 @@ consequences, the trade-offs accepted, and the alternatives deliberately not
 chosen. They document *why* the code is the way it is — the part git history
 and code comments don't preserve.
 
-Each ADR is short (roughly a page), uses a fixed template (Status / Date /
+Each ADR is focused, uses a fixed template (Status / Date /
 Context / Decision / Consequences / Trade-offs / Alternatives considered),
 and describes behavior that is actually implemented — no aspirational
 architecture.
@@ -25,8 +25,9 @@ architecture.
 | [008](008-synthetic-enterprise-corpus.md) | Synthetic AcmeCorp corpus | A fictional internal-policy corpus replaces tutorial pages so the enterprise features operate on enterprise-shaped content. |
 | [009](009-eval-harness.md) | Deterministic eval harness | Behavioral evals with deterministic checks (stop reasons, provenance, counters, substrings); not run in CI. |
 | [010](010-prompt-injection-defense.md) | Prompt-injection defense | The generation prompt explicitly treats retrieved content as untrusted evidence, never as instructions — a first-line mitigation, not a complete solution. |
-| [011](011-web-fallback-policy.md) | Configurable web-fallback policy | `WEB_FALLBACK_POLICY` (conservative/aggressive/disabled, default conservative): answer from remaining relevant local docs first; web fallback only when none remain. |
+| [011](011-web-fallback-policy.md) | Configurable web-fallback policy | `WEB_FALLBACK_POLICY` (conservative/aggressive/disabled) controls when retrieval paths escalate to web; the default conservative policy is local-first, and disabled blocks local-path fallback with a caveat. |
 | [012](012-prompt-injection-hardening.md) | Prompt-injection hardening | Extends ADR 010: Security rules on the control-plane chains (router/graders/rewriter), explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters in the generation context, and deterministic graph-level containment tests. |
+| [013](013-eval-harness-v2-expansion.md) | Eval harness v2 expansion | Extends ADR 009: 24-row/6-category dataset (adds `multi_document`, `policy_fallback`), richer deterministic checks (AND/OR contains, not-contains, source titles, min-local-sources, web-search-count, policy), and metadata-only history + delta tracking; still deterministic, still not in CI. |
 
 ## Conventions
 

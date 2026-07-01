@@ -116,7 +116,7 @@ type, never the message.
 
 ```powershell
 # Always work from the project root
-cd "C:\Agentic AI\LangGraph\Agentic_RAG_Claude"
+cd "<your-local-repo-path>"
 
 # Set up the environment (creates .venv, writes uv.lock)
 uv sync --group dev
