@@ -17,7 +17,8 @@ UNSUPPORTED_INTENT_NOTE = (
     "Sorry — the Office Agent can't handle that request. Right now it answers "
     "enterprise knowledge and policy questions from the internal knowledge base, "
     "summarizes your inbox, looks up your calendar, helps with tickets and tasks, "
-    "gives you a daily briefing, and prepares you for a meeting (meeting prep). "
+    "gives you a daily briefing, prepares you for a meeting (meeting prep), and "
+    "handles approval workflows (workflow / approval agent). "
     "Try rephrasing toward one of those."
 )
 

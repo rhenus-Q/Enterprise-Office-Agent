@@ -4,8 +4,9 @@ Demo: Office Agent v1 (deterministic, local-only).
 Runs a few requests through `office_agent.engine.answer_office_request` and
 prints the selected intent and response for each. By default it exercises only
 the local mock capabilities (Daily Briefing, Email Summary, Calendar Lookup,
-Task / Ticket Assistant, Meeting Agent / Meeting Prep) plus one unsupported
-request — no API keys, no external services, no Chroma index required.
+Task / Ticket Assistant, Meeting Agent / Meeting Prep, Workflow / Approval Agent)
+plus one unsupported request — no API keys, no external services, no Chroma index
+required.
 
 Usage:
     uv run python scripts/demo_office_agent_v1.py
@@ -37,6 +38,7 @@ DEFAULT_REQUESTS = [
     ("Calendar Lookup", "what meetings do I have today?"),
     ("Task / Ticket Assistant", "show blocked tickets"),
     ("Meeting Agent / Meeting Prep", "prepare me for my next meeting"),
+    ("Workflow / Approval Agent", "show pending approvals"),
     ("Unsupported request", "order lunch for the team"),
 ]
 

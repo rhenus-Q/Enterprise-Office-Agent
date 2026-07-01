@@ -1,0 +1,66 @@
+[
+  {
+    "id": "AUD-001",
+    "approval_id": "APR-001",
+    "action": "created",
+    "actor": "manager@acmecorp.example",
+    "timestamp": "2026-07-01T09:15:00",
+    "note": "VPN split-tunnel exception requested for the onboarding cohort."
+  },
+  {
+    "id": "AUD-002",
+    "approval_id": "APR-001",
+    "action": "commented",
+    "actor": "employee@acmecorp.example",
+    "timestamp": "2026-07-01T11:20:00",
+    "note": "Requested confirmation of the exception end date before approving."
+  },
+  {
+    "id": "AUD-003",
+    "approval_id": "APR-005",
+    "action": "created",
+    "actor": "legal@acmecorp.example",
+    "timestamp": "2026-06-28T11:00:00",
+    "note": "Audit-log export requested under the data retention policy."
+  },
+  {
+    "id": "AUD-004",
+    "approval_id": "APR-005",
+    "action": "approved",
+    "actor": "compliance@acmecorp.example",
+    "timestamp": "2026-06-29T09:05:00",
+    "note": "Export approved; scope limited to the requested date range."
+  },
+  {
+    "id": "AUD-005",
+    "approval_id": "APR-007",
+    "action": "rejected",
+    "actor": "employee@acmecorp.example",
+    "timestamp": "2026-06-27T10:30:00",
+    "note": "Duplicate reimbursement; original request already in flight."
+  },
+  {
+    "id": "AUD-006",
+    "approval_id": "APR-008",
+    "action": "rejected",
+    "actor": "finance@acmecorp.example",
+    "timestamp": "2026-06-26T09:50:00",
+    "note": "Booking exceeds the expense policy cap; resubmit within policy."
+  },
+  {
+    "id": "AUD-007",
+    "approval_id": "APR-004",
+    "action": "escalated",
+    "actor": "security-team@acmecorp.example",
+    "timestamp": "2026-06-30T08:15:00",
+    "note": "Escalated to security review ahead of the Sev-1 runbook change."
+  },
+  {
+    "id": "AUD-008",
+    "approval_id": "APR-010",
+    "action": "cancelled",
+    "actor": "manager@acmecorp.example",
+    "timestamp": "2026-07-01T08:00:00",
+    "note": "Buddy assignment handled out of band; approval no longer needed."
+  }
+]

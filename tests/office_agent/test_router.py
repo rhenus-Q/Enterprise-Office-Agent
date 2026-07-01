@@ -15,6 +15,7 @@ from office_agent.schemas import (
     INTENT_MEETING_AGENT,
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
+    INTENT_WORKFLOW_APPROVAL,
 )
 
 # Obvious enterprise knowledge / policy / document questions (from the spec).
@@ -58,6 +59,21 @@ TICKET_REQUESTS = [
     "create a follow-up task for the VPN ticket",
 ]
 
+# Obvious workflow / approval requests (Phase 7, from the spec). These must route
+# to the Workflow / Approval Agent, ahead of the ticket/task and knowledge rules.
+WORKFLOW_REQUESTS = [
+    "show pending approvals",
+    "which approvals are assigned to me?",
+    "show urgent approvals",
+    "what is the status of APR-001?",
+    "approve APR-001",
+    "reject APR-002",
+    "create a follow-up task for APR-001",
+    "show audit log for APR-001",
+    "show expense approvals",
+    "show VPN approvals",
+]
+
 # Obvious meeting-prep requests (Phase 6, from the spec). These must route to the
 # Meeting Agent, NOT to the broad calendar lookup.
 MEETING_REQUESTS = [
@@ -66,7 +82,7 @@ MEETING_REQUESTS = [
     "what should I bring up in the VPN rollout meeting?",
     "summarize context for my next meeting",
     "prep me for the security review board",
-    "meeting prep for expense approvals",
+    "meeting prep for the budget workshop",
     "what should I bring up in my meeting?",
 ]
 
@@ -120,6 +136,13 @@ def test_ticket_requests_route_to_ticket_assistant(request_text):
     assert routed.reason
 
 
+@pytest.mark.parametrize("request_text", WORKFLOW_REQUESTS)
+def test_workflow_requests_route_to_workflow_approval(request_text):
+    routed = route_request(request_text)
+    assert routed.intent == INTENT_WORKFLOW_APPROVAL
+    assert routed.reason
+
+
 @pytest.mark.parametrize("request_text", MEETING_REQUESTS)
 def test_meeting_prep_requests_route_to_meeting_agent(request_text):
     routed = route_request(request_text)
@@ -150,6 +173,19 @@ def test_meeting_prep_and_calendar_lookup_are_distinguished():
     assert route_request("what is my next meeting?").intent == INTENT_CALENDAR_LOOKUP
 
 
+def test_workflow_approval_and_ticket_assistant_are_distinguished():
+    # Plain task/ticket requests (no approval id, no approval keyword) stay on the
+    # Task / Ticket Assistant...
+    assert route_request("show my tasks").intent == INTENT_TICKET_ASSISTANT
+    assert route_request("create a task from TICK-001").intent == INTENT_TICKET_ASSISTANT
+    # ...but an approval id or an explicit approval word routes to Workflow / Approval.
+    assert route_request("create a follow-up task for APR-001").intent == INTENT_WORKFLOW_APPROVAL
+    assert route_request("approve APR-001").intent == INTENT_WORKFLOW_APPROVAL
+    assert route_request("show expense approvals").intent == INTENT_WORKFLOW_APPROVAL
+    # A plain policy question is still Knowledge Q&A (not an approval request).
+    assert route_request("what is the expense policy?").intent == INTENT_KNOWLEDGE_QA
+
+
 def test_router_is_case_insensitive():
     assert route_request("WHAT IS THE VPN POLICY?").intent == INTENT_KNOWLEDGE_QA
     assert route_request("SUMMARIZE MY INBOX").intent == INTENT_EMAIL_SUMMARY
@@ -157,3 +193,5 @@ def test_router_is_case_insensitive():
     assert route_request("SHOW OPEN TICKETS").intent == INTENT_TICKET_ASSISTANT
     assert route_request("GIVE ME MY DAILY BRIEFING").intent == INTENT_DAILY_BRIEFING
     assert route_request("PREPARE ME FOR MY NEXT MEETING").intent == INTENT_MEETING_AGENT
+    assert route_request("SHOW PENDING APPROVALS").intent == INTENT_WORKFLOW_APPROVAL
+    assert route_request("APPROVE APR-001").intent == INTENT_WORKFLOW_APPROVAL
