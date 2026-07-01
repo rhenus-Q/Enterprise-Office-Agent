@@ -16,9 +16,18 @@ from office_agent.schemas import (
     INTENT_MEETING_AGENT,
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
+    INTENT_WORKFLOW_APPROVAL,
     ToolResult,
 )
-from office_agent.tools import briefing, calendar, email, knowledge, meeting, tickets
+from office_agent.tools import (
+    approvals,
+    briefing,
+    calendar,
+    email,
+    knowledge,
+    meeting,
+    tickets,
+)
 
 
 def _guard(tool_label):
@@ -49,6 +58,7 @@ def test_knowledge_qa_request_dispatches_to_knowledge_tool(monkeypatch):
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
     monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
     monkeypatch.setattr(meeting, "prepare_meeting", _guard("meeting"))
+    monkeypatch.setattr(approvals, "handle_approval_request", _guard("approval"))
 
     response = engine.answer_office_request("What is the VPN access policy?")
 
@@ -73,6 +83,7 @@ def test_email_summary_request_dispatches_to_email_tool(monkeypatch):
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
     monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
     monkeypatch.setattr(meeting, "prepare_meeting", _guard("meeting"))
+    monkeypatch.setattr(approvals, "handle_approval_request", _guard("approval"))
 
     response = engine.answer_office_request("summarize my unread emails")
 
@@ -95,6 +106,7 @@ def test_calendar_lookup_request_dispatches_to_calendar_tool(monkeypatch):
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
     monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
     monkeypatch.setattr(meeting, "prepare_meeting", _guard("meeting"))
+    monkeypatch.setattr(approvals, "handle_approval_request", _guard("approval"))
 
     response = engine.answer_office_request("what meetings do I have today?")
 
@@ -117,6 +129,7 @@ def test_ticket_assistant_request_dispatches_to_ticket_tool(monkeypatch):
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
     monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
     monkeypatch.setattr(meeting, "prepare_meeting", _guard("meeting"))
+    monkeypatch.setattr(approvals, "handle_approval_request", _guard("approval"))
 
     response = engine.answer_office_request("show open tickets")
 
@@ -139,6 +152,7 @@ def test_daily_briefing_request_dispatches_to_briefing_tool(monkeypatch):
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
     monkeypatch.setattr(meeting, "prepare_meeting", _guard("meeting"))
+    monkeypatch.setattr(approvals, "handle_approval_request", _guard("approval"))
 
     response = engine.answer_office_request("give me my daily briefing")
 
@@ -161,6 +175,7 @@ def test_meeting_agent_request_dispatches_to_meeting_tool(monkeypatch):
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
     monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
+    monkeypatch.setattr(approvals, "handle_approval_request", _guard("approval"))
 
     response = engine.answer_office_request("prepare me for my next meeting")
 
@@ -170,6 +185,29 @@ def test_meeting_agent_request_dispatches_to_meeting_tool(monkeypatch):
     assert response.content == "MEETING PREP"
 
 
+def test_workflow_approval_request_dispatches_to_approval_tool(monkeypatch):
+    calls = []
+
+    def fake_tool(query):
+        calls.append(query)
+        return ToolResult(tool=INTENT_WORKFLOW_APPROVAL, content="APPROVAL SUMMARY")
+
+    monkeypatch.setattr(approvals, "handle_approval_request", fake_tool)
+    monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
+    monkeypatch.setattr(email, "summarize_emails", _guard("email"))
+    monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
+    monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
+    monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
+    monkeypatch.setattr(meeting, "prepare_meeting", _guard("meeting"))
+
+    response = engine.answer_office_request("show pending approvals")
+
+    assert calls == ["show pending approvals"]
+    assert response.intent == INTENT_WORKFLOW_APPROVAL
+    assert response.tool == INTENT_WORKFLOW_APPROVAL
+    assert response.content == "APPROVAL SUMMARY"
+
+
 def test_unknown_request_returns_unsupported_message_without_calling_any_tool(monkeypatch):
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
@@ -177,6 +215,7 @@ def test_unknown_request_returns_unsupported_message_without_calling_any_tool(mo
     monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
     monkeypatch.setattr(briefing, "generate_daily_briefing", _guard("briefing"))
     monkeypatch.setattr(meeting, "prepare_meeting", _guard("meeting"))
+    monkeypatch.setattr(approvals, "handle_approval_request", _guard("approval"))
 
     response = engine.answer_office_request("order lunch for the team")
 

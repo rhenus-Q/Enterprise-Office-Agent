@@ -28,7 +28,7 @@ failure handling, evals). This root document is the repository-level overview.
 │   ├── ingestion.py             #   KB build: load local Markdown corpus → split → embed → persist to Chroma
 │   ├── data/acmecorp_internal_docs/  #   Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 │   └── graph/                   #   StateGraph, nodes, chains, engine, config, state, consts, formatting
-├── office_agent/                # ✅ Enterprise Office Agent v1.5 (router + Knowledge Q&A + mock Email/Calendar/Ticket-Task/Daily-Briefing/Meeting-Prep)
+├── office_agent/                # ✅ Enterprise Office Agent v1.5 (router + Knowledge Q&A + mock Email/Calendar/Ticket-Task/Daily-Briefing/Meeting-Prep/Workflow-Approval)
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
 │   └── adr/                     # Architecture Decision Records 001–015 (repo-level; index in docs/adr/README.md)
@@ -73,8 +73,9 @@ handling, and citations — see **[`enterprise_rag/README.md`](enterprise_rag/RE
 - **[`structure.md`](structure.md)** — architecture deep-dive: the full workflow,
   state machine, routing, and module boundaries.
 - **[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md)** — Office Agent
-  demo & usage: the capabilities (including the v1.5 Meeting Agent / Meeting
-  Prep), intents, the programmatic API, and example requests.
+  demo & usage: the capabilities (including the v1.5 Meeting Agent / Meeting Prep
+  and Workflow / Approval Agent), intents, the programmatic API, and example
+  requests.
 - **[`docs/adr/`](docs/adr/README.md)** — Architecture Decision Records: *why* the
   code is the way it is (context, decision, consequences, trade-offs, alternatives).
   The package refactor that introduced this module layout is
@@ -85,8 +86,9 @@ handling, and citations — see **[`enterprise_rag/README.md`](enterprise_rag/RE
 ### Try the Office Agent
 
 ```powershell
-# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep, Unknown).
-# Deterministic and offline — no API keys or external services required.
+# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep,
+# Workflow / Approval, Unknown). Deterministic and offline — no API keys or
+# external services required.
 uv run python scripts/demo_office_agent_v1.py
 ```
 
