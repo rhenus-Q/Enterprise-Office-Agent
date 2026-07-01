@@ -9,13 +9,13 @@ from dotenv import load_dotenv
 # constructed at runtime, so .env must be loaded before the graph runs.
 load_dotenv()
 
-from graph.config import web_search_enabled
-from graph.engine import answer_question
+from enterprise_rag.graph.config import web_search_enabled
+from enterprise_rag.graph.engine import answer_question
 
-# Presentation lives in graph/formatting.py (shared with the eval harness and
+# Presentation lives in enterprise_rag/graph/formatting.py (shared with the eval harness and
 # the engine). Re-exported here so existing imports `from main import ...`
 # keep working.
-from graph.formatting import (
+from enterprise_rag.graph.formatting import (
     BUDGET_EXHAUSTED_NOTE,
     GENERATION_ERROR_NOTE,
     LOCAL_SOURCE_FALLBACK_LABEL,

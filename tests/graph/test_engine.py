@@ -12,18 +12,18 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
-from graph.config import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
+from enterprise_rag.graph.config import (
     WEB_FALLBACK_AGGRESSIVE,
     WEB_FALLBACK_CONSERVATIVE,
     WEB_FALLBACK_DISABLED,
     normalize_web_fallback_policy,
 )
-from graph.consts import GENERATE, RETRIEVE, WEBSEARCH
-from graph.engine import AnswerOptions, AnswerResult, answer_question, seed_state
-from graph.graph import decide_to_generate, grade_generation
-from graph.state import GraphState
+from enterprise_rag.graph.consts import GENERATE, RETRIEVE, WEBSEARCH
+from enterprise_rag.graph.engine import AnswerOptions, AnswerResult, answer_question, seed_state
+from enterprise_rag.graph.graph import decide_to_generate, grade_generation
+from enterprise_rag.graph.state import GraphState
 
 # ---------------------------------------------------------------------------
 # normalize_web_fallback_policy
@@ -317,11 +317,11 @@ def test_grade_generation_state_policy_wins_over_environment(monkeypatch):
 def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", "rel-2", "irrel")):
     """Mock every external seam; per-chunk relevance comes from a content map."""
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
     monkeypatch.setattr(
         retrieve_module,
@@ -457,7 +457,7 @@ def test_trace_stream_merge_final_state_equals_invoke():
     plain last-value overwrite (no reducers). Uses the same _FakeApp already
     exercised above so there is no extra mocking surface.
     """
-    from graph.engine import _run_graph_with_trace
+    from enterprise_rag.graph.engine import _run_graph_with_trace
 
     seed = seed_state("Q")
     final_fields = {

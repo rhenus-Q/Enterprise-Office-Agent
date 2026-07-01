@@ -16,9 +16,9 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.consts import RETRIEVE
-from graph.engine import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.consts import RETRIEVE
+from enterprise_rag.graph.engine import (
     QUESTION_PREVIEW_MAX_CHARS,
     AnswerOptions,
     _redact_secrets,
@@ -370,10 +370,10 @@ def test_trace_preview_is_truncated_to_max_chars(monkeypatch, tmp_path):
 def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
     # A secret in the question must not reach the outbound web-search query, and
     # redaction must not flip web_search_enabled or the fallback policy.
-    from graph.consts import WEBSEARCH
+    from enterprise_rag.graph.consts import WEBSEARCH
 
-    web_module = importlib.import_module("graph.nodes.web_search")
-    generate_module = importlib.import_module("graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
 
     web_calls = []
 
@@ -431,10 +431,10 @@ def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
 
 
 def _patch_node_seams(monkeypatch):
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
 
     monkeypatch.setattr(
         retrieve_module,

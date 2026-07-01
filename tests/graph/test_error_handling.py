@@ -15,18 +15,18 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.consts import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.consts import (
     RETRIEVE,
     STOP_REASON_GENERATION_ERROR,
     STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_ERROR,
 )
-from graph.graph import grade_generation
-from graph.nodes.clear_transient_tool_error import clear_transient_tool_error
-from graph.nodes.generate import GENERATION_FAILED_ANSWER
-from graph.nodes.tool_error_notice import tool_error_notice
+from enterprise_rag.graph.graph import grade_generation
+from enterprise_rag.graph.nodes.clear_transient_tool_error import clear_transient_tool_error
+from enterprise_rag.graph.nodes.generate import GENERATION_FAILED_ANSWER
+from enterprise_rag.graph.nodes.tool_error_notice import tool_error_notice
 from main import (
     GENERATION_ERROR_NOTE,
     RETRIEVAL_ERROR_NOTE,
@@ -121,11 +121,11 @@ def _patch_all_node_seams(
 ):
     """Mock every external seam; returns the recorded web-search payloads."""
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
     def fake_retrieve(q):
         if retriever_raises:
@@ -379,7 +379,7 @@ def test_app_successful_web_answer_clears_transient_grading_tool_error(monkeypat
     _patch_graders(monkeypatch, grounded=True, useful=True)
     _patch_all_node_seams(monkeypatch)
 
-    web_module = importlib.import_module("graph.nodes.web_search")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
     monkeypatch.setattr(
         web_module,
         "get_web_search_tool",

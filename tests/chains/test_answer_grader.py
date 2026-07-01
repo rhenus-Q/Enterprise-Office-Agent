@@ -13,7 +13,7 @@ on-topic vs. off-topic.
 
 import pytest
 
-from graph.chains.answer_grader import GradeAnswer, answer_grader
+from enterprise_rag.graph.chains.answer_grader import GradeAnswer, answer_grader
 from tests.conftest import requires_openai
 
 # (question, generation) answer actually addresses the question -> expect answers_question == True

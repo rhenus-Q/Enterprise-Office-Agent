@@ -20,22 +20,22 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
-from graph.config import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
+from enterprise_rag.graph.config import (
     WEB_FALLBACK_AGGRESSIVE,
     WEB_FALLBACK_CONSERVATIVE,
     WEB_FALLBACK_DISABLED,
     web_fallback_policy,
 )
-from graph.consts import (
+from enterprise_rag.graph.consts import (
     GENERATE,
     RETRIEVE,
     STOP_REASON_WEB_FALLBACK_DISABLED,
     WEBSEARCH,
 )
-from graph.graph import decide_to_generate, grade_generation
-from graph.nodes.web_fallback_disabled_notice import web_fallback_disabled_notice
+from enterprise_rag.graph.graph import decide_to_generate, grade_generation
+from enterprise_rag.graph.nodes.web_fallback_disabled_notice import web_fallback_disabled_notice
 from main import WEB_FALLBACK_DISABLED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
@@ -262,11 +262,11 @@ def test_format_answer_appends_fallback_policy_caveat():
 def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", "rel-2", "irrel")):
     """Mock every external seam; per-chunk relevance comes from a content map."""
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
     monkeypatch.setattr(
         retrieve_module,

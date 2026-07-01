@@ -13,13 +13,13 @@ Pure string assertions on the prompt modules — importing them is
 side-effect-free by design, so no API keys or network are required.
 """
 
-from graph.chains.answer_grader import system_prompt as answer_grader_prompt
-from graph.chains.hallucination_grader import (
+from enterprise_rag.graph.chains.answer_grader import system_prompt as answer_grader_prompt
+from enterprise_rag.graph.chains.hallucination_grader import (
     system_prompt as hallucination_grader_prompt,
 )
-from graph.chains.query_rewriter import system_prompt as query_rewriter_prompt
-from graph.chains.question_router import system_prompt as question_router_prompt
-from graph.chains.retrieval_grader import system_prompt as retrieval_grader_prompt
+from enterprise_rag.graph.chains.query_rewriter import system_prompt as query_rewriter_prompt
+from enterprise_rag.graph.chains.question_router import system_prompt as question_router_prompt
+from enterprise_rag.graph.chains.retrieval_grader import system_prompt as retrieval_grader_prompt
 
 # ---------------------------------------------------------------------------
 # Shared concepts every hardened chain must state

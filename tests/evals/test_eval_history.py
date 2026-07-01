@@ -771,8 +771,8 @@ def _mock_graph_modules(monkeypatch):
     mock_formatting = MagicMock()
     mock_formatting.format_answer.return_value = "Mock answer."
 
-    monkeypatch.setitem(sys.modules, "graph.engine", mock_engine)
-    monkeypatch.setitem(sys.modules, "graph.formatting", mock_formatting)
+    monkeypatch.setitem(sys.modules, "enterprise_rag.graph.engine", mock_engine)
+    monkeypatch.setitem(sys.modules, "enterprise_rag.graph.formatting", mock_formatting)
 
     return mock_engine
 

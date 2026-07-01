@@ -13,14 +13,14 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.consts import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.consts import (
     RETRIEVE,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL,
 )
-from graph.graph import MAX_RETRIES, grade_generation
-from graph.nodes.max_retries_notice import (
+from enterprise_rag.graph.graph import MAX_RETRIES, grade_generation
+from enterprise_rag.graph.nodes.max_retries_notice import (
     max_retries_not_grounded_notice,
     max_retries_not_useful_notice,
 )
@@ -73,10 +73,10 @@ def _generation_state(**overrides):
 def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
     """Mock every external seam; returns the recorded web-search invocations."""
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
 
     monkeypatch.setattr(
         retrieve_module,
@@ -108,7 +108,7 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=web_relevant)),
     )
 
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
     monkeypatch.setattr(
         rewrite_module,
         "get_query_rewriter",

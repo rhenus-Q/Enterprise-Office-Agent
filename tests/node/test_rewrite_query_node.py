@@ -1,5 +1,5 @@
 """
-Unit tests for the rewrite_query node (graph/nodes/rewrite_query.py).
+Unit tests for the rewrite_query node (enterprise_rag/graph/nodes/rewrite_query.py).
 
 The query rewriter chain is mocked via monkeypatch (patching
 get_query_rewriter), so no real OpenAI call happens. Tests focus on node
@@ -8,13 +8,13 @@ state input/output and on graceful degradation when the rewriter fails.
 
 import importlib
 
-from graph.consts import STOP_REASON_TOOL_ERROR
-from graph.nodes.rewrite_query import rewrite_query
+from enterprise_rag.graph.consts import STOP_REASON_TOOL_ERROR
+from enterprise_rag.graph.nodes.rewrite_query import rewrite_query
 
-# graph/nodes/__init__.py re-exports the `rewrite_query` function under the same
-# name as its submodule, so `import graph.nodes.rewrite_query as ...` would bind
+# enterprise_rag/graph/nodes/__init__.py re-exports the `rewrite_query` function under the same
+# name as its submodule, so `import enterprise_rag.graph.nodes.rewrite_query as ...` would bind
 # the function, not the module. Resolve the real module for monkeypatching.
-rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
 
 def _patch_rewriter(monkeypatch, new_query="rewritten query"):
