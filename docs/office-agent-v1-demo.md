@@ -1,9 +1,14 @@
 # Office Agent v1 — demo & usage
 
 Office Agent v1 is a small, deterministic assistant that routes a free-text
-request to one of five capabilities and returns a structured response. It lives
+request to one of its capabilities and returns a structured response. It lives
 in [`office_agent/`](../office_agent/) and is the office-automation companion to
 the completed [`enterprise_rag`](../enterprise_rag/README.md) engine.
+
+> **v1.5 (Phase 6)** adds a **Meeting Agent / Meeting Prep** capability
+> (`meeting_agent`) — an advanced *composition* tool that combines the local
+> calendar, inbox, and ticket/task mock data into one deterministic meeting-prep
+> sheet. See [Meeting Agent / Meeting Prep](#meeting-agent--meeting-prep) below.
 
 Everything except Knowledge Q&A is **local, mock-data-backed, and LLM-free**, so
 most of it demos with no API keys and no external services.
@@ -20,13 +25,18 @@ request into one **intent**, and the engine dispatches to exactly one tool:
 | `calendar_lookup` | Calendar / meetings | Local mock `mock_data/calendar_events.json` |
 | `ticket_assistant` | Tickets & tasks | Local mock `mock_data/tickets.json` + `tasks.json` |
 | `daily_briefing` | Aggregated morning briefing | Aggregates the email + calendar + ticket mock data |
+| `meeting_agent` | Meeting prep (composition) | Combines the calendar + email + ticket/task mock data for one meeting |
 | `unknown` | Unsupported request | Returns a safe "can't do that" message; no tool runs |
 
-Routing precedence is `email → calendar → ticket/task → daily_briefing →
-knowledge → unknown`: an explicit tool-specific request wins, a broad "brief me /
-what should I focus on" request goes to Daily Briefing, and a policy/document
-question falls to Knowledge Q&A. There is **no LLM router** — routing is pure
-keyword matching, so it is fast, offline, and fully reproducible.
+Routing precedence is `email → ticket/task → meeting_agent → calendar →
+daily_briefing → knowledge → unknown`: an explicit channel request (email, then
+ticket/task) wins first; meeting-*prep* semantics ("prepare me for…", "meeting
+prep", "bring up", "agenda") are matched before the broad calendar keywords so a
+plain lookup like "what meetings do I have today?" still routes to Calendar
+Lookup; a broad "brief me / what should I focus on" request goes to Daily
+Briefing; and a policy/document question falls to Knowledge Q&A. There is **no
+LLM router** — routing is pure keyword matching, so it is fast, offline, and
+fully reproducible.
 
 ## Programmatic usage
 
@@ -52,13 +62,15 @@ Knowledge Q&A, which carries through the `enterprise_rag` caveats and sources).
 | `"summarize unread emails"` | `email_summary` |
 | `"what meetings do I have today?"` | `calendar_lookup` |
 | `"show blocked tickets"` | `ticket_assistant` |
+| `"prepare me for my next meeting"` | `meeting_agent` |
+| `"what should I bring up in the VPN rollout meeting?"` | `meeting_agent` |
 | `"what is the VPN access policy?"` | `knowledge_qa` |
 | `"order lunch for the team"` | `unknown` |
 
 ## Run the demo script
 
 ```powershell
-# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Unknown).
+# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep, Unknown).
 # No API keys, no external services, no Chroma index required.
 uv run python scripts/demo_office_agent_v1.py
 
@@ -78,8 +90,8 @@ Enterprise RAG pipeline.
   enterprise_rag.ingestion`) and **API keys** (`OPENAI_API_KEY`, and `TAVILY_API_KEY`
   when web search is enabled). See
   [`enterprise_rag/README.md`](../enterprise_rag/README.md).
-- **Email Summary, Calendar Lookup, Task / Ticket Assistant, and Daily Briefing**
-  read static fictional JSON in
+- **Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing, and
+  Meeting Agent / Meeting Prep** read static fictional JSON in
   [`office_agent/mock_data/`](../office_agent/mock_data/). No network, no keys, no
   LLM.
 
@@ -107,6 +119,37 @@ other tools' pure helpers to assemble one concise briefing:
 - **Tickets & tasks** — open / high-priority / blocked / assigned-to-me ticket
   counts and open/linked task counts, from the Ticket tool's loaders.
 - **Recommended focus** — a short, deterministic list derived from the above.
+
+## Meeting Agent / Meeting Prep
+
+Meeting Agent (`meeting_agent`, added in v1.5 / Phase 6) is an advanced
+**composition** capability: like Daily Briefing it reuses the other tools' pure
+helpers rather than reimplementing them, but it is *scoped to a single selected
+meeting* and produces a focused prep sheet. It is **local-only, LLM-free, and
+never calls the Enterprise RAG pipeline** — the "relevant knowledge areas" it
+lists are inferred deterministically from labels, not retrieved from the corpus.
+
+**Meeting selection** (deterministic, never the system clock):
+
+- a request mentioning **"next"** picks the earliest-starting event (the calendar
+  tool's `next_meeting`);
+- otherwise the meeting whose **title words / labels best match** the request is
+  chosen (`"prep me for the security review board"` → *Security review board*),
+  ties broken by earliest start;
+- if nothing matches, it **falls back to the next meeting**.
+
+**The prep sheet** contains, for the selected meeting: the meeting metadata; up
+to three **relevant emails** (subject + sender only, high-importance /
+response-needed / unread / newest first); up to three **relevant tickets/tasks**
+(high-priority / active / assigned-to-me / label match first); inferred
+**relevant knowledge areas**; a **suggested agenda** (3–5 deterministic items); a
+**risks / blockers** list (schedule conflicts with the selected meeting, plus
+relevant blocked tickets); and **recommended follow-ups**. Output is concise,
+bounded, and identical on every run.
+
+Example requests: `"prepare me for my next meeting"`, `"generate meeting prep"`,
+`"what should I bring up in the VPN rollout meeting?"`, `"prep me for the security
+review board"`, `"meeting prep for expense approvals"`.
 
 See [ADR 015](adr/015-office-agent-v1-architecture.md) for the full architecture
 decision behind Office Agent v1.

@@ -3,9 +3,9 @@ office_agent.schemas — lightweight typed structures for the Office Agent.
 
 A user request, the router's routed intent, a tool result, and the final
 office-agent response. Intentionally minimal — plain dataclasses, no behavior.
-As of Phase 5 (Office Agent v1) six intents exist (`knowledge_qa`,
+As of Phase 6 (Office Agent v1.5) seven intents exist (`knowledge_qa`,
 `email_summary`, `calendar_lookup`, `ticket_assistant`, `daily_briefing`,
-`unknown`).
+`meeting_agent`, `unknown`).
 """
 
 from dataclasses import dataclass, field
@@ -17,6 +17,7 @@ INTENT_EMAIL_SUMMARY = "email_summary"
 INTENT_CALENDAR_LOOKUP = "calendar_lookup"
 INTENT_TICKET_ASSISTANT = "ticket_assistant"
 INTENT_DAILY_BRIEFING = "daily_briefing"
+INTENT_MEETING_AGENT = "meeting_agent"
 INTENT_UNKNOWN = "unknown"
 
 # Every intent the Office Agent can currently produce.
@@ -26,6 +27,7 @@ OFFICE_INTENTS = (
     INTENT_CALENDAR_LOOKUP,
     INTENT_TICKET_ASSISTANT,
     INTENT_DAILY_BRIEFING,
+    INTENT_MEETING_AGENT,
     INTENT_UNKNOWN,
 )
 
