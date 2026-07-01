@@ -29,6 +29,7 @@ architecture.
 | [012](012-prompt-injection-hardening.md) | Prompt-injection hardening | Extends ADR 010: Security rules on the control-plane chains (router/graders/rewriter), explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters in the generation context, and deterministic graph-level containment tests. |
 | [013](013-eval-harness-v2-expansion.md) | Eval harness v2 expansion | Extends ADR 009: 24-row/6-category dataset (adds `multi_document`, `policy_fallback`), richer deterministic checks (AND/OR contains, not-contains, source titles, min-local-sources, web-search-count, policy), and metadata-only history + delta tracking; still deterministic, still not in CI. |
 | [014](014-enterprise-rag-package-and-office-agent-placeholder.md) | `enterprise_rag` package + `office_agent` placeholder | The completed RAG implementation moved under `enterprise_rag/`; `office_agent/` is a reserved empty placeholder; root docs stay repo-level; historical ADRs are preserved, not moved or rewritten. No runtime behavior change. |
+| [015](015-office-agent-v1-architecture.md) | Office Agent v1 architecture | The completed Office Agent v1: deterministic keyword intent routing (email → calendar → ticket → daily_briefing → knowledge → unknown), a single `answer_office_request()` entry point, a `ToolResult` tool contract, a Knowledge Q&A adapter over `enterprise_rag` plus local mock email/calendar/ticket tools and a thin Daily Briefing aggregator — all local, read-only, deterministic, and no-LLM/no-external-integration. |
 
 ## Conventions
 
