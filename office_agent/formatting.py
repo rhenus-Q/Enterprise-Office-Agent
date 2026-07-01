@@ -14,10 +14,10 @@ from office_agent.schemas import OfficeAgentResponse
 # capabilities are named so the user gets a clear "not yet" rather than an
 # opaque failure.
 UNSUPPORTED_INTENT_NOTE = (
-    "Sorry — the Office Agent can't handle that request yet. Right now it "
-    "answers enterprise knowledge and policy questions from the internal "
-    "knowledge base, summarizes your inbox, looks up your calendar, and helps "
-    "with tickets and tasks. The daily briefing is planned for a later phase."
+    "Sorry — the Office Agent can't handle that request. Right now it answers "
+    "enterprise knowledge and policy questions from the internal knowledge base, "
+    "summarizes your inbox, looks up your calendar, helps with tickets and tasks, "
+    "and gives you a daily briefing. Try rephrasing toward one of those."
 )
 
 

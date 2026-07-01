@@ -9,6 +9,7 @@ import pytest
 from office_agent.router import route_request
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
+    INTENT_DAILY_BRIEFING,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
     INTENT_TICKET_ASSISTANT,
@@ -56,13 +57,24 @@ TICKET_REQUESTS = [
     "create a follow-up task for the VPN ticket",
 ]
 
-# Unsupported office requests — the router must not claim these.
-# (Email, calendar, and ticket/task requests are handled by their own cases; the
-# daily briefing is still unimplemented, as are generic requests.)
+# Obvious daily-briefing requests (Phase 5, from the spec).
+BRIEFING_REQUESTS = [
+    "give me my daily briefing",
+    "daily briefing",
+    "what should I focus on today?",
+    "summarize my day",
+    "morning briefing",
+    "what is on my plate today?",
+    "brief me for today",
+]
+
+# Unsupported office requests — the router must not claim these. Email, calendar,
+# ticket/task, and briefing requests are handled by their own cases; what remains
+# is genuinely out of scope.
 UNKNOWN_REQUESTS = [
-    "Give me my daily briefing.",
     "order lunch for the team",
     "book a flight to Berlin",
+    "translate this paragraph to German",
     "",
 ]
 
@@ -95,6 +107,13 @@ def test_ticket_requests_route_to_ticket_assistant(request_text):
     assert routed.reason
 
 
+@pytest.mark.parametrize("request_text", BRIEFING_REQUESTS)
+def test_briefing_requests_route_to_daily_briefing(request_text):
+    routed = route_request(request_text)
+    assert routed.intent == INTENT_DAILY_BRIEFING
+    assert routed.reason
+
+
 @pytest.mark.parametrize("request_text", UNKNOWN_REQUESTS)
 def test_unsupported_requests_route_to_unknown(request_text):
     routed = route_request(request_text)
@@ -106,3 +125,4 @@ def test_router_is_case_insensitive():
     assert route_request("SUMMARIZE MY INBOX").intent == INTENT_EMAIL_SUMMARY
     assert route_request("WHAT IS MY NEXT MEETING?").intent == INTENT_CALENDAR_LOOKUP
     assert route_request("SHOW OPEN TICKETS").intent == INTENT_TICKET_ASSISTANT
+    assert route_request("GIVE ME MY DAILY BRIEFING").intent == INTENT_DAILY_BRIEFING
