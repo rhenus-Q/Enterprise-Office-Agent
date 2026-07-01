@@ -12,6 +12,7 @@ from office_agent.schemas import (
     INTENT_DAILY_BRIEFING,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
+    INTENT_MEETING_AGENT,
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
 )
@@ -55,6 +56,18 @@ TICKET_REQUESTS = [
     "show my tasks",
     "create a task from TICK-001",
     "create a follow-up task for the VPN ticket",
+]
+
+# Obvious meeting-prep requests (Phase 6, from the spec). These must route to the
+# Meeting Agent, NOT to the broad calendar lookup.
+MEETING_REQUESTS = [
+    "prepare me for my next meeting",
+    "generate meeting prep",
+    "what should I bring up in the VPN rollout meeting?",
+    "summarize context for my next meeting",
+    "prep me for the security review board",
+    "meeting prep for expense approvals",
+    "what should I bring up in my meeting?",
 ]
 
 # Obvious daily-briefing requests (Phase 5, from the spec).
@@ -107,6 +120,13 @@ def test_ticket_requests_route_to_ticket_assistant(request_text):
     assert routed.reason
 
 
+@pytest.mark.parametrize("request_text", MEETING_REQUESTS)
+def test_meeting_prep_requests_route_to_meeting_agent(request_text):
+    routed = route_request(request_text)
+    assert routed.intent == INTENT_MEETING_AGENT
+    assert routed.reason
+
+
 @pytest.mark.parametrize("request_text", BRIEFING_REQUESTS)
 def test_briefing_requests_route_to_daily_briefing(request_text):
     routed = route_request(request_text)
@@ -120,9 +140,20 @@ def test_unsupported_requests_route_to_unknown(request_text):
     assert routed.intent == INTENT_UNKNOWN
 
 
+def test_meeting_prep_and_calendar_lookup_are_distinguished():
+    # Meeting-*prep* semantics route to the Meeting Agent...
+    assert route_request("prepare me for my next meeting").intent == INTENT_MEETING_AGENT
+    assert route_request("what should I bring up in my meeting?").intent == INTENT_MEETING_AGENT
+    # ...but plain calendar *lookups* still route to Calendar Lookup.
+    assert route_request("what meetings do I have today?").intent == INTENT_CALENDAR_LOOKUP
+    assert route_request("show my calendar today").intent == INTENT_CALENDAR_LOOKUP
+    assert route_request("what is my next meeting?").intent == INTENT_CALENDAR_LOOKUP
+
+
 def test_router_is_case_insensitive():
     assert route_request("WHAT IS THE VPN POLICY?").intent == INTENT_KNOWLEDGE_QA
     assert route_request("SUMMARIZE MY INBOX").intent == INTENT_EMAIL_SUMMARY
     assert route_request("WHAT IS MY NEXT MEETING?").intent == INTENT_CALENDAR_LOOKUP
     assert route_request("SHOW OPEN TICKETS").intent == INTENT_TICKET_ASSISTANT
     assert route_request("GIVE ME MY DAILY BRIEFING").intent == INTENT_DAILY_BRIEFING
+    assert route_request("PREPARE ME FOR MY NEXT MEETING").intent == INTENT_MEETING_AGENT
