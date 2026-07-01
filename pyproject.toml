@@ -69,6 +69,7 @@ files = [
     "enterprise_rag/graph/formatting.py",
     "enterprise_rag/graph/state.py",
     "enterprise_rag/graph/consts.py",
+    "office_agent/",
 ]
 warn_unused_configs = true
 warn_unused_ignores = true
