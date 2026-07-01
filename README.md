@@ -72,10 +72,28 @@ handling, and citations — see **[`enterprise_rag/README.md`](enterprise_rag/RE
   engine: full setup, usage, configuration, and API reference.
 - **[`structure.md`](structure.md)** — architecture deep-dive: the full workflow,
   state machine, routing, and module boundaries.
+- **[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md)** — Office Agent
+  v1 demo & usage: the five capabilities, intents, the programmatic API, and
+  example requests.
 - **[`docs/adr/`](docs/adr/README.md)** — Architecture Decision Records: *why* the
   code is the way it is (context, decision, consequences, trade-offs, alternatives).
   The package refactor that introduced this module layout is
-  [ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md).
+  [ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md);
+  the Office Agent v1 architecture is
+  [ADR 015](docs/adr/015-office-agent-v1-architecture.md).
+
+### Try the Office Agent
+
+```powershell
+# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Unknown).
+# Deterministic and offline — no API keys or external services required.
+uv run python scripts/demo_office_agent_v1.py
+```
+
+Or call it programmatically via `office_agent.engine.answer_office_request(...)`.
+See [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md) for details
+(including the optional `--include-knowledge` flag, which uses the real
+`enterprise_rag` pipeline).
 
 ## Tests and CI
 
