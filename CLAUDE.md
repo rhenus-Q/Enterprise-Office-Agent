@@ -12,15 +12,20 @@ This repository — **Enterprise Office Agent** — is organized as named capabi
   self-correcting Agentic RAG (CRAG-style) workflow. It answers questions from an ingested
   knowledge base and falls back to web search when needed. Public entry point:
   `enterprise_rag.graph.engine.answer_question()`.
-- **`office_agent/`** — 🚧 **planned, not implemented.** An intentionally empty placeholder
-  package for a future office-automation agent. Do **not** build office-agent features unless
-  explicitly asked; when that work starts it lives in `office_agent/` and **must not change or
-  regress `enterprise_rag` behavior or its tests** (same rules as §3: side-effect-free
-  imports, lazy `@lru_cache` external clients).
+- **`office_agent/`** — ✅ **implemented: the Enterprise Office Agent (v1 + v1.5).** A
+  deterministic, LLM-free intent router — entry point `office_agent.engine.answer_office_request(user_input)`
+  — over local capabilities: **Knowledge Q&A** (a thin adapter over the `enterprise_rag`
+  engine), **Email Summary**, **Calendar Lookup**, **Task / Ticket Assistant**, **Daily
+  Briefing**, and (Phase 6 / v1.5) **Meeting Agent / Meeting Prep**. All tools except Knowledge
+  Q&A run on local mock data with no LLM and no external services. Office-agent work **must not
+  change or regress `enterprise_rag` behavior or its tests** (§3 rules apply: side-effect-free
+  imports, lazy `@lru_cache` external clients). See [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md)
+  and [ADR 015](docs/adr/015-office-agent-v1-architecture.md); office-agent working rules are in §3.
 
 Root docs (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) are repository-level;
-detailed engine usage lives in `enterprise_rag/README.md`. The rest of this file is guidance
-for working in `enterprise_rag`.
+detailed engine usage lives in `enterprise_rag/README.md` and `docs/office-agent-v1-demo.md`.
+Most of this file is guidance for working in `enterprise_rag`; office-agent-specific rules are
+called out in §3.
 
 **Stack:** LangGraph, LangChain, OpenAI (`gpt-5-mini`, `OpenAIEmbeddings`), Chroma (vector
 store), Tavily (web search). Managed with **uv**.
@@ -59,7 +64,7 @@ type, never the message.
 | `main.py` | CLI entry point. Loads `.env`, then runs an interactive Q&A loop over `enterprise_rag.graph.engine.answer_question()`. Re-exports the `enterprise_rag/graph/formatting.py` names (`format_answer`, `format_sources`, caveat notes) for backward compatibility. |
 | `enterprise_rag/__init__.py` | Package marker + docstring for the RAG engine. No clients, no side effects. |
 | `enterprise_rag/README.md` | Module-level documentation: detailed engine setup, usage, privacy mode, fallback policy, programmatic API, budgets, and failure handling (the content that used to dominate the root README). |
-| `office_agent/` | Reserved placeholder package for the future Enterprise Office Agent. Docstring-only `__init__.py`; **no features implemented.** Do not add office-agent code unless asked, and never at the cost of `enterprise_rag` behavior/tests. |
+| `office_agent/` | The **Enterprise Office Agent** (v1 + v1.5 Meeting Agent). Deterministic keyword router (`router.py`), `answer_office_request()` entry point (`engine.py`), typed intent constants + `ToolResult` schemas (`schemas.py`), unsupported-intent + presentation (`formatting.py`), and `tools/` — `knowledge` (thin `enterprise_rag` adapter) plus `email`, `calendar`, `tickets`, `briefing`, `meeting` (local mock-data tools). Local-only and LLM-free except the Knowledge Q&A adapter; mock data in `mock_data/` is read-only and anchored to the data (not the system clock). Must never regress `enterprise_rag`. See `docs/office-agent-v1-demo.md` and ADR 015. |
 | `enterprise_rag/graph/engine.py` | Canonical programmatic API: `answer_question(question, options) -> AnswerResult`, `AnswerOptions` (per-run `web_search_enabled` / `web_fallback_policy` / `run_id` / `trace_path` overrides; `None` = env default), and `seed_state()` — the single state-seeding helper shared by CLI, evals, and tests. Also owns the lightweight observability: every run gets a `run_id`, the executed `node_path` + per-step timings + `total_duration_ms` are collected by streaming graph updates (additive — merging the updates reproduces `invoke()`), and `trace_path` optionally writes a metadata-only trace JSON (never `page_content`, prompts, raw state, or keys). |
 | `enterprise_rag/graph/formatting.py` | Shared presentation: `stop_reason` caveats (`STOP_REASON_NOTES`) plus the deterministic `Sources:` section built from `Document` metadata (`format_answer` / `format_sources` / `source_lines`; local corpus vs. `web_search` supplement). Pure — no clients, no env reads. |
 | `enterprise_rag/ingestion.py` | Builds the knowledge base: loads the local Markdown corpus from `enterprise_rag/data/acmecorp_internal_docs/`, splits, embeds, persists to Chroma (idempotent: collection reset + deterministic chunk ids; provenance metadata `source`/`title`/`source_type`/`document_category`). Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
@@ -74,6 +79,7 @@ type, never the message.
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
 | `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
 | `tests/evals/` | Mocked unit tests for the eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
+| `tests/office_agent/` | Unit tests for the Office Agent (router, engine dispatch, and each mock tool). Fully mocked / deterministic — no OpenAI, Tavily, Chroma, or external services; no `enterprise_rag` graph call (the knowledge adapter is patched). No API keys needed. |
 | `evals/` | Behavioral eval harness: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `enterprise_rag.graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. Not part of CI. |
 | `evals/history/` | Append-only, metadata-only eval history records (one JSON per full run; never answer text, `page_content`, prompts, or raw state). The harness only writes new records — never edits/deletes. `evals/history/*.json` is gitignored by default (the dir is tracked via `.gitkeep`); force-add (`git add -f`) to share a known-good baseline. |
 | `docs/adr/` | Architecture Decision Records (001–011) with an index in `docs/adr/README.md`. When a documented decision changes, update or supersede the matching ADR. |
@@ -104,6 +110,20 @@ type, never the message.
   module-level names (e.g. `generation_chain`, `question_router`) remain available via a lazy
   module-level `__getattr__`. Don't reintroduce eager module-level chain objects.
 - Code comments/docstrings are written in **English**.
+- **`office_agent/` working rules.** The Office Agent is deterministic and local by design —
+  keep it that way unless a task explicitly says otherwise:
+  - **No LLM routing.** Classify intents with the existing keyword router + intent constants /
+    typed schemas (`schemas.py`); do not introduce an LLM router.
+  - **Knowledge Q&A goes through the existing adapter over `enterprise_rag`** — never duplicate
+    retrieval/generation/graph logic inside `office_agent`.
+  - **Mock tools stay local-only and deterministic.** Read `office_agent/mock_data/` as
+    **read-only** and anchor dates to the data, **not the system clock**. **No external
+    integrations** (Gmail, Google/Outlook Calendar, Slack, Jira, Linear, Asana, Trello) unless
+    explicitly requested.
+  - Tools return a `ToolResult`; `answer_office_request(user_input)` is the single entry point.
+  - Same discipline as `enterprise_rag`: **side-effect-free imports**, lazy data/client access.
+  - **`office_agent` tests stay fully mocked / CI-safe** — no OpenAI, Tavily, Chroma, or external
+    services, and no real `enterprise_rag` graph call (patch the knowledge adapter).
 
 ## 4. Testing Rules
 

@@ -11,8 +11,8 @@ built alongside it.
 
 | Module | Status | What it is |
 |---|---|---|
-| [`enterprise_rag/`](enterprise_rag/README.md) | ✅ **Implemented** | **Enterprise Document Q&A Engine** (企业文档问答引擎) — a self-correcting Agentic RAG (CRAG-style) LangGraph workflow that answers questions from an ingested internal-document knowledge base, with web-search fallback, privacy mode, quality gates, bounded self-correction, per-run budgets, graceful degradation, and deterministic provenance. |
-| [`office_agent/`](office_agent/) | ✅ **v1 (Phase 5)** | The **Enterprise Office Agent** v1. A deterministic intent router over five local, LLM-free capabilities: a **Knowledge Q&A** tool that adapts the `enterprise_rag` engine, a **mock Email Summary** tool, a **mock Calendar Lookup** tool (today/tomorrow/next meeting/conflicts), a **mock Task / Ticket Assistant** (ticket views + simulated task creation), and a **mock Daily Briefing** that aggregates the email/calendar/ticket mock data (`office_agent.engine.answer_office_request()`); unsupported requests return a clear guidance message. |
+| [`enterprise_rag/`](enterprise_rag/README.md) | ✅ **Implemented** | **Enterprise Document Q&A Engine** — a self-correcting Agentic RAG (CRAG-style) LangGraph workflow that answers questions from an ingested internal-document knowledge base, with web-search fallback, privacy mode, quality gates, bounded self-correction, per-run budgets, graceful degradation, and deterministic provenance. |
+| [`office_agent/`](office_agent/) | ✅ **v1.5 (Phase 6)** | The **Enterprise Office Agent**. A deterministic intent router over six local, LLM-free capabilities: a **Knowledge Q&A** tool that adapts the `enterprise_rag` engine, a **mock Email Summary** tool, a **mock Calendar Lookup** tool (today/tomorrow/next meeting/conflicts), a **mock Task / Ticket Assistant** (ticket views + simulated task creation), a **mock Daily Briefing** that aggregates the email/calendar/ticket mock data, and a **mock Meeting Agent / Meeting Prep** (v1.5) that composes the calendar/email/ticket data into a per-meeting prep sheet (`office_agent.engine.answer_office_request()`); unsupported requests return a clear guidance message. |
 
 The completed engine is fully documented in **[`enterprise_rag/README.md`](enterprise_rag/README.md)**
 (setup, usage, privacy mode, fallback policy, the programmatic engine API, budgets,
@@ -23,12 +23,12 @@ failure handling, evals). This root document is the repository-level overview.
 ```
 .
 ├── main.py                      # CLI entry point: interactive Q&A loop over the enterprise_rag engine
-├── enterprise_rag/              # ✅ Enterprise Document Q&A Engine (企业文档问答引擎) — see enterprise_rag/README.md
+├── enterprise_rag/              # ✅ Enterprise Document Q&A Engine — see enterprise_rag/README.md
 │   ├── README.md                #   Module docs: detailed setup, usage, API, budgets, failure handling
 │   ├── ingestion.py             #   KB build: load local Markdown corpus → split → embed → persist to Chroma
 │   ├── data/acmecorp_internal_docs/  #   Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 │   └── graph/                   #   StateGraph, nodes, chains, engine, config, state, consts, formatting
-├── office_agent/                # ✅ Enterprise Office Agent v1 (router + Knowledge Q&A + mock Email/Calendar/Ticket-Task/Daily-Briefing)
+├── office_agent/                # ✅ Enterprise Office Agent v1.5 (router + Knowledge Q&A + mock Email/Calendar/Ticket-Task/Daily-Briefing/Meeting-Prep)
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
 │   └── adr/                     # Architecture Decision Records 001–015 (repo-level; index in docs/adr/README.md)
@@ -73,8 +73,8 @@ handling, and citations — see **[`enterprise_rag/README.md`](enterprise_rag/RE
 - **[`structure.md`](structure.md)** — architecture deep-dive: the full workflow,
   state machine, routing, and module boundaries.
 - **[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md)** — Office Agent
-  v1 demo & usage: the five capabilities, intents, the programmatic API, and
-  example requests.
+  demo & usage: the capabilities (including the v1.5 Meeting Agent / Meeting
+  Prep), intents, the programmatic API, and example requests.
 - **[`docs/adr/`](docs/adr/README.md)** — Architecture Decision Records: *why* the
   code is the way it is (context, decision, consequences, trade-offs, alternatives).
   The package refactor that introduced this module layout is
@@ -85,7 +85,7 @@ handling, and citations — see **[`enterprise_rag/README.md`](enterprise_rag/RE
 ### Try the Office Agent
 
 ```powershell
-# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Unknown).
+# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep, Unknown).
 # Deterministic and offline — no API keys or external services required.
 uv run python scripts/demo_office_agent_v1.py
 ```
