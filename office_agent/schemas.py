@@ -1,9 +1,9 @@
 """
 office_agent.schemas — lightweight typed structures for the Office Agent.
 
-Phase 1 scope: a user request, the router's routed intent, a tool result, and
-the final office-agent response. Intentionally minimal — plain dataclasses, no
-behavior. Only two intents exist yet (`knowledge_qa`, `unknown`); email /
+A user request, the router's routed intent, a tool result, and the final
+office-agent response. Intentionally minimal — plain dataclasses, no behavior.
+As of Phase 2 three intents exist (`knowledge_qa`, `email_summary`, `unknown`);
 calendar / ticket / task / briefing intents are deliberately NOT defined until
 their own phases land.
 """
@@ -13,10 +13,11 @@ from dataclasses import dataclass, field
 # Routed intents. Keep this in lockstep with the router and the engine dispatch:
 # adding a value here is meaningless until a route rule and a tool back it.
 INTENT_KNOWLEDGE_QA = "knowledge_qa"
+INTENT_EMAIL_SUMMARY = "email_summary"
 INTENT_UNKNOWN = "unknown"
 
 # Every intent the Office Agent can currently produce.
-OFFICE_INTENTS = (INTENT_KNOWLEDGE_QA, INTENT_UNKNOWN)
+OFFICE_INTENTS = (INTENT_KNOWLEDGE_QA, INTENT_EMAIL_SUMMARY, INTENT_UNKNOWN)
 
 
 @dataclass

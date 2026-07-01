@@ -1,20 +1,25 @@
 """
-office_agent.engine — the Office Agent entry point (Phase 1).
+office_agent.engine — the Office Agent entry point.
 
 `answer_office_request(user_input)` routes the request and dispatches to a tool.
-Phase 1 supports exactly one capability — `knowledge_qa`, via the enterprise_rag
-adapter. Any other request routes to `unknown` and returns a clear
-unsupported-intent message. The selected intent is always included in the
-response for observability and testing.
+As of Phase 2 two capabilities are supported — `knowledge_qa` (the enterprise_rag
+adapter) and `email_summary` (the local mock Email Summary tool). Any other
+request routes to `unknown` and returns a clear unsupported-intent message. The
+selected intent is always included in the response for observability and testing.
 
 This is the office-agent analogue of `enterprise_rag.graph.engine`: a single,
-thin dispatch entry point. It deliberately adds no LLM routing and no new
-capabilities yet — those arrive in later phases.
+thin dispatch entry point. It deliberately adds no LLM routing yet — that
+arrives in a later phase.
 """
 
 from office_agent import formatting, router
-from office_agent.schemas import INTENT_KNOWLEDGE_QA, INTENT_UNKNOWN, OfficeAgentResponse
-from office_agent.tools import knowledge
+from office_agent.schemas import (
+    INTENT_EMAIL_SUMMARY,
+    INTENT_KNOWLEDGE_QA,
+    INTENT_UNKNOWN,
+    OfficeAgentResponse,
+)
+from office_agent.tools import email, knowledge
 
 
 def answer_office_request(user_input: str) -> OfficeAgentResponse:
@@ -22,24 +27,31 @@ def answer_office_request(user_input: str) -> OfficeAgentResponse:
 
     - `knowledge_qa` -> the enterprise_rag Knowledge Q&A adapter (caveats and
       Sources preserved in `content`).
+    - `email_summary` -> the local mock Email Summary tool.
     - `unknown` -> a safe unsupported-intent message; no tool is invoked.
+
+    Each tool returns a `ToolResult`, so the response is built uniformly with
+    the routed intent attached for observability.
     """
 
     routed = router.route_request(user_input)
 
     if routed.intent == INTENT_KNOWLEDGE_QA:
         result = knowledge.run_knowledge_qa(user_input)
+    elif routed.intent == INTENT_EMAIL_SUMMARY:
+        result = email.summarize_emails(user_input)
+    else:
         return OfficeAgentResponse(
-            intent=INTENT_KNOWLEDGE_QA,
-            content=result.content,
-            tool=result.tool,
-            stop_reason=result.stop_reason,
-            sources=list(result.sources),
-            run_id=result.run_id,
+            intent=INTENT_UNKNOWN,
+            content=formatting.UNSUPPORTED_INTENT_NOTE,
+            tool=None,
         )
 
     return OfficeAgentResponse(
-        intent=INTENT_UNKNOWN,
-        content=formatting.UNSUPPORTED_INTENT_NOTE,
-        tool=None,
+        intent=routed.intent,
+        content=result.content,
+        tool=result.tool,
+        stop_reason=result.stop_reason,
+        sources=list(result.sources),
+        run_id=result.run_id,
     )

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "email-001",
+    "from": "manager@acmecorp.example",
+    "to": "employee@acmecorp.example",
+    "subject": "VPN rollout review needed",
+    "body": "Please review the updated VPN rollout plan before Friday's security sync. Your sign-off is required.",
+    "received_at": "2026-07-01T09:00:00",
+    "is_read": false,
+    "importance": "high",
+    "requires_response": true,
+    "labels": ["security", "vpn"]
+  },
+  {
+    "id": "email-002",
+    "from": "security-team@acmecorp.example",
+    "to": "employee@acmecorp.example",
+    "subject": "Action required: confirm on-call coverage for Sev-1 rotation",
+    "body": "We are finalizing the incident on-call rotation. Please confirm your availability for next week's Sev-1 coverage.",
+    "received_at": "2026-07-01T08:15:00",
+    "is_read": false,
+    "importance": "high",
+    "requires_response": true,
+    "labels": ["security", "incident", "on-call"]
+  },
+  {
+    "id": "email-003",
+    "from": "people-ops@acmecorp.example",
+    "to": "employee@acmecorp.example",
+    "subject": "Onboarding buddy assignment",
+    "body": "You've been assigned as an onboarding buddy for a new hire starting next month. Details and the onboarding guide are attached.",
+    "received_at": "2026-06-30T14:00:00",
+    "is_read": true,
+    "importance": "normal",
+    "requires_response": false,
+    "labels": ["hr", "onboarding"]
+  },
+  {
+    "id": "email-004",
+    "from": "finance@acmecorp.example",
+    "to": "employee@acmecorp.example",
+    "subject": "Expense report needs one more receipt",
+    "body": "Your June expense reimbursement is almost approved — please reply with the missing hotel receipt so we can process it.",
+    "received_at": "2026-07-01T11:30:00",
+    "is_read": false,
+    "importance": "normal",
+    "requires_response": true,
+    "labels": ["finance", "expenses"]
+  },
+  {
+    "id": "email-005",
+    "from": "it-helpdesk@acmecorp.example",
+    "to": "employee@acmecorp.example",
+    "subject": "Your laptop ticket has been resolved",
+    "body": "Ticket IT-4821 (slow laptop) has been marked resolved. No action needed; reopen the ticket if the issue returns.",
+    "received_at": "2026-06-29T16:45:00",
+    "is_read": true,
+    "importance": "low",
+    "requires_response": false,
+    "labels": ["it"]
+  },
+  {
+    "id": "email-006",
+    "from": "newsletter@acmecorp.example",
+    "to": "all-staff@acmecorp.example",
+    "subject": "AcmeCorp Weekly — product updates and town hall recap",
+    "body": "This week's company newsletter: roadmap highlights, the town hall recap, and a reminder about the data retention policy refresh.",
+    "received_at": "2026-06-30T07:00:00",
+    "is_read": true,
+    "importance": "low",
+    "requires_response": false,
+    "labels": ["newsletter"]
+  },
+  {
+    "id": "email-007",
+    "from": "ceo@acmecorp.example",
+    "to": "all-staff@acmecorp.example",
+    "subject": "Q3 priorities and what they mean for your team",
+    "body": "A short note on our Q3 priorities. No reply needed — your manager will follow up with team-specific goals.",
+    "received_at": "2026-06-30T18:00:00",
+    "is_read": true,
+    "importance": "high",
+    "requires_response": false,
+    "labels": ["company"]
+  },
+  {
+    "id": "email-008",
+    "from": "teammate@acmecorp.example",
+    "to": "employee@acmecorp.example",
+    "subject": "Can you review my draft before standup?",
+    "body": "I put together the migration plan draft. Could you review and reply with comments before tomorrow's standup?",
+    "received_at": "2026-06-30T10:20:00",
+    "is_read": true,
+    "importance": "normal",
+    "requires_response": true,
+    "labels": ["project"]
+  },
+  {
+    "id": "email-009",
+    "from": "facilities@acmecorp.example",
+    "to": "all-staff@acmecorp.example",
+    "subject": "Office HVAC maintenance this weekend",
+    "body": "Facilities will perform HVAC maintenance on Saturday. The office remains open; no action is required from you.",
+    "received_at": "2026-06-28T12:00:00",
+    "is_read": true,
+    "importance": "low",
+    "requires_response": false,
+    "labels": ["facilities"]
+  },
+  {
+    "id": "email-010",
+    "from": "recruiting@acmecorp.example",
+    "to": "employee@acmecorp.example",
+    "subject": "Interview panel invite for next week",
+    "body": "You've been added to an interview panel. Slots are being scheduled; watch for a calendar hold. No reply needed right now.",
+    "received_at": "2026-07-01T13:05:00",
+    "is_read": false,
+    "importance": "normal",
+    "requires_response": false,
+    "labels": ["hr", "hiring"]
+  }
+]
