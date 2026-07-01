@@ -2,12 +2,12 @@
 office_agent.router — deterministic intent router.
 
 A rule-based keyword matcher, ordered by priority: inbox/email requests route to
-`email_summary`, calendar/meeting/schedule requests route to `calendar_lookup`,
-ticket/task requests route to `ticket_assistant`, whole-day "briefing / what
-should I focus on" requests route to `daily_briefing`, enterprise knowledge /
-policy / document questions route to `knowledge_qa`, and everything else routes
-to `unknown`. No LLM is involved — this keeps routing fast, free, offline, and
-fully deterministic for tests.
+`email_summary`, ticket/task requests route to `ticket_assistant`, meeting-prep
+requests route to `meeting_agent`, calendar/meeting/schedule lookups route to
+`calendar_lookup`, whole-day "briefing / what should I focus on" requests route
+to `daily_briefing`, enterprise knowledge / policy / document questions route to
+`knowledge_qa`, and everything else routes to `unknown`. No LLM is involved —
+this keeps routing fast, free, offline, and fully deterministic for tests.
 """
 
 from office_agent.schemas import (
@@ -15,6 +15,7 @@ from office_agent.schemas import (
     INTENT_DAILY_BRIEFING,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
+    INTENT_MEETING_AGENT,
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     RoutedIntent,
@@ -32,17 +33,34 @@ _EMAIL_KEYWORDS = (
     "unread",
 )
 
-# Substrings that mark a calendar / scheduling request. Checked before the
-# knowledge keywords so "do I have any meetings about the VPN rollout?" is
-# treated as a calendar request rather than a policy lookup.
+# Substrings that mark a calendar / scheduling *lookup* request. Checked before
+# the knowledge keywords so "do I have any meetings about the VPN rollout?" is
+# treated as a calendar request rather than a policy lookup. Meeting-*prep*
+# semantics (see `_MEETING_KEYWORDS`) are matched earlier, so a plain lookup like
+# "what meetings do I have today?" still lands here.
 _CALENDAR_KEYWORDS = (
     "calendar",
     "meeting",
     "meetings",
     "schedule",
-    "agenda",
     "conflict",
     "conflicts",
+)
+
+# Substrings that mark a meeting-*prep* request — the user wants to be prepared
+# for a meeting (agenda, talking points, context), not just look up the schedule.
+# Checked before the broad calendar keywords, but kept specific enough that a
+# plain "what meetings do I have today?" lookup still routes to calendar.
+_MEETING_KEYWORDS = (
+    "meeting prep",
+    "prepare me for",
+    "prep me for",
+    "prepare for",
+    "prep for",
+    "bring up",
+    "agenda",
+    "summarize context",
+    "context for my next meeting",
 )
 
 # Substrings that mark a ticket / task request. Checked before the knowledge
@@ -100,13 +118,15 @@ _KNOWLEDGE_KEYWORDS = (
 )
 
 # Ordered routing rules: the first intent whose keyword set matches wins.
-# Channel-specific requests (email, then calendar, then ticket/task) take
-# precedence over the whole-day briefing, which in turn precedes the broad
-# knowledge keywords.
+# Precedence: explicit channel requests (email, then ticket/task) win first;
+# meeting-*prep* is matched before the broad calendar keywords so "prepare me for
+# my next meeting" is prep (not a lookup); a plain calendar lookup follows; then
+# the whole-day briefing; and finally the broad knowledge keywords.
 _INTENT_RULES = (
     (INTENT_EMAIL_SUMMARY, _EMAIL_KEYWORDS),
-    (INTENT_CALENDAR_LOOKUP, _CALENDAR_KEYWORDS),
     (INTENT_TICKET_ASSISTANT, _TICKET_KEYWORDS),
+    (INTENT_MEETING_AGENT, _MEETING_KEYWORDS),
+    (INTENT_CALENDAR_LOOKUP, _CALENDAR_KEYWORDS),
     (INTENT_DAILY_BRIEFING, _BRIEFING_KEYWORDS),
     (INTENT_KNOWLEDGE_QA, _KNOWLEDGE_KEYWORDS),
 )

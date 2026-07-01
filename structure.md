@@ -1,8 +1,11 @@
 # Enterprise RAG Architecture
 
 This is the architecture deep-dive for the **`enterprise_rag`** module — the
-Enterprise Document Q&A engine that is the one implemented capability in the
-Enterprise Office Agent repository. The repo-level [README](README.md) covers
+Enterprise Document Q&A engine — with a companion section on the **`office_agent`**
+module at the end. The repository now has **two implemented modules**:
+`enterprise_rag/` (the RAG engine described in detail below) and `office_agent/`
+(the Enterprise Office Agent; see [The Office Agent module](#the-office-agent-module)).
+The repo-level [README](README.md) covers
 the module layout and quickstart, the module's [README](enterprise_rag/README.md)
 covers setup and usage, and this document describes the engine's full workflow,
 state machine, and design decisions, including the paths the READMEs' simplified
@@ -20,15 +23,20 @@ The repository is organized as named capability modules (see
   (`enterprise_rag/graph/…`, `enterprise_rag/ingestion.py`,
   `enterprise_rag/data/…`); its public entry point is
   `enterprise_rag.graph.engine.answer_question()`.
-- **`office_agent/`** — a reserved, currently empty placeholder for a future
-  office-automation agent. No features are implemented yet; when they are, they
+- **`office_agent/`** — the implemented **Enterprise Office Agent** (v1, plus the
+  v1.5 / Phase 6 Meeting Agent). A deterministic, LLM-free intent router over
+  local capabilities; public entry point
+  `office_agent.engine.answer_office_request()`. It is documented in
+  [The Office Agent module](#the-office-agent-module) at the end of this file, and
   must not change or regress `enterprise_rag` behavior or its tests.
 - **Repo root** — `main.py` (thin CLI over the engine), `tests/`, `evals/`, and
-  `docs/adr/` are repository-level and target the engine. Root docs
+  `docs/adr/` are repository-level. Root docs
   (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) stay repo-level;
-  module-specific usage lives in `enterprise_rag/README.md`.
+  module-specific usage lives in `enterprise_rag/README.md` and
+  `docs/office-agent-v1-demo.md`.
 
-The section numbering below describes the `enterprise_rag` engine itself.
+The numbered sections below (§1–§15) describe the `enterprise_rag` engine itself;
+the Office Agent module is documented in its own section at the end.
 
 ## 1. Goal
 
@@ -485,3 +493,81 @@ GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every p
 
 * **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface: `enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`, `enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`).
+
+## The Office Agent module
+
+`office_agent/` is the repository's second implemented module: the **Enterprise
+Office Agent** (v1, plus the v1.5 / Phase 6 Meeting Agent). It is the
+office-automation companion to the `enterprise_rag` engine and is intentionally
+small, deterministic, and — except for Knowledge Q&A — local and LLM-free. It is
+**not** a LangGraph graph; it is a thin keyword router + tool dispatch.
+
+**Design:**
+
+- **Deterministic keyword router** (`office_agent/router.py`) — classifies a
+  free-text request into exactly one intent by ordered, case-insensitive keyword
+  matching. No LLM is involved, so routing is fast, offline, and reproducible.
+  Precedence: `email → ticket/task → meeting_agent → calendar → daily_briefing →
+  knowledge → unknown` (meeting-*prep* semantics are matched before the broad
+  calendar keywords, so a plain "what meetings do I have today?" lookup still
+  routes to `calendar_lookup`).
+- **Typed schemas + intent constants** (`office_agent/schemas.py`) — plain
+  dataclasses (`OfficeRequest`, `RoutedIntent`, `ToolResult`,
+  `OfficeAgentResponse`) plus the `INTENT_*` string constants and the
+  `OFFICE_INTENTS` tuple, kept in lockstep with the router and the engine
+  dispatch.
+- **`ToolResult` contract** — every tool returns a `ToolResult`
+  (`tool`, `content`, `stop_reason`, `sources`, `run_id`), so the engine builds a
+  uniform `OfficeAgentResponse` with the routed intent attached for
+  observability/testing.
+- **Entry point** — `office_agent.engine.answer_office_request(user_input: str)
+  -> OfficeAgentResponse` routes the request and dispatches to exactly one tool;
+  unsupported requests route to `unknown` and return a safe guidance message.
+  This is the office-agent analogue of
+  `enterprise_rag.graph.engine.answer_question()` — a single, thin dispatch entry
+  point, deliberately with no LLM routing.
+
+**Tools** (`office_agent/tools/`):
+
+| Tool | Intent | Data source |
+|---|---|---|
+| `knowledge.py` | `knowledge_qa` | Thin **adapter** over `enterprise_rag` (the real RAG pipeline) |
+| `email.py` | `email_summary` | Local mock `mock_data/emails.json` |
+| `calendar.py` | `calendar_lookup` | Local mock `mock_data/calendar_events.json` |
+| `tickets.py` | `ticket_assistant` | Local mock `mock_data/tickets.json` + `mock_data/tasks.json` |
+| `briefing.py` | `daily_briefing` | Aggregates the email + calendar + ticket mock data |
+| `meeting.py` | `meeting_agent` | Composes the calendar + email + ticket/task mock data for one meeting (**v1.5 / Phase 6**) |
+
+**`enterprise_rag` is not duplicated inside `office_agent`.** The Knowledge Q&A
+tool is a thin *adapter* that calls
+`enterprise_rag.graph.engine.answer_question()` and reuses its formatting
+(caveats + `Sources:` section); no retrieval, generation, or graph logic is
+reimplemented. Knowledge Q&A is the only office tool that reaches an LLM /
+external services (through the RAG engine); every other tool is local mock data.
+
+**Local mock data** (`office_agent/mock_data/`) — `emails.json`,
+`calendar_events.json`, `tickets.json`, `tasks.json`. It is entirely fictional
+AcmeCorp data, loaded lazily (imports stay side-effect-free), treated as
+**read-only** (task "creation" is *simulated*, never written back), and
+**anchored to the data rather than the system clock** ("today" / "next meeting"
+are resolved from the data), so every mock tool is deterministic and CI-safe. No
+external service is ever contacted (no Gmail / Outlook / Google Calendar / Slack /
+Jira / Linear / Asana / Trello).
+
+**Meeting Agent / Meeting Prep (v1.5 / Phase 6)** is an advanced *composition*
+capability. It selects one meeting deterministically ("next", best topic match on
+title/labels, or fallback to the next meeting — never the system clock) and
+assembles a concise, bounded prep sheet from the local mock data: meeting
+metadata, relevant emails, relevant tickets/tasks, inferred knowledge areas, a
+suggested agenda, risks/blockers, and recommended follow-ups. It **does not call
+the Enterprise RAG pipeline** — "relevant knowledge areas" are inferred from
+labels, not retrieved — and it uses no LLM and no external services.
+
+**Demo & docs.** `scripts/demo_office_agent_v1.py` runs a few requests through
+`answer_office_request()` and prints the selected intent + response for each; it
+is local-only and deterministic by default (`--include-knowledge` additionally
+exercises the real RAG pipeline, which needs the `enterprise_rag` setup and API
+keys). Full usage and the capability list are in
+[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md); the architecture
+decision behind the module is
+[ADR 015](docs/adr/015-office-agent-v1-architecture.md).
