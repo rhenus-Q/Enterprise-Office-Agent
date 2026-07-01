@@ -10,7 +10,7 @@ These are pure string/template assertions on the prompt module — importing it
 is side-effect-free by design, so no API keys or network are required.
 """
 
-from graph.chains.generation import prompt, system_prompt
+from enterprise_rag.graph.chains.generation import prompt, system_prompt
 
 # ---------------------------------------------------------------------------
 # Untrusted-context / prompt-injection warning

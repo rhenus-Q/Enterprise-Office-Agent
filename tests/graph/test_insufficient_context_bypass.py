@@ -16,15 +16,15 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
-from graph.consts import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.chains.generation import INSUFFICIENT_CONTEXT_ANSWER
+from enterprise_rag.graph.consts import (
     RETRIEVE,
     STOP_REASON_GENERATION_ERROR,
     STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_WEB_SEARCH_DISABLED,
 )
-from graph.graph import grade_generation
+from enterprise_rag.graph.graph import grade_generation
 from main import WEB_SEARCH_DISABLED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
@@ -102,10 +102,10 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
     the genuine production short-circuit. Returns the web-search payloads.
     """
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    web_module = importlib.import_module("graph.nodes.web_search")
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
     monkeypatch.setattr(
         retrieve_module,

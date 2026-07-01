@@ -11,7 +11,7 @@ they need no API key and run in the standard tests/node validation set.
 
 from langchain_core.documents import Document
 
-from graph.chains.generation import format_documents
+from enterprise_rag.graph.chains.generation import format_documents
 
 
 def test_multiple_documents_are_each_delimited_in_order():

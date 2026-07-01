@@ -16,10 +16,13 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.consts import RETRIEVE, WEBSEARCH
-from graph.nodes.add_grounding_feedback import GROUNDING_FEEDBACK, add_grounding_feedback
-from graph.nodes.rewrite_query import rewrite_query
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.consts import RETRIEVE, WEBSEARCH
+from enterprise_rag.graph.nodes.add_grounding_feedback import (
+    GROUNDING_FEEDBACK,
+    add_grounding_feedback,
+)
+from enterprise_rag.graph.nodes.rewrite_query import rewrite_query
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -64,11 +67,11 @@ def _patch_all_node_seams(
     - feedbacks: retry_feedback received by each generate_answer call
     """
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
     monkeypatch.setattr(
         retrieve_module,
@@ -141,7 +144,7 @@ def test_add_grounding_feedback_records_feedback_only():
 
 
 def test_rewrite_query_calls_rewriter_with_question_and_previous_answer(monkeypatch):
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
     calls = []
     monkeypatch.setattr(
@@ -163,7 +166,7 @@ def test_rewrite_query_calls_rewriter_with_question_and_previous_answer(monkeypa
 
 
 def test_generate_answer_folds_feedback_into_question_input(monkeypatch):
-    generation_module = importlib.import_module("graph.chains.generation")
+    generation_module = importlib.import_module("enterprise_rag.graph.chains.generation")
 
     payloads = []
     monkeypatch.setattr(
@@ -180,7 +183,7 @@ def test_generate_answer_folds_feedback_into_question_input(monkeypatch):
 
 
 def test_generate_answer_without_feedback_keeps_question_unchanged(monkeypatch):
-    generation_module = importlib.import_module("graph.chains.generation")
+    generation_module = importlib.import_module("enterprise_rag.graph.chains.generation")
 
     payloads = []
     monkeypatch.setattr(
@@ -195,7 +198,7 @@ def test_generate_answer_without_feedback_keeps_question_unchanged(monkeypatch):
 
 
 def test_generate_answer_with_feedback_still_short_circuits_on_empty_docs(monkeypatch):
-    generation_module = importlib.import_module("graph.chains.generation")
+    generation_module = importlib.import_module("enterprise_rag.graph.chains.generation")
 
     def explode():
         raise AssertionError("chain must not be built for empty documents")

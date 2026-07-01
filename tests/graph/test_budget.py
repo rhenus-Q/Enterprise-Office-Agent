@@ -15,8 +15,8 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.config import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.config import (
     DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
     DEFAULT_MAX_LLM_CALLS_PER_RUN,
     DEFAULT_MAX_WEB_RESULTS_TO_GRADE,
@@ -26,9 +26,9 @@ from graph.config import (
     max_web_results_to_grade,
     max_web_searches_per_run,
 )
-from graph.consts import RETRIEVE, STOP_REASON_BUDGET_EXHAUSTED
-from graph.graph import grade_generation
-from graph.nodes.budget_exhausted_notice import budget_exhausted_notice
+from enterprise_rag.graph.consts import RETRIEVE, STOP_REASON_BUDGET_EXHAUSTED
+from enterprise_rag.graph.graph import grade_generation
+from enterprise_rag.graph.nodes.budget_exhausted_notice import budget_exhausted_notice
 from main import BUDGET_EXHAUSTED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
@@ -145,11 +145,11 @@ def _generation_state(**overrides):
 def _patch_all_node_seams(monkeypatch, *, docs_relevant=True):
     """Mock every external seam; returns the recorded web-search payloads."""
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
     monkeypatch.setattr(
         retrieve_module,

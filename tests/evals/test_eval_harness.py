@@ -9,6 +9,7 @@ a malformed row fails fast in CI-safe tests rather than mid-eval.
 
 from langchain_core.documents import Document
 
+from enterprise_rag.graph.consts import WEB_SEARCH_SOURCE
 from evals.run_eval import (
     CATEGORIES,
     DEFAULT_DATASET,
@@ -20,7 +21,6 @@ from evals.run_eval import (
     summarize_result,
     validate_dataset,
 )
-from graph.consts import WEB_SEARCH_SOURCE
 
 
 def _row(**overrides):

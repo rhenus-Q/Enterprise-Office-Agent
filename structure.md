@@ -1,12 +1,34 @@
-# Agentic RAG Architecture
+# Enterprise RAG Architecture
 
-This is the architecture deep-dive for the project. The [README](README.md)
-covers setup and usage; this document describes the full workflow, state
-machine, and design decisions, including the paths the README's simplified
-diagram omits (terminal notice nodes and retry helpers). The *rationale*
-behind the major decisions — context, trade-offs, and rejected alternatives —
-lives in the Architecture Decision Records under
-[docs/adr/](docs/adr/README.md).
+This is the architecture deep-dive for the **`enterprise_rag`** module — the
+Enterprise Document Q&A engine that is the one implemented capability in the
+Enterprise Office Agent repository. The repo-level [README](README.md) covers
+the module layout and quickstart, the module's [README](enterprise_rag/README.md)
+covers setup and usage, and this document describes the engine's full workflow,
+state machine, and design decisions, including the paths the READMEs' simplified
+diagrams omit (terminal notice nodes and retry helpers). The *rationale* behind
+the major decisions — context, trade-offs, and rejected alternatives — lives in
+the Architecture Decision Records under [docs/adr/](docs/adr/README.md).
+
+## Repository context and module boundaries
+
+The repository is organized as named capability modules (see
+[ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md)):
+
+- **`enterprise_rag/`** — the completed Enterprise Document Q&A / RAG engine that
+  the rest of this document describes. All engine code lives here
+  (`enterprise_rag/graph/…`, `enterprise_rag/ingestion.py`,
+  `enterprise_rag/data/…`); its public entry point is
+  `enterprise_rag.graph.engine.answer_question()`.
+- **`office_agent/`** — a reserved, currently empty placeholder for a future
+  office-automation agent. No features are implemented yet; when they are, they
+  must not change or regress `enterprise_rag` behavior or its tests.
+- **Repo root** — `main.py` (thin CLI over the engine), `tests/`, `evals/`, and
+  `docs/adr/` are repository-level and target the engine. Root docs
+  (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) stay repo-level;
+  module-specific usage lives in `enterprise_rag/README.md`.
+
+The section numbering below describes the `enterprise_rag` engine itself.
 
 ## 1. Goal
 
@@ -15,7 +37,7 @@ unvetted answer as a success**. Built as a self-correcting (CRAG-style)
 LangGraph workflow:
 
 - Answers come from a curated local knowledge base (Chroma) — a synthetic
-  AcmeCorp internal-document corpus under `data/acmecorp_internal_docs/`
+  AcmeCorp internal-document corpus under `enterprise_rag/data/acmecorp_internal_docs/`
   (six fictional policy/guide documents; no real company data) — with web
   search (Tavily) as a fallback, and a privacy mode that disables web
   search entirely.
@@ -36,13 +58,13 @@ module imports side-effect-free (no API keys, no network at import time):
 
 | Layer | Location | Contents |
 |---|---|---|
-| Orchestration | `graph/graph.py` | `StateGraph` assembly, pure routing functions, `MAX_RETRIES = 5`, compiled `app` |
-| Nodes | `graph/nodes/` | State-transforming steps; the only place state is written |
-| Chains | `graph/chains/` | Six LCEL chains on `gpt-5-mini` (`temperature=0`): `question_router`, `retrieval_grader`, `generation`, `hallucination_grader`, `answer_grader`, `query_rewriter` |
+| Orchestration | `enterprise_rag/graph/graph.py` | `StateGraph` assembly, pure routing functions, `MAX_RETRIES = 5`, compiled `app` |
+| Nodes | `enterprise_rag/graph/nodes/` | State-transforming steps; the only place state is written |
+| Chains | `enterprise_rag/graph/chains/` | Six LCEL chains on `gpt-5-mini` (`temperature=0`): `question_router`, `retrieval_grader`, `generation`, `hallucination_grader`, `answer_grader`, `query_rewriter` |
 
-Supporting modules: `graph/state.py` (the state schema), `graph/consts.py`
+Supporting modules: `enterprise_rag/graph/state.py` (the state schema), `enterprise_rag/graph/consts.py`
 (node names, `stop_reason` values, the `WEB_SEARCH_SOURCE` metadata marker),
-`graph/config.py` (env-driven flags), `graph/engine.py` (the canonical
+`enterprise_rag/graph/config.py` (env-driven flags), `enterprise_rag/graph/engine.py` (the canonical
 programmatic entry point: `answer_question()` / `AnswerOptions` /
 `AnswerResult`, plus `seed_state()` — the single state-seeding helper used by
 the CLI, the eval harness, and tests — and the lightweight per-run
@@ -51,8 +73,8 @@ duration, and an optional metadata-only trace JSON via
 `AnswerOptions.trace_path`; collected centrally by streaming the compiled
 graph's node updates (`stream_mode="updates"`), merged onto the seeded state
 — GraphState has only last-value channels, so this reproduces `invoke()`
-exactly and tracing can never change behavior), `graph/formatting.py` (shared
-presentation: stop-reason caveats + Sources section), `ingestion.py`
+exactly and tracing can never change behavior), `enterprise_rag/graph/formatting.py` (shared
+presentation: stop-reason caveats + Sources section), `enterprise_rag/ingestion.py`
 (offline, idempotent Chroma build of the local Markdown corpus: collection
 reset + deterministic chunk ids, provenance metadata per document),
 `main.py` (thin CLI over the engine).
@@ -64,12 +86,12 @@ reset + deterministic chunk ids, provenance metadata per document),
 - Every retry cycle passes through `generate`, which increments the `retries`
   counter that `MAX_RETRIES` caps.
 - Shared string constants live in `consts.py`; user-facing presentation lives
-  in `graph/formatting.py` (re-exported by `main.py` for backward
+  in `enterprise_rag/graph/formatting.py` (re-exported by `main.py` for backward
   compatibility).
 
 ## 3. GraphState
 
-Defined in `graph/state.py` (`TypedDict`). `graph/engine.py` (`seed_state()`)
+Defined in `enterprise_rag/graph/state.py` (`TypedDict`). `enterprise_rag/graph/engine.py` (`seed_state()`)
 seeds every field per question — the single seeding site shared by the CLI,
 the eval harness, and tests; all readers use safe defaults so partial states
 behave like today's defaults.
@@ -111,7 +133,7 @@ behave like today's defaults.
 
 ## 5. Conditional routing
 
-Three pure decision functions in `graph/graph.py`:
+Three pure decision functions in `enterprise_rag/graph/graph.py`:
 
 **`route_question`** (conditional entry point)
 - Privacy mode off → an LLM router picks `retrieve` (knowledge-base topics) or
@@ -270,9 +292,9 @@ generation in that run keeps the stricter instruction.
 ## 9. Privacy mode (`WEB_SEARCH_ENABLED=false`)
 
 For deployments where user questions must never reach an external search
-service. Parsed by `graph/config.py` (`false`/`0`/`no`/`off`, case-insensitive,
+service. Parsed by `enterprise_rag/graph/config.py` (`false`/`0`/`no`/`off`, case-insensitive,
 disable; anything else — including unset — preserves full behavior) and seeded
-into state by `graph/engine.py` (`seed_state()`; a per-run `AnswerOptions`
+into state by `enterprise_rag/graph/engine.py` (`seed_state()`; a per-run `AnswerOptions`
 value wins over the environment). When disabled:
 
 - `route_question` always returns `retrieve` and skips the router LLM.
@@ -294,7 +316,7 @@ from the same empty context cannot improve it (see §5).
 ## 10. stop_reason and user-facing caveats
 
 Terminal notice nodes record *why* a run ended without a passing answer;
-`graph/formatting.py` maps each reason to a caveat appended after the answer
+`enterprise_rag/graph/formatting.py` maps each reason to a caveat appended after the answer
 (`STOP_REASON_NOTES`; `main.py` re-exports the names). Successful answers are
 printed without any caveat, in both modes.
 
@@ -329,7 +351,7 @@ exception).
 ### Answer provenance (Sources section)
 
 After the caveat (if any), the CLI appends a deterministic `Sources:`
-section built by `format_sources(result["documents"])` (`graph/formatting.py`)
+section built by `format_sources(result["documents"])` (`enterprise_rag/graph/formatting.py`)
 — pure post-run formatting of `Document` metadata, never an LLM call, never
 document content (the engine exposes the same lines as
 `AnswerResult.sources`):
@@ -337,7 +359,7 @@ document content (the engine exposes the same lines as
 - **Local corpus documents** (anything not marked as the web supplement) are
   cited as `- Local corpus: <title>` (falling back to the `source` path, then
   to the safe label `Local corpus document`). Titles come from each corpus
-  document's H1 heading; `ingestion.py` also records `source` (repo-relative
+  document's H1 heading; `enterprise_rag/ingestion.py` also records `source` (repo-relative
   path), `source_type: "local_corpus"`, and a `document_category`, all
   persisted through chunking into Chroma.
 - **The web supplement** is detected via `metadata["source"] ==
@@ -366,7 +388,7 @@ former may contain unsupported content; the latter is grounded but incomplete.
 ## 12. Per-run cost / latency budget
 
 Three counters in state track spend; three env-configurable budgets
-(`graph/config.py`) cap it. Increments happen only in nodes (where state
+(`enterprise_rag/graph/config.py`) cap it. Increments happen only in nodes (where state
 writes are legal); checks are pure reads:
 
 | Budget (env var) | Default | Counts | Checked where | On exhaustion |
@@ -437,7 +459,7 @@ insufficient-context / privacy-mode / multi-document / policy-fallback categorie
 graph by `evals/run_eval.py`, scored with deterministic checks (stop reasons,
 source provenance including local title checks, counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes) and reported to
 `evals/results.md`. The harness runs each row through
-`graph.engine.answer_question()` — the same entry point `main.py` uses — so
+`enterprise_rag.graph.engine.answer_question()` — the same entry point `main.py` uses — so
 state seeding is never duplicated; privacy-mode rows pass
 `web_search_enabled=False` per run (no env mutation) and hard-assert
 `web_search_count == 0`, and rows may optionally pin a per-row
@@ -462,4 +484,4 @@ Future improvements (rough priority): structured logging and metrics-friendly ob
 GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every push and pull request — both keys-free:
 
 * **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
-* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface: `graph/engine.py`, `graph/config.py`, `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface: `enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`, `enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`).

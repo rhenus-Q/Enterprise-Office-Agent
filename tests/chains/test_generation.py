@@ -17,7 +17,7 @@ plain string answer.
 
 from langchain_core.documents import Document
 
-from graph.chains.generation import (
+from enterprise_rag.graph.chains.generation import (
     INSUFFICIENT_CONTEXT_ANSWER,
     format_documents,
     generate_answer,

@@ -1,5 +1,5 @@
 """
-Unit tests for the web_search node (graph/nodes/web_search.py).
+Unit tests for the web_search node (enterprise_rag/graph/nodes/web_search.py).
 
 The Tavily tool AND the retrieval grader are mocked via monkeypatch (patching
 get_web_search_tool / get_retrieval_grader), so no real web search or OpenAI
@@ -11,13 +11,13 @@ import importlib
 
 from langchain_core.documents import Document
 
-from graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
-from graph.nodes.web_search import web_search
+from enterprise_rag.graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
+from enterprise_rag.graph.nodes.web_search import web_search
 
-# graph/nodes/__init__.py re-exports the `web_search` function under the same name
-# as its submodule, so `import graph.nodes.web_search as ...` would bind the
+# enterprise_rag/graph/nodes/__init__.py re-exports the `web_search` function under the same name
+# as its submodule, so `import enterprise_rag.graph.nodes.web_search as ...` would bind the
 # function, not the module. Resolve the real module for monkeypatching.
-web_search_module = importlib.import_module("graph.nodes.web_search")
+web_search_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
 
 
 def _patch_tool(monkeypatch, results):
