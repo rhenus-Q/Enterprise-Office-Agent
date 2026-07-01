@@ -1,0 +1,62 @@
+[
+  {
+    "id": "TASK-001",
+    "title": "Follow up on VPN onboarding blocker",
+    "description": "Coordinate with IT security to unblock the new hire's VPN setup.",
+    "status": "open",
+    "priority": "high",
+    "source_ticket_id": "TICK-001",
+    "owner": "employee@acmecorp.example",
+    "created_at": "2026-07-01T09:00:00",
+    "due_at": "2026-07-02T12:00:00",
+    "labels": ["vpn", "onboarding"]
+  },
+  {
+    "id": "TASK-002",
+    "title": "Chase expense approval",
+    "description": "Ping the approving manager about the stuck June expense report.",
+    "status": "in_progress",
+    "priority": "normal",
+    "source_ticket_id": "TICK-002",
+    "owner": "employee@acmecorp.example",
+    "created_at": "2026-06-30T11:00:00",
+    "due_at": "2026-07-03T12:00:00",
+    "labels": ["expenses"]
+  },
+  {
+    "id": "TASK-003",
+    "title": "Prepare data retention export",
+    "description": "Assemble the audit-log export requested by legal.",
+    "status": "open",
+    "priority": "normal",
+    "source_ticket_id": "TICK-005",
+    "owner": "compliance@acmecorp.example",
+    "created_at": "2026-06-28T12:00:00",
+    "due_at": "2026-07-05T12:00:00",
+    "labels": ["compliance", "retention"]
+  },
+  {
+    "id": "TASK-004",
+    "title": "Review Q3 personal goals",
+    "description": "Personal planning task not tied to any ticket.",
+    "status": "open",
+    "priority": "low",
+    "source_ticket_id": null,
+    "owner": "employee@acmecorp.example",
+    "created_at": "2026-06-30T17:00:00",
+    "due_at": "2026-07-07T17:00:00",
+    "labels": ["planning"]
+  },
+  {
+    "id": "TASK-005",
+    "title": "Fix Sev-1 runbook link",
+    "description": "Restore the broken incident response playbook link.",
+    "status": "blocked",
+    "priority": "high",
+    "source_ticket_id": "TICK-004",
+    "owner": "employee@acmecorp.example",
+    "created_at": "2026-06-29T15:00:00",
+    "due_at": "2026-07-02T10:00:00",
+    "labels": ["incident"]
+  }
+]

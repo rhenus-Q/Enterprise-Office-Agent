@@ -11,6 +11,7 @@ from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
+    INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
 )
 
@@ -44,13 +45,24 @@ CALENDAR_REQUESTS = [
     "What's on my calendar tomorrow?",
 ]
 
+# Obvious ticket / task requests (Phase 4, from the spec).
+TICKET_REQUESTS = [
+    "show open tickets",
+    "summarize urgent tickets",
+    "which tickets are assigned to me?",
+    "show blocked tickets",
+    "show my tasks",
+    "create a task from TICK-001",
+    "create a follow-up task for the VPN ticket",
+]
+
 # Unsupported office requests — the router must not claim these.
-# (Email and calendar requests are handled by their own cases; the ones left
-# here are still unimplemented: tickets, tasks, daily briefing.)
+# (Email, calendar, and ticket/task requests are handled by their own cases; the
+# daily briefing is still unimplemented, as are generic requests.)
 UNKNOWN_REQUESTS = [
-    "Create a Jira ticket for the login bug.",
-    "Add 'call the vendor' to my task list.",
     "Give me my daily briefing.",
+    "order lunch for the team",
+    "book a flight to Berlin",
     "",
 ]
 
@@ -76,6 +88,13 @@ def test_calendar_requests_route_to_calendar_lookup(request_text):
     assert routed.reason
 
 
+@pytest.mark.parametrize("request_text", TICKET_REQUESTS)
+def test_ticket_requests_route_to_ticket_assistant(request_text):
+    routed = route_request(request_text)
+    assert routed.intent == INTENT_TICKET_ASSISTANT
+    assert routed.reason
+
+
 @pytest.mark.parametrize("request_text", UNKNOWN_REQUESTS)
 def test_unsupported_requests_route_to_unknown(request_text):
     routed = route_request(request_text)
@@ -86,3 +105,4 @@ def test_router_is_case_insensitive():
     assert route_request("WHAT IS THE VPN POLICY?").intent == INTENT_KNOWLEDGE_QA
     assert route_request("SUMMARIZE MY INBOX").intent == INTENT_EMAIL_SUMMARY
     assert route_request("WHAT IS MY NEXT MEETING?").intent == INTENT_CALENDAR_LOOKUP
+    assert route_request("SHOW OPEN TICKETS").intent == INTENT_TICKET_ASSISTANT

@@ -3,15 +3,17 @@ office_agent.router — deterministic intent router.
 
 A rule-based keyword matcher, ordered by priority: inbox/email requests route to
 `email_summary`, calendar/meeting/schedule requests route to `calendar_lookup`,
-enterprise knowledge / policy / document questions route to `knowledge_qa`, and
-everything else routes to `unknown`. No LLM is involved (that is a later phase) —
-this keeps routing fast, free, offline, and fully deterministic for tests.
+ticket/task requests route to `ticket_assistant`, enterprise knowledge / policy /
+document questions route to `knowledge_qa`, and everything else routes to
+`unknown`. No LLM is involved (that is a later phase) — this keeps routing fast,
+free, offline, and fully deterministic for tests.
 """
 
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
+    INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     RoutedIntent,
 )
@@ -39,6 +41,20 @@ _CALENDAR_KEYWORDS = (
     "agenda",
     "conflict",
     "conflicts",
+)
+
+# Substrings that mark a ticket / task request. Checked before the knowledge
+# keywords so "create a follow-up task for the VPN ticket" is treated as a
+# ticket request rather than a policy lookup.
+_TICKET_KEYWORDS = (
+    "ticket",
+    "tickets",
+    "task",
+    "tasks",
+    "to-do",
+    "todo",
+    "backlog",
+    "blocked",
 )
 
 # Substrings that mark an enterprise knowledge-base / policy / document question.
@@ -70,11 +86,12 @@ _KNOWLEDGE_KEYWORDS = (
 )
 
 # Ordered routing rules: the first intent whose keyword set matches wins.
-# Channel-specific requests (email, then calendar) take precedence over the
-# broader knowledge keywords.
+# Channel-specific requests (email, then calendar, then ticket/task) take
+# precedence over the broader knowledge keywords.
 _INTENT_RULES = (
     (INTENT_EMAIL_SUMMARY, _EMAIL_KEYWORDS),
     (INTENT_CALENDAR_LOOKUP, _CALENDAR_KEYWORDS),
+    (INTENT_TICKET_ASSISTANT, _TICKET_KEYWORDS),
     (INTENT_KNOWLEDGE_QA, _KNOWLEDGE_KEYWORDS),
 )
 

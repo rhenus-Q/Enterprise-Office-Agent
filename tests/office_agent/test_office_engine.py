@@ -12,10 +12,11 @@ from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
+    INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     ToolResult,
 )
-from office_agent.tools import calendar, email, knowledge
+from office_agent.tools import calendar, email, knowledge, tickets
 
 
 def _guard(tool_label):
@@ -43,6 +44,7 @@ def test_knowledge_qa_request_dispatches_to_knowledge_tool(monkeypatch):
     monkeypatch.setattr(knowledge, "run_knowledge_qa", fake_tool)
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
+    monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
 
     response = engine.answer_office_request("What is the VPN access policy?")
 
@@ -64,6 +66,7 @@ def test_email_summary_request_dispatches_to_email_tool(monkeypatch):
     monkeypatch.setattr(email, "summarize_emails", fake_tool)
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
+    monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
 
     response = engine.answer_office_request("summarize my unread emails")
 
@@ -83,6 +86,7 @@ def test_calendar_lookup_request_dispatches_to_calendar_tool(monkeypatch):
     monkeypatch.setattr(calendar, "lookup_calendar", fake_tool)
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
+    monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
 
     response = engine.answer_office_request("what meetings do I have today?")
 
@@ -92,12 +96,33 @@ def test_calendar_lookup_request_dispatches_to_calendar_tool(monkeypatch):
     assert response.content == "CALENDAR SUMMARY"
 
 
-def test_unknown_request_returns_unsupported_message_without_calling_any_tool(monkeypatch):
+def test_ticket_assistant_request_dispatches_to_ticket_tool(monkeypatch):
+    calls = []
+
+    def fake_tool(query):
+        calls.append(query)
+        return ToolResult(tool=INTENT_TICKET_ASSISTANT, content="TICKET SUMMARY")
+
+    monkeypatch.setattr(tickets, "handle_ticket_request", fake_tool)
     monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
     monkeypatch.setattr(email, "summarize_emails", _guard("email"))
     monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
 
-    response = engine.answer_office_request("Create a Jira ticket for the login bug.")
+    response = engine.answer_office_request("show open tickets")
+
+    assert calls == ["show open tickets"]
+    assert response.intent == INTENT_TICKET_ASSISTANT
+    assert response.tool == INTENT_TICKET_ASSISTANT
+    assert response.content == "TICKET SUMMARY"
+
+
+def test_unknown_request_returns_unsupported_message_without_calling_any_tool(monkeypatch):
+    monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
+    monkeypatch.setattr(email, "summarize_emails", _guard("email"))
+    monkeypatch.setattr(calendar, "lookup_calendar", _guard("calendar"))
+    monkeypatch.setattr(tickets, "handle_ticket_request", _guard("ticket"))
+
+    response = engine.answer_office_request("Give me my daily briefing.")
 
     assert response.intent == INTENT_UNKNOWN
     assert response.tool is None
