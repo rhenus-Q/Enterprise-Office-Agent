@@ -1,5 +1,5 @@
 """
-office_agent — the Enterprise Office Agent (Phase 3).
+office_agent — the Enterprise Office Agent (Phase 4).
 
 The package provides a lightweight schema layer (:mod:`office_agent.schemas`), a
 deterministic rule-based router (:mod:`office_agent.router`), a set of tools, and
@@ -15,10 +15,13 @@ Implemented capabilities:
 - **Calendar Lookup** (:mod:`office_agent.tools.calendar`) — a deterministic
   view over local, fictional mock calendar data (today/tomorrow/next
   meeting/conflicts/important); no LLM and no calendar service.
+- **Task / Ticket Assistant** (:mod:`office_agent.tools.tickets`) — deterministic
+  ticket/task views and a *simulated* task-creation over local, fictional mock
+  data; no LLM and no ticketing service, and it never mutates the mock files.
 
-Tickets, tasks, and the daily briefing are intentionally NOT implemented yet —
-they are reserved for later phases. Anything added here must follow the same
-rules as the rest of the repo (side-effect-free imports, lazy external clients,
-local-only mock data) and must not change or regress `enterprise_rag` behavior
-or its tests (see CLAUDE.md).
+The daily briefing is intentionally NOT implemented yet — it is reserved for a
+later phase. Anything added here must follow the same rules as the rest of the
+repo (side-effect-free imports, lazy external clients, local-only mock data) and
+must not change or regress `enterprise_rag` behavior or its tests (see
+CLAUDE.md).
 """
