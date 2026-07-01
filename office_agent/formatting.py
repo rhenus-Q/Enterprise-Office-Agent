@@ -16,8 +16,8 @@ from office_agent.schemas import OfficeAgentResponse
 UNSUPPORTED_INTENT_NOTE = (
     "Sorry — the Office Agent can't handle that request yet. Right now it "
     "answers enterprise knowledge and policy questions from the internal "
-    "knowledge base and summarizes your inbox. Calendar lookup, tickets, tasks, "
-    "and the daily briefing are planned for later phases."
+    "knowledge base, summarizes your inbox, and looks up your calendar. Tickets, "
+    "tasks, and the daily briefing are planned for later phases."
 )
 
 

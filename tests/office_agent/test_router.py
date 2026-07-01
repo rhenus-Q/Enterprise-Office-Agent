@@ -7,7 +7,12 @@ Pure and deterministic — no external dependencies, no API keys.
 import pytest
 
 from office_agent.router import route_request
-from office_agent.schemas import INTENT_EMAIL_SUMMARY, INTENT_KNOWLEDGE_QA, INTENT_UNKNOWN
+from office_agent.schemas import (
+    INTENT_CALENDAR_LOOKUP,
+    INTENT_EMAIL_SUMMARY,
+    INTENT_KNOWLEDGE_QA,
+    INTENT_UNKNOWN,
+)
 
 # Obvious enterprise knowledge / policy / document questions (from the spec).
 KNOWLEDGE_QUESTIONS = [
@@ -28,11 +33,21 @@ EMAIL_REQUESTS = [
     "give me an inbox summary",
 ]
 
-# Unsupported office requests — the router must not claim these.
-# (Email requests are handled by their own case as of Phase 2; the ones left
-# here are still unimplemented: calendar, tickets, tasks, daily briefing.)
-UNKNOWN_REQUESTS = [
+# Obvious calendar / scheduling requests (Phase 3, from the spec).
+CALENDAR_REQUESTS = [
+    "what meetings do I have today?",
+    "show my calendar today",
+    "what is my next meeting?",
+    "do I have any meetings tomorrow?",
+    "do I have schedule conflicts?",
+    "show important meetings",
     "What's on my calendar tomorrow?",
+]
+
+# Unsupported office requests — the router must not claim these.
+# (Email and calendar requests are handled by their own cases; the ones left
+# here are still unimplemented: tickets, tasks, daily briefing.)
+UNKNOWN_REQUESTS = [
     "Create a Jira ticket for the login bug.",
     "Add 'call the vendor' to my task list.",
     "Give me my daily briefing.",
@@ -54,6 +69,13 @@ def test_email_requests_route_to_email_summary(request_text):
     assert routed.reason
 
 
+@pytest.mark.parametrize("request_text", CALENDAR_REQUESTS)
+def test_calendar_requests_route_to_calendar_lookup(request_text):
+    routed = route_request(request_text)
+    assert routed.intent == INTENT_CALENDAR_LOOKUP
+    assert routed.reason
+
+
 @pytest.mark.parametrize("request_text", UNKNOWN_REQUESTS)
 def test_unsupported_requests_route_to_unknown(request_text):
     routed = route_request(request_text)
@@ -63,3 +85,4 @@ def test_unsupported_requests_route_to_unknown(request_text):
 def test_router_is_case_insensitive():
     assert route_request("WHAT IS THE VPN POLICY?").intent == INTENT_KNOWLEDGE_QA
     assert route_request("SUMMARIZE MY INBOX").intent == INTENT_EMAIL_SUMMARY
+    assert route_request("WHAT IS MY NEXT MEETING?").intent == INTENT_CALENDAR_LOOKUP
