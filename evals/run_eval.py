@@ -32,17 +32,17 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Make project-root imports (graph.*, main) work when invoked as
+# Make project-root imports (enterprise_rag.*, main) work when invoked as
 # `python evals/run_eval.py` from anywhere.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from graph.config import (
+from enterprise_rag.graph.config import (
     WEB_FALLBACK_AGGRESSIVE,
     WEB_FALLBACK_CONSERVATIVE,
     WEB_FALLBACK_DISABLED,
 )
-from graph.consts import WEB_SEARCH_SOURCE
+from enterprise_rag.graph.consts import WEB_SEARCH_SOURCE
 
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
@@ -793,10 +793,10 @@ def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None
     """
 
     # Imported here so --validate-only never touches the graph. State seeding
-    # and per-run config resolution live in the engine (graph/engine.py) —
+    # and per-run config resolution live in the engine (enterprise_rag/graph/engine.py) —
     # the same entry point main.py uses — so the harness never mutates env.
-    from graph.engine import AnswerOptions, answer_question
-    from graph.formatting import format_answer
+    from enterprise_rag.graph.engine import AnswerOptions, answer_question
+    from enterprise_rag.graph.formatting import format_answer
 
     evaluated = []
     for index, row in enumerate(rows, 1):

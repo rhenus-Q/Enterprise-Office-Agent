@@ -13,7 +13,7 @@ doc.page_content per document.
 
 import pytest
 
-from graph.chains.retrieval_grader import RetrievalGrade, retrieval_grader
+from enterprise_rag.graph.chains.retrieval_grader import RetrievalGrade, retrieval_grader
 from tests.conftest import requires_openai
 
 # (question, document) document helps answer the question -> expect is_relevant == True

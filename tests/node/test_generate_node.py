@@ -1,5 +1,5 @@
 """
-Unit tests for the generate node (graph/nodes/generate.py).
+Unit tests for the generate node (enterprise_rag/graph/nodes/generate.py).
 
 The node is tested in isolation: graph.chains.generation.generate_answer is mocked
 via monkeypatch, so no real OpenAI call happens. Tests focus only on how the node
@@ -10,13 +10,13 @@ import importlib
 
 from langchain_core.documents import Document
 
-from graph.consts import STOP_REASON_GENERATION_ERROR
-from graph.nodes.generate import GENERATION_FAILED_ANSWER, generate
+from enterprise_rag.graph.consts import STOP_REASON_GENERATION_ERROR
+from enterprise_rag.graph.nodes.generate import GENERATION_FAILED_ANSWER, generate
 
-# graph/nodes/__init__.py re-exports the `generate` function under the same name
-# as its submodule, so `import graph.nodes.generate as ...` would bind the
+# enterprise_rag/graph/nodes/__init__.py re-exports the `generate` function under the same name
+# as its submodule, so `import enterprise_rag.graph.nodes.generate as ...` would bind the
 # function, not the module. Resolve the real module for monkeypatching.
-generate_module = importlib.import_module("graph.nodes.generate")
+generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
 
 
 def _patch_generate_answer(monkeypatch):

@@ -15,21 +15,21 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.config import web_search_enabled
-from graph.consts import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.config import web_search_enabled
+from enterprise_rag.graph.consts import (
     GENERATE,
     RETRIEVE,
     STOP_REASON_WEB_SEARCH_DISABLED,
     WEBSEARCH,
 )
-from graph.graph import (
+from enterprise_rag.graph.graph import (
     MAX_RETRIES,
     decide_to_generate,
     grade_generation,
     route_question,
 )
-from graph.nodes.web_search_disabled_notice import web_search_disabled_notice
+from enterprise_rag.graph.nodes.web_search_disabled_notice import web_search_disabled_notice
 from main import WEB_SEARCH_DISABLED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
@@ -238,10 +238,10 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
     gate the web_search node applies to external results.
     """
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
 
     monkeypatch.setattr(
         retrieve_module,
@@ -273,7 +273,7 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=web_relevant)),
     )
 
-    rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
     monkeypatch.setattr(
         rewrite_module,
         "get_query_rewriter",

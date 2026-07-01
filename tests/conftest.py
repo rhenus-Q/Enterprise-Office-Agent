@@ -3,7 +3,7 @@ conftest.py
 
 pytest loads conftest.py before collecting tests.
 We load env vars from .env (OPENAI_API_KEY, etc.) here, before any
-`from graph.chains.question_router import ...` triggers ChatOpenAI construction.
+`from enterprise_rag.graph.chains.question_router import ...` triggers ChatOpenAI construction.
 """
 
 import os
