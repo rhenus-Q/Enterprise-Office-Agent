@@ -1,18 +1,35 @@
 """
-office_agent.router — deterministic Phase 1 intent router.
+office_agent.router — deterministic intent router.
 
-A rule-based keyword matcher: obvious enterprise knowledge / policy / document
-questions route to `knowledge_qa`; everything else routes to `unknown`. No LLM
-is involved yet (that is a later phase) — this keeps Phase 1 fast, free,
-offline, and fully deterministic for tests.
+A rule-based keyword matcher, ordered by priority: inbox/email requests route to
+`email_summary`, enterprise knowledge / policy / document questions route to
+`knowledge_qa`, and everything else routes to `unknown`. No LLM is involved (that
+is a later phase) — this keeps routing fast, free, offline, and fully
+deterministic for tests.
 """
 
-from office_agent.schemas import INTENT_KNOWLEDGE_QA, INTENT_UNKNOWN, RoutedIntent
+from office_agent.schemas import (
+    INTENT_EMAIL_SUMMARY,
+    INTENT_KNOWLEDGE_QA,
+    INTENT_UNKNOWN,
+    RoutedIntent,
+)
+
+# Substrings that mark an inbox / email request (the *channel* the user is
+# asking about). Checked before the knowledge keywords so an explicit inbox
+# request ("summarize my emails about VPN") is treated as an email request
+# rather than a policy lookup.
+_EMAIL_KEYWORDS = (
+    "email",
+    "emails",
+    "inbox",
+    "mailbox",
+    "unread",
+)
 
 # Substrings that mark an enterprise knowledge-base / policy / document question.
 # Drawn from the AcmeCorp corpus domains (VPN, expenses, incident response,
 # on-call, data retention, onboarding) plus a few generic policy/document terms.
-# Matching is case-insensitive substring containment against the request text.
 _KNOWLEDGE_KEYWORDS = (
     "policy",
     "policies",
@@ -38,19 +55,27 @@ _KNOWLEDGE_KEYWORDS = (
     "audit log",
 )
 
+# Ordered routing rules: the first intent whose keyword set matches wins.
+_INTENT_RULES = (
+    (INTENT_EMAIL_SUMMARY, _EMAIL_KEYWORDS),
+    (INTENT_KNOWLEDGE_QA, _KNOWLEDGE_KEYWORDS),
+)
+
 
 def route_request(text: str) -> RoutedIntent:
-    """Classify a request into an Office Agent intent (Phase 1: rule-based).
+    """Classify a request into an Office Agent intent (rule-based).
 
-    Returns `knowledge_qa` when the text contains any known enterprise
-    knowledge/policy keyword, otherwise `unknown`. The matched keyword (or the
-    lack of a match) is recorded in `reason` for observability and tests.
+    Matching is case-insensitive substring containment against the request
+    text, evaluated in the priority order of `_INTENT_RULES`. No rule matches
+    -> `unknown`. The matched keyword (or the lack of a match) is recorded in
+    `reason` for observability and tests.
     """
 
     normalized = (text or "").casefold()
 
-    for keyword in _KNOWLEDGE_KEYWORDS:
-        if keyword in normalized:
-            return RoutedIntent(INTENT_KNOWLEDGE_QA, reason=f"matched keyword '{keyword}'")
+    for intent, keywords in _INTENT_RULES:
+        for keyword in keywords:
+            if keyword in normalized:
+                return RoutedIntent(intent, reason=f"matched keyword '{keyword}'")
 
     return RoutedIntent(INTENT_UNKNOWN, reason="no known office intent matched")

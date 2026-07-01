@@ -12,7 +12,7 @@ built alongside it.
 | Module | Status | What it is |
 |---|---|---|
 | [`enterprise_rag/`](enterprise_rag/README.md) | ✅ **Implemented** | **Enterprise Document Q&A Engine** (企业文档问答引擎) — a self-correcting Agentic RAG (CRAG-style) LangGraph workflow that answers questions from an ingested internal-document knowledge base, with web-search fallback, privacy mode, quality gates, bounded self-correction, per-run budgets, graceful degradation, and deterministic provenance. |
-| [`office_agent/`](office_agent/) | 🌱 **Phase 1** | The initial **Enterprise Office Agent** shell. Phase 1 ships a deterministic intent router and a single **Knowledge Q&A** tool that adapts the `enterprise_rag` engine (`office_agent.engine.answer_office_request()`); unsupported requests return a clear "not yet" message. Email summary, calendar lookup, tickets, tasks, and the daily briefing are reserved for later phases. |
+| [`office_agent/`](office_agent/) | 🌱 **Phase 2** | The **Enterprise Office Agent** (in progress). Ships a deterministic intent router, a **Knowledge Q&A** tool that adapts the `enterprise_rag` engine, and a **mock Email Summary** tool over local fictional inbox data (`office_agent.engine.answer_office_request()`); unsupported requests return a clear "not yet" message. Calendar lookup, tickets, tasks, and the daily briefing are reserved for later phases. |
 
 The completed engine is fully documented in **[`enterprise_rag/README.md`](enterprise_rag/README.md)**
 (setup, usage, privacy mode, fallback policy, the programmatic engine API, budgets,
@@ -28,7 +28,7 @@ failure handling, evals). This root document is the repository-level overview.
 │   ├── ingestion.py             #   KB build: load local Markdown corpus → split → embed → persist to Chroma
 │   ├── data/acmecorp_internal_docs/  #   Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 │   └── graph/                   #   StateGraph, nodes, chains, engine, config, state, consts, formatting
-├── office_agent/                # 🌱 Enterprise Office Agent shell (Phase 1: router + Knowledge Q&A adapter)
+├── office_agent/                # 🌱 Enterprise Office Agent (Phase 2: router + Knowledge Q&A adapter + mock Email Summary)
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
 │   └── adr/                     # Architecture Decision Records 001–014 (repo-level; index in docs/adr/README.md)

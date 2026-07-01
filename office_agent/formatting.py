@@ -10,14 +10,14 @@ re-format answers — it only selects/renders the final text.
 
 from office_agent.schemas import OfficeAgentResponse
 
-# Shown when the Office Agent cannot handle a request yet. Phase 1 supports only
-# enterprise knowledge questions; the coming capabilities are named so the user
-# gets a clear "not yet" rather than an opaque failure.
+# Shown when the Office Agent cannot handle a request yet. The supported
+# capabilities are named so the user gets a clear "not yet" rather than an
+# opaque failure.
 UNSUPPORTED_INTENT_NOTE = (
-    "Sorry — the Office Agent can't handle that request yet. Right now it only "
+    "Sorry — the Office Agent can't handle that request yet. Right now it "
     "answers enterprise knowledge and policy questions from the internal "
-    "knowledge base. Email summaries, calendar lookup, tickets, tasks, and the "
-    "daily briefing are planned for later phases."
+    "knowledge base and summarizes your inbox. Calendar lookup, tickets, tasks, "
+    "and the daily briefing are planned for later phases."
 )
 
 
