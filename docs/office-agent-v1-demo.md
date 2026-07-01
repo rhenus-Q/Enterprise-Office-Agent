@@ -9,6 +9,12 @@ the completed [`enterprise_rag`](../enterprise_rag/README.md) engine.
 > (`meeting_agent`) — an advanced *composition* tool that combines the local
 > calendar, inbox, and ticket/task mock data into one deterministic meeting-prep
 > sheet. See [Meeting Agent / Meeting Prep](#meeting-agent--meeting-prep) below.
+>
+> **v1.5 (Phase 7)** adds a **Workflow / Approval Agent** capability
+> (`workflow_approval`) — a deterministic mock approval assistant over a local
+> approval queue + audit log, with *simulated* approve/reject decisions and
+> follow-up tasks (mock data is never mutated). See
+> [Workflow / Approval Agent](#workflow--approval-agent) below.
 
 Everything except Knowledge Q&A is **local, mock-data-backed, and LLM-free**, so
 most of it demos with no API keys and no external services.
@@ -26,17 +32,21 @@ request into one **intent**, and the engine dispatches to exactly one tool:
 | `ticket_assistant` | Tickets & tasks | Local mock `mock_data/tickets.json` + `tasks.json` |
 | `daily_briefing` | Aggregated morning briefing | Aggregates the email + calendar + ticket mock data |
 | `meeting_agent` | Meeting prep (composition) | Combines the calendar + email + ticket/task mock data for one meeting |
+| `workflow_approval` | Approval workflows | Local mock `mock_data/approvals.json` + `audit_log.json` |
 | `unknown` | Unsupported request | Returns a safe "can't do that" message; no tool runs |
 
-Routing precedence is `email → ticket/task → meeting_agent → calendar →
-daily_briefing → knowledge → unknown`: an explicit channel request (email, then
-ticket/task) wins first; meeting-*prep* semantics ("prepare me for…", "meeting
-prep", "bring up", "agenda") are matched before the broad calendar keywords so a
-plain lookup like "what meetings do I have today?" still routes to Calendar
-Lookup; a broad "brief me / what should I focus on" request goes to Daily
-Briefing; and a policy/document question falls to Knowledge Q&A. There is **no
-LLM router** — routing is pure keyword matching, so it is fast, offline, and
-fully reproducible.
+Routing precedence is `email → workflow_approval → ticket/task → meeting_agent →
+calendar → daily_briefing → knowledge → unknown`: an explicit email request wins
+first; workflow/approval requests (an approval keyword like "approve"/"reject"/
+"approval", or an explicit `APR-<n>` id) are matched **before** ticket/task, so
+"create a follow-up task for APR-001" is an approval action rather than a plain
+task; plain ticket/task requests follow; meeting-*prep* semantics ("prepare me
+for…", "meeting prep", "bring up", "agenda") are matched before the broad
+calendar keywords so a plain lookup like "what meetings do I have today?" still
+routes to Calendar Lookup; a broad "brief me / what should I focus on" request
+goes to Daily Briefing; and a policy/document question falls to Knowledge Q&A.
+There is **no LLM router** — routing is pure keyword matching, so it is fast,
+offline, and fully reproducible.
 
 ## Programmatic usage
 
@@ -64,14 +74,16 @@ Knowledge Q&A, which carries through the `enterprise_rag` caveats and sources).
 | `"show blocked tickets"` | `ticket_assistant` |
 | `"prepare me for my next meeting"` | `meeting_agent` |
 | `"what should I bring up in the VPN rollout meeting?"` | `meeting_agent` |
+| `"show pending approvals"` | `workflow_approval` |
+| `"approve APR-001"` | `workflow_approval` |
 | `"what is the VPN access policy?"` | `knowledge_qa` |
 | `"order lunch for the team"` | `unknown` |
 
 ## Run the demo script
 
 ```powershell
-# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep, Unknown).
-# No API keys, no external services, no Chroma index required.
+# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep,
+# Workflow / Approval, Unknown). No API keys, no external services, no Chroma index.
 uv run python scripts/demo_office_agent_v1.py
 
 # Also run the Knowledge Q&A example (needs the enterprise_rag setup below).
@@ -90,10 +102,10 @@ Enterprise RAG pipeline.
   enterprise_rag.ingestion`) and **API keys** (`OPENAI_API_KEY`, and `TAVILY_API_KEY`
   when web search is enabled). See
   [`enterprise_rag/README.md`](../enterprise_rag/README.md).
-- **Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing, and
-  Meeting Agent / Meeting Prep** read static fictional JSON in
-  [`office_agent/mock_data/`](../office_agent/mock_data/). No network, no keys, no
-  LLM.
+- **Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing,
+  Meeting Agent / Meeting Prep, and Workflow / Approval Agent** read static
+  fictional JSON in [`office_agent/mock_data/`](../office_agent/mock_data/). No
+  network, no keys, no LLM.
 
 ## Local-only mock-data design
 
@@ -149,7 +161,45 @@ bounded, and identical on every run.
 
 Example requests: `"prepare me for my next meeting"`, `"generate meeting prep"`,
 `"what should I bring up in the VPN rollout meeting?"`, `"prep me for the security
-review board"`, `"meeting prep for expense approvals"`.
+review board"`, `"meeting prep for the budget workshop"`.
+
+## Workflow / Approval Agent
+
+Workflow / Approval Agent (`workflow_approval`, added in v1.5 / Phase 7) is a
+deterministic mock approval assistant over a local approval queue
+([`mock_data/approvals.json`](../office_agent/mock_data/approvals.json)) and audit
+log ([`mock_data/audit_log.json`](../office_agent/mock_data/audit_log.json)). It
+is **local-only, LLM-free, and never calls the Enterprise RAG pipeline or any
+external service** (no Jira / Linear / Asana / Trello / Slack / Gmail / Outlook /
+Google Calendar).
+
+**Views** (deterministic precedence; case-insensitive):
+
+- **List / filter** — all approvals, `pending`, `assigned to me` (approver is
+  me), `urgent`/`high`, `approved`, `rejected`, and topic filters such as "show
+  expense approvals" / "show VPN approvals".
+- **Status** — status for a specific id (any `APR-<n>`): status, priority,
+  requester, approver/owner, due date, amount, linked ticket/task, policy area.
+- **Simulated approve/reject** — `"approve APR-001"` / `"reject APR-002"` return a
+  clear **Simulated action** section (previous → new status, actor, note).
+- **Simulated follow-up task** — `"create a follow-up task for APR-001"` returns a
+  **Simulated follow-up task** section.
+- **Audit log** — `"show audit log for APR-001"` lists that approval's audit
+  events, sorted by timestamp.
+
+**Simulated actions never mutate the mock data.** `approve`/`reject` and
+follow-up task creation compute their result in the response only;
+`handle_approval_request` writes nothing. `build_simulated_decision` and
+`build_simulated_followup_task` are pure (no system clock — timestamps mirror the
+source approval), so output is identical on every run. `record_decision` exposes
+an optional `persist_path` seam for tests only — it writes solely to a
+caller-provided path (e.g. pytest's `tmp_path`), never to the repo's `mock_data/`
+files.
+
+Example requests: `"show pending approvals"`, `"which approvals are assigned to
+me?"`, `"show urgent approvals"`, `"what is the status of APR-001?"`, `"approve
+APR-001"`, `"reject APR-002"`, `"create a follow-up task for APR-001"`, `"show
+audit log for APR-001"`, `"show expense approvals"`.
 
 See [ADR 015](adr/015-office-agent-v1-architecture.md) for the full architecture
 decision behind Office Agent v1.

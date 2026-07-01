@@ -507,10 +507,12 @@ small, deterministic, and — except for Knowledge Q&A — local and LLM-free. I
 - **Deterministic keyword router** (`office_agent/router.py`) — classifies a
   free-text request into exactly one intent by ordered, case-insensitive keyword
   matching. No LLM is involved, so routing is fast, offline, and reproducible.
-  Precedence: `email → ticket/task → meeting_agent → calendar → daily_briefing →
-  knowledge → unknown` (meeting-*prep* semantics are matched before the broad
-  calendar keywords, so a plain "what meetings do I have today?" lookup still
-  routes to `calendar_lookup`).
+  Precedence: `email → workflow_approval → ticket/task → meeting_agent → calendar
+  → daily_briefing → knowledge → unknown` (workflow/approval requests — an
+  approval keyword or an explicit `APR-<n>` id — are matched before ticket/task,
+  so "create a follow-up task for APR-001" is an approval action; meeting-*prep*
+  semantics are matched before the broad calendar keywords, so a plain "what
+  meetings do I have today?" lookup still routes to `calendar_lookup`).
 - **Typed schemas + intent constants** (`office_agent/schemas.py`) — plain
   dataclasses (`OfficeRequest`, `RoutedIntent`, `ToolResult`,
   `OfficeAgentResponse`) plus the `INTENT_*` string constants and the
@@ -537,6 +539,7 @@ small, deterministic, and — except for Knowledge Q&A — local and LLM-free. I
 | `tickets.py` | `ticket_assistant` | Local mock `mock_data/tickets.json` + `mock_data/tasks.json` |
 | `briefing.py` | `daily_briefing` | Aggregates the email + calendar + ticket mock data |
 | `meeting.py` | `meeting_agent` | Composes the calendar + email + ticket/task mock data for one meeting (**v1.5 / Phase 6**) |
+| `approvals.py` | `workflow_approval` | Local mock `mock_data/approvals.json` + `mock_data/audit_log.json` (**v1.5 / Phase 7**) |
 
 **`enterprise_rag` is not duplicated inside `office_agent`.** The Knowledge Q&A
 tool is a thin *adapter* that calls
@@ -546,9 +549,10 @@ reimplemented. Knowledge Q&A is the only office tool that reaches an LLM /
 external services (through the RAG engine); every other tool is local mock data.
 
 **Local mock data** (`office_agent/mock_data/`) — `emails.json`,
-`calendar_events.json`, `tickets.json`, `tasks.json`. It is entirely fictional
-AcmeCorp data, loaded lazily (imports stay side-effect-free), treated as
-**read-only** (task "creation" is *simulated*, never written back), and
+`calendar_events.json`, `tickets.json`, `tasks.json`, `approvals.json`,
+`audit_log.json`. It is entirely fictional AcmeCorp data, loaded lazily (imports
+stay side-effect-free), treated as **read-only** (task "creation" and approve/
+reject decisions are *simulated*, never written back), and
 **anchored to the data rather than the system clock** ("today" / "next meeting"
 are resolved from the data), so every mock tool is deterministic and CI-safe. No
 external service is ever contacted (no Gmail / Outlook / Google Calendar / Slack /
@@ -562,6 +566,18 @@ metadata, relevant emails, relevant tickets/tasks, inferred knowledge areas, a
 suggested agenda, risks/blockers, and recommended follow-ups. It **does not call
 the Enterprise RAG pipeline** — "relevant knowledge areas" are inferred from
 labels, not retrieved — and it uses no LLM and no external services.
+
+**Workflow / Approval Agent (v1.5 / Phase 7)** is a deterministic mock approval
+assistant over the local approval queue (`approvals.json`) and audit log
+(`audit_log.json`). It supports list/filter views (all, pending, assigned-to-me,
+high-priority, approved, rejected, and topic filters like "expense approvals"),
+per-id status, *simulated* approve/reject decisions, *simulated* follow-up task
+creation, and audit-log output sorted by timestamp. Simulated actions never
+mutate the mock data — `handle_approval_request` writes nothing, and the pure
+`build_simulated_decision` / `build_simulated_followup_task` helpers use no system
+clock. An optional `record_decision(..., persist_path=...)` seam writes only to a
+caller-provided path (tests use `tmp_path`), never the repo mock data. Like the
+other mock tools it uses no LLM and contacts no external service.
 
 **Demo & docs.** `scripts/demo_office_agent_v1.py` runs a few requests through
 `answer_office_request()` and prints the selected intent + response for each; it

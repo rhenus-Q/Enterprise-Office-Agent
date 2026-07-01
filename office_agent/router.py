@@ -2,13 +2,16 @@
 office_agent.router — deterministic intent router.
 
 A rule-based keyword matcher, ordered by priority: inbox/email requests route to
-`email_summary`, ticket/task requests route to `ticket_assistant`, meeting-prep
-requests route to `meeting_agent`, calendar/meeting/schedule lookups route to
-`calendar_lookup`, whole-day "briefing / what should I focus on" requests route
-to `daily_briefing`, enterprise knowledge / policy / document questions route to
-`knowledge_qa`, and everything else routes to `unknown`. No LLM is involved —
-this keeps routing fast, free, offline, and fully deterministic for tests.
+`email_summary`, workflow/approval requests route to `workflow_approval`,
+ticket/task requests route to `ticket_assistant`, meeting-prep requests route to
+`meeting_agent`, calendar/meeting/schedule lookups route to `calendar_lookup`,
+whole-day "briefing / what should I focus on" requests route to `daily_briefing`,
+enterprise knowledge / policy / document questions route to `knowledge_qa`, and
+everything else routes to `unknown`. No LLM is involved — this keeps routing
+fast, free, offline, and fully deterministic for tests.
 """
+
+import re
 
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
@@ -18,6 +21,7 @@ from office_agent.schemas import (
     INTENT_MEETING_AGENT,
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
+    INTENT_WORKFLOW_APPROVAL,
     RoutedIntent,
 )
 
@@ -46,6 +50,26 @@ _CALENDAR_KEYWORDS = (
     "conflict",
     "conflicts",
 )
+
+# Substrings that mark a workflow / approval request. Checked before the
+# ticket/task keywords so an approval request that mentions a task ("create a
+# follow-up task for APR-001") is treated as a workflow request, not a plain task
+# request. An explicit approval id (see `_APPROVAL_ID_PATTERN`) also routes here.
+_WORKFLOW_KEYWORDS = (
+    "approval",
+    "approvals",
+    "approve",
+    "reject",
+    "sign off",
+    "sign-off",
+    "signoff",
+    "workflow",
+)
+
+# An explicit approval id, e.g. "APR-001". Routes to the Workflow / Approval
+# Agent regardless of other keywords, so "create a follow-up task for APR-001"
+# and "what is the status of APR-001?" both land on `workflow_approval`.
+_APPROVAL_ID_PATTERN = re.compile(r"apr-\d+", re.IGNORECASE)
 
 # Substrings that mark a meeting-*prep* request — the user wants to be prepared
 # for a meeting (agenda, talking points, context), not just look up the schedule.
@@ -118,12 +142,15 @@ _KNOWLEDGE_KEYWORDS = (
 )
 
 # Ordered routing rules: the first intent whose keyword set matches wins.
-# Precedence: explicit channel requests (email, then ticket/task) win first;
-# meeting-*prep* is matched before the broad calendar keywords so "prepare me for
-# my next meeting" is prep (not a lookup); a plain calendar lookup follows; then
-# the whole-day briefing; and finally the broad knowledge keywords.
+# Precedence: an explicit email request wins first; then workflow/approval
+# requests (matched before ticket/task, since an approval may mention a task or
+# ticket); then plain ticket/task requests; meeting-*prep* is matched before the
+# broad calendar keywords so "prepare me for my next meeting" is prep (not a
+# lookup); a plain calendar lookup follows; then the whole-day briefing; and
+# finally the broad knowledge keywords.
 _INTENT_RULES = (
     (INTENT_EMAIL_SUMMARY, _EMAIL_KEYWORDS),
+    (INTENT_WORKFLOW_APPROVAL, _WORKFLOW_KEYWORDS),
     (INTENT_TICKET_ASSISTANT, _TICKET_KEYWORDS),
     (INTENT_MEETING_AGENT, _MEETING_KEYWORDS),
     (INTENT_CALENDAR_LOOKUP, _CALENDAR_KEYWORDS),
@@ -147,5 +174,9 @@ def route_request(text: str) -> RoutedIntent:
         for keyword in keywords:
             if keyword in normalized:
                 return RoutedIntent(intent, reason=f"matched keyword '{keyword}'")
+        # The workflow rule also matches an explicit approval id (e.g. APR-001),
+        # evaluated at its precedence position so email keywords still win first.
+        if intent == INTENT_WORKFLOW_APPROVAL and _APPROVAL_ID_PATTERN.search(normalized):
+            return RoutedIntent(intent, reason="matched approval id")
 
     return RoutedIntent(INTENT_UNKNOWN, reason="no known office intent matched")
