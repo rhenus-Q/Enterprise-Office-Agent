@@ -2,13 +2,14 @@
 office_agent.router — deterministic intent router.
 
 A rule-based keyword matcher, ordered by priority: inbox/email requests route to
-`email_summary`, enterprise knowledge / policy / document questions route to
-`knowledge_qa`, and everything else routes to `unknown`. No LLM is involved (that
-is a later phase) — this keeps routing fast, free, offline, and fully
-deterministic for tests.
+`email_summary`, calendar/meeting/schedule requests route to `calendar_lookup`,
+enterprise knowledge / policy / document questions route to `knowledge_qa`, and
+everything else routes to `unknown`. No LLM is involved (that is a later phase) —
+this keeps routing fast, free, offline, and fully deterministic for tests.
 """
 
 from office_agent.schemas import (
+    INTENT_CALENDAR_LOOKUP,
     INTENT_EMAIL_SUMMARY,
     INTENT_KNOWLEDGE_QA,
     INTENT_UNKNOWN,
@@ -25,6 +26,19 @@ _EMAIL_KEYWORDS = (
     "inbox",
     "mailbox",
     "unread",
+)
+
+# Substrings that mark a calendar / scheduling request. Checked before the
+# knowledge keywords so "do I have any meetings about the VPN rollout?" is
+# treated as a calendar request rather than a policy lookup.
+_CALENDAR_KEYWORDS = (
+    "calendar",
+    "meeting",
+    "meetings",
+    "schedule",
+    "agenda",
+    "conflict",
+    "conflicts",
 )
 
 # Substrings that mark an enterprise knowledge-base / policy / document question.
@@ -56,8 +70,11 @@ _KNOWLEDGE_KEYWORDS = (
 )
 
 # Ordered routing rules: the first intent whose keyword set matches wins.
+# Channel-specific requests (email, then calendar) take precedence over the
+# broader knowledge keywords.
 _INTENT_RULES = (
     (INTENT_EMAIL_SUMMARY, _EMAIL_KEYWORDS),
+    (INTENT_CALENDAR_LOOKUP, _CALENDAR_KEYWORDS),
     (INTENT_KNOWLEDGE_QA, _KNOWLEDGE_KEYWORDS),
 )
 

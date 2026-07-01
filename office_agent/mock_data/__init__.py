@@ -1,9 +1,14 @@
 """
 office_agent.mock_data — local, fictional sample data for the Office Agent.
 
-Phase 2 ships `emails.json`: a small, entirely fictional AcmeCorp-style inbox
-used by the mock Email Summary tool (`office_agent.tools.email`). There is NO
-connection to Gmail, Outlook, or any mail service — this is static local data so
-the tool is deterministic and CI-safe. Replace it with a real mail adapter in a
-later phase behind the same tool interface.
+Ships two static, entirely fictional AcmeCorp-style datasets:
+
+- `emails.json` — inbox data for the mock Email Summary tool
+  (`office_agent.tools.email`).
+- `calendar_events.json` — calendar data for the mock Calendar Lookup tool
+  (`office_agent.tools.calendar`).
+
+There is NO connection to Gmail, Outlook, Google Calendar, or any service — this
+is static local data so the tools stay deterministic and CI-safe. Replace it
+with real adapters in later phases behind the same tool interfaces.
 """
