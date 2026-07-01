@@ -93,7 +93,7 @@ disappear in a later prompt edit.
   with its own failure modes and budget cost; a natural second layer on top
   of the relevance gate if the threat model hardens.
 - **Allowlisted web domains**: deferred — effective but operationally heavy
-  for a portfolio-scale project; belongs in a deployment configuration.
+  at the current project scale; belongs in a deployment configuration.
 - **Tool permissioning**: not currently needed — generation has no tools to
   permission. This becomes mandatory the moment retrieved content can reach
   an agent that executes actions.

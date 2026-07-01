@@ -50,7 +50,7 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project architecture is clean, maintainable, testable, observable, safe to continue building on, and suitable as a portfolio-grade Agentic RAG / LangGraph project.
+Review whether the current project architecture is clean, maintainable, testable, observable, safe to continue building on, and suitable as a production-oriented Agentic RAG / LangGraph project.
 
 This review should cover:
 
@@ -271,8 +271,8 @@ Evaluate the following areas.
 * Are logs, traces, eval history, and generated reports safe for local development and CI?
 * Are `.env`, secrets, generated artifacts, vector stores, and runtime outputs protected from accidental commit?
 * Are CI checks sufficient for safe development without requiring paid API calls?
-* Is the project easy to run, test, debug, and explain as a portfolio-grade system?
-* Are production-like risks documented clearly enough without overengineering the demo?
+* Is the project easy to run, test, debug, and explain as a well-engineered system?
+* Are production-like risks documented clearly enough without overengineering the system?
 * Is cleanup needed before adding more features?
 
 ### Documentation quality
@@ -284,14 +284,14 @@ Evaluate the following areas.
 * Do docs explain how to run safe tests versus API-key-requiring workflows?
 * Do docs clearly describe the architecture without overstating production readiness?
 
-### Portfolio quality
+### Engineering quality
 
-* Would this architecture look credible to a hiring manager or senior engineer?
+* Would this architecture read as credible to a senior engineer?
 * Are there signs of overengineering?
 * Are there signs of underengineering?
-* What would make the project look more production-ready?
-* Is the project explainable in a clear interview narrative?
-* Does the architecture demonstrate real engineering judgment rather than only LLM demo behavior?
+* What would make the project more production-ready?
+* Is the project's design explainable in a clear technical narrative?
+* Does the architecture reflect real engineering judgment rather than only prototype LLM behavior?
 
 ## Step 4. Look for risks and improvement opportunities
 
@@ -308,7 +308,7 @@ Flag:
 * missing tests around important behavior
 * architecture that makes future features harder
 * observability that leaks too much or explains too little
-* production-readiness gaps that could cause fragile demos
+* production-readiness gaps that could cause fragile behavior
 * places where security, privacy, fallback, budget, or stop_reason semantics are unclear
 
 Do not rewrite the architecture.
@@ -343,7 +343,7 @@ Report file: <selected unique report path>
 
 State whether the architecture is:
 
-* Strong / portfolio-ready
+* Strong / production-oriented
 * Good but needs minor cleanup
 * Needs significant improvement
 
@@ -468,19 +468,19 @@ Separate recommendations into:
 
 ### Optional improvements
 
-## 13. Portfolio-readiness verdict
+## 13. Engineering-readiness verdict
 
 Give one of:
 
-* Portfolio-ready
-* Portfolio-ready after minor cleanup
-* Not portfolio-ready yet
+* Production-oriented
+* Production-oriented after minor cleanup
+* Not production-ready yet
 
 Explain why.
 
 ## 14. Overall recommendation
 
-Do not restate the executive summary or the portfolio-readiness verdict here.
+Do not restate the executive summary or the engineering-readiness verdict here.
 
 Instead, give a short, action-oriented recommendation that answers:
 

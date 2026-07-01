@@ -52,7 +52,7 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project has enough test coverage for a portfolio-grade Agentic RAG / LangGraph system.
+Review whether the current project has enough test coverage for a production-oriented Agentic RAG / LangGraph system.
 
 This review should focus on coverage gaps, regression risks, and missing tests around important behavior.
 
@@ -446,7 +446,7 @@ Report file: <selected unique report path>
 
 State whether the test coverage posture is:
 
-* Strong / portfolio-ready
+* Strong / production-oriented
 * Good but needs minor cleanup
 * Needs significant improvement
 
@@ -603,7 +603,7 @@ Separate recommendations into:
 
 Give one of:
 
-* Test-ready for portfolio use
+* Test-ready / production-oriented
 * Test-ready after minor cleanup
 * Not test-ready yet
 

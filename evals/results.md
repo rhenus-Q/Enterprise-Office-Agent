@@ -1,7 +1,7 @@
 # Eval results
 
 - Generated: 2026-06-17 02:52 UTC
-- Dataset: `C:\Agentic AI\LangGraph\Agentic_RAG_Claude\evals\questions.jsonl`
+- Dataset: `evals/questions.jsonl`
 - Rows evaluated: 24
 
 ## Metrics
@@ -207,4 +207,3 @@ No previous run found — this is the first recorded run.
 **Q:** Who is the current CEO of Microsoft?
 
 **A:** According to the provided documents, Satya Nadella is the current CEO of Microsoft. Sources: - Web search: Why Does Microsoft Now Have a New, Extra CEO? — https://technologymagazine.com/news/why-is-microsoft-ceo-satya-nadella-shifting-his-focus-to-ai - Web search: Who is the CEO of Microsoft in 2026? Satya Nadella's Bio - Clay — https://www.clay.com/dossier/microsoft-ceo - Web search: Satya Nadell…
-

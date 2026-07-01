@@ -177,7 +177,7 @@ Examples of unacceptable guidance:
 
 * "On 2026-06-13, Phase 3D was implemented."
 * "378 tests passed."
-* "Architecture review said the project is portfolio-ready."
+* "Architecture review said the project is production-ready."
 * "The implementation report was written to a specific path."
 
 ## Step 5. Validate the documentation diff

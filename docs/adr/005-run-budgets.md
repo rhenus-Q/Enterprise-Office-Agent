@@ -11,9 +11,9 @@ generation, two post-generation graders, query rewrites, web searches, and
 per-result web grading — looped up to `MAX_RETRIES = 5` times. The retry cap
 bounds *iterations*, but nothing bounded *spend within an iteration's
 machinery*, and a future change (or a pathological configuration) could make
-a single question arbitrarily expensive or slow. For a portfolio/demo project
-run against a paid API, an unbounded worst case is also a personal-cost
-hazard: one bad loop is a real bill.
+a single question arbitrarily expensive or slow. For a project run against a
+paid API, an unbounded worst case is also a cost hazard: one bad loop is a
+real bill.
 
 ## Decision
 

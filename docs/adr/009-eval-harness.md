@@ -4,6 +4,12 @@ Status: Accepted
 
 Date: 2026-06-11
 
+> **Note:** This ADR records the **v1** eval harness. The later **v2**
+> expansion — a larger dataset, richer deterministic expectations, and
+> metadata-only history/delta tracking — is documented in
+> [ADR 013](013-eval-harness-v2-expansion.md). This ADR is preserved as the
+> original decision and is intentionally not rewritten.
+
 ## Context
 
 The project has 170+ mocked unit and graph tests proving that *code paths*

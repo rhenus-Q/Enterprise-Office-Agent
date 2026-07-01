@@ -70,7 +70,9 @@ chooses fallback within an allowance. Collapsing both into one variable
 would force privacy-sensitive deployments to also accept routing changes,
 and vice versa.
 
-No new graph state was needed: `decide_to_generate` distinguishes "some
+Originally no new graph state was needed; this was later superseded by the
+2026-06-11 update above, which stores the resolved per-run policy in
+`GraphState["web_fallback_policy"]`. `decide_to_generate` distinguishes "some
 relevant documents remain" from "none remain" by reading the already-filtered
 `documents` list.
 

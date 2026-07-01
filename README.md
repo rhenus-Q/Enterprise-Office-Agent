@@ -1,6 +1,6 @@
-# Agentic RAG Assistant
+# Agentic RAG Assistant for Enterprise Document Q&A
 
-[![CI](https://github.com/rhenusbeichenGit/Agentic_RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/rhenusbeichenGit/Agentic_RAG/actions/workflows/ci.yml)
+[![CI](https://github.com/rhenus-Q/Enterprise-Office-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/rhenus-Q/Enterprise-Office-Agent/actions/workflows/ci.yml)
 
 **A self-correcting, enterprise-style document Q&A assistant built with LangGraph (CRAG pattern).**
 
@@ -12,20 +12,21 @@ The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp 
 
 ## Key Features
 
-- **Question routing** — an LLM router sends knowledge-base questions to vector retrieval and out-of-scope questions straight to web search.
-- **Three quality gates**, each an independent structured-output LLM grader:
+* **Question routing** — an LLM router sends knowledge-base questions to vector retrieval and out-of-scope questions straight to web search.
+* **Three quality gates**, each an independent structured-output LLM grader:
+
   1. **Document relevance** — irrelevant retrieved chunks are filtered out before generation, and external web results must pass the *same* relevance gate before they're added to the context (untrusted sources don't get a free pass).
   2. **Answer grounding (anti-hallucination)** — answers not supported by the documents are regenerated.
   3. **Answer usefulness** — grounded but off-target answers trigger a web-search supplement.
-- **Web search fallback** via Tavily when the local knowledge base isn't sufficient.
-- **Privacy mode** — a `WEB_SEARCH_ENABLED=false` toggle disables every web-search path (routing, fallback, and supplement), so user questions never leave the local environment.
-- **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
-- **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
-- **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
-- **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
-- **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement. Web provenance is **page-level**: each relevant result's title and URL are preserved and cited (`Web search: <title> — <url>`), falling back to the query-level citation when Tavily returns no URLs. Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
-- **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
-- **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
+* **Web search fallback** via Tavily when the local knowledge base isn't sufficient.
+* **Privacy mode** — a `WEB_SEARCH_ENABLED=false` toggle disables every web-search path (routing, fallback, and supplement), so user questions never leave the local environment.
+* **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
+* **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
+* **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
+* **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
+* **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement. Web provenance is **page-level**: each relevant result's title and URL are preserved and cited (`Web search: <title> — <url>`), falling back to the query-level citation when Tavily returns no URLs. Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
+* **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
+* **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
 
 ## Architecture
 
@@ -60,31 +61,32 @@ flowchart TD
 4. **`websearch`** — searches with the rewritten `search_query` on retry rounds (original question otherwise). Each Tavily result is individually graded for relevance against the *original* question (reusing the retrieval grader, so external content faces the same gate as internal chunks); only relevant results are merged into a single `Document` (tagged `source: web_search`, with each contributing page's title/URL kept in `web_sources` metadata for the Sources section), which **replaces** any previous web supplement instead of stacking duplicates. Malformed responses and irrelevant results are dropped defensively — if nothing usable comes back, the workflow continues with the existing documents.
 5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM and flags it via `insufficient_context` in state. Each pass increments `retries`.
 6. **`grade_generation`** (conditional edge) — two-layer check with eleven explicit outcomes:
-   - `insufficient_context` → the generation is the deterministic insufficient-context answer (no usable documents); both graders are skipped — there is nothing to verify and regenerating from the same empty context cannot help — and the run ends honestly on the first pass (in privacy mode via the `web_search_disabled` notice, so the caveat explains why no information could be added),
-   - `not_grounded` → `add_grounding_feedback` injects a corrective instruction into the next generation, then regenerate,
-   - `useful` → END,
-   - `not_useful` → `rewrite_query` produces a more specific search query, then web search and regenerate,
-   - `web_search_disabled` → terminal notice node (privacy mode; see below),
-   - `web_fallback_disabled` → terminal notice node (`WEB_FALLBACK_POLICY=disabled` blocked a local-only run's not-useful web retry; see below),
-   - `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one),
-   - `budget_exhausted` → the per-run cost budget is spent; terminal notice node, the answer goes out with an explicit caveat,
-   - `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
-   - `tool_error` → a grader call failed; the run ends through a terminal notice node with the answer explicitly flagged as unverified.
+
+   * `insufficient_context` → the generation is the deterministic insufficient-context answer (no usable documents); both graders are skipped — there is nothing to verify and regenerating from the same empty context cannot help — and the run ends honestly on the first pass (in privacy mode via the `web_search_disabled` notice, so the caveat explains why no information could be added),
+   * `not_grounded` → `add_grounding_feedback` injects a corrective instruction into the next generation, then regenerate,
+   * `useful` → END,
+   * `not_useful` → `rewrite_query` produces a more specific search query, then web search and regenerate,
+   * `web_search_disabled` → terminal notice node (privacy mode; see below),
+   * `web_fallback_disabled` → terminal notice node (`WEB_FALLBACK_POLICY=disabled` blocked a local-only run's not-useful web retry; see below),
+   * `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one),
+   * `budget_exhausted` → the per-run cost budget is spent; terminal notice node, the answer goes out with an explicit caveat,
+   * `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
+   * `tool_error` → a grader call failed; the run ends through a terminal notice node with the answer explicitly flagged as unverified.
 
 State is a `TypedDict` defined in `graph/state.py` with thirteen fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`, `insufficient_context`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](structure.md) §3 for the full field-by-field table.
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Orchestration | LangGraph (`StateGraph`, conditional edges) |
-| LLM | OpenAI `gpt-5-mini` (router, graders, generation — all structured output via Pydantic) |
-| Embeddings | `OpenAIEmbeddings` |
-| Vector store | Chroma (local persistence) |
-| Web search | Tavily (`langchain-tavily`) |
-| Chains | LangChain LCEL |
-| Package management | uv (`pyproject.toml` + committed `uv.lock`) |
-| Testing | pytest (mocked unit tests + key-gated integration tests) |
+| Layer              | Technology                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| Orchestration      | LangGraph (`StateGraph`, conditional edges)                                            |
+| LLM                | OpenAI `gpt-5-mini` (router, graders, generation — all structured output via Pydantic) |
+| Embeddings         | `OpenAIEmbeddings`                                                                     |
+| Vector store       | Chroma (local persistence)                                                             |
+| Web search         | Tavily (`langchain-tavily`)                                                            |
+| Chains             | LangChain LCEL                                                                         |
+| Package management | uv (`pyproject.toml` + committed `uv.lock`)                                            |
+| Testing            | pytest (mocked unit tests + key-gated integration tests)                               |
 
 ## Project Structure
 
@@ -132,8 +134,8 @@ Requires **Python ≥ 3.11** and [uv](https://docs.astral.sh/uv/).
 
 ```powershell
 # 1. Clone and enter the project
-git clone <repo-url>
-cd Agentic_RAG_Claude
+git clone https://github.com/rhenus-Q/Enterprise-Office-Agent.git
+cd Enterprise-Office-Agent
 
 # 2. Install dependencies (creates .venv from the committed uv.lock)
 uv sync --group dev
@@ -146,14 +148,14 @@ Copy-Item .env.example .env   # then edit .env and add your keys
 
 See [`.env.example`](.env.example) for the full template:
 
-| Variable | Required | Used for |
-|---|---|---|
-| `OPENAI_API_KEY` | Yes | Chat models (router, graders, generation) and embeddings |
-| `TAVILY_API_KEY` | Yes | Web-search fallback node |
-| `WEB_SEARCH_ENABLED` | Optional (default `true`) | Set to `false` to disable all external web search (privacy mode) |
-| `WEB_FALLBACK_POLICY` | Optional (default `conservative`) | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below) |
-| `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE` | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below) |
-| `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` | Optional | LangSmith tracing of the correction loops |
+| Variable                                                                            | Required                              | Used for                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OPENAI_API_KEY`                                                                    | Yes                                   | Chat models (router, graders, generation) and embeddings                                                                                                                       |
+| `TAVILY_API_KEY`                                                                    | Yes                                   | Web-search fallback node                                                                                                                                                       |
+| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` to disable all external web search (privacy mode)                                                                                                               |
+| `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
+| `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. |
 
 `.env` is gitignored; only `.env.example` is committed.
 
@@ -164,9 +166,9 @@ external search API is a data-leak risk: every routed or fallback web search
 transmits the question text to a third-party service. Setting
 `WEB_SEARCH_ENABLED=false` guarantees questions never leave the local environment:
 
-- The entry router never sends a question to web search — everything goes to vector retrieval (the router LLM call is skipped entirely on this path).
-- If retrieved documents are graded irrelevant, the workflow generates from whatever relevant documents remain instead of searching the web; with none left, it returns the deterministic *"I do not have enough information in the provided documents."* answer rather than fabricating one.
-- A grounded-but-off-target answer ends the run with the grounded answer instead of triggering a web-search supplement. In that case the workflow records a `stop_reason` in its state, and the CLI appends an explicit caveat to the answer so the limitation is never silent:
+* The entry router never sends a question to web search — everything goes to vector retrieval (the router LLM call is skipped entirely on this path).
+* If retrieved documents are graded irrelevant, the workflow generates from whatever relevant documents remain instead of searching the web; with none left, it returns the deterministic *"I do not have enough information in the provided documents."* answer rather than fabricating one.
+* A grounded-but-off-target answer ends the run with the grounded answer instead of triggering a web-search supplement. In that case the workflow records a `stop_reason` in its state, and the CLI appends an explicit caveat to the answer so the limitation is never silent:
 
   > *Note: Web search is disabled, so I could only use the local knowledge base. I may not have enough information to fully answer this question.*
 
@@ -186,16 +188,16 @@ external web search is allowed *at all* (and overrides everything below);
 `WEB_FALLBACK_POLICY` decides *when* the system chooses retrieval-triggered
 fallback while web search is otherwise allowed.
 
-- **`conservative` (default)** — answer from the curated corpus first: if at
+* **`conservative` (default)** — answer from the curated corpus first: if at
   least one relevant local document survives grading, generate from it; fall
   back to web search only when nothing relevant remains. A grounded local
   answer that later fails the usefulness gate can still trigger a rewritten
   web search.
-- **`aggressive`** — legacy CRAG behavior: any irrelevant retrieved document
+* **`aggressive`** — legacy CRAG behavior: any irrelevant retrieved document
   triggers web fallback before generation. Better first-pass coverage for
   sparse corpora, at the cost of sending more questions to an external
   service.
-- **`disabled`** — local retrieval paths never escalate to the web, including
+* **`disabled`** — local retrieval paths never escalate to the web, including
   the post-generation not-useful retry on runs that have stayed local (those
   end with an explicit caveat via the `web_fallback_disabled` stop reason).
   Router-chosen web searches still work when web search is enabled. With no
@@ -263,6 +265,32 @@ document `page_content`, prompts, raw graph state, or API keys. By default
 (`trace_path=None`) no file is written. Note that the question text itself
 is part of the trace — store trace files accordingly.
 
+#### LangSmith tracing (optional)
+
+In addition to the engine's lightweight metadata-only trace JSON, LangSmith
+tracing can be enabled through environment variables:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_PROJECT=enterprise-ai-automation-agent
+```
+
+The two tracing layers serve different purposes:
+
+* **LangSmith tracing** captures detailed LangChain/LangGraph execution traces
+  for debugging, including chain runs, prompts, model inputs/outputs, latency,
+  token usage, and failures.
+* **Engine trace JSON** is a small, CI-safe project artifact that records
+  metadata only: `run_id`, node path, timings, counters, stop reason, policy
+  flags, and source lines. It deliberately avoids document content, prompts,
+  raw graph state, and API keys.
+
+LangSmith is useful for development-time inspection; the engine trace is useful
+for reproducible reports, eval artifacts, and lightweight debugging without
+exposing internal content.
+
 ### Retry-exhaustion warnings
 
 The self-correction loop is capped at `MAX_RETRIES = 5` generations. The limit is
@@ -271,11 +299,11 @@ and if it still fails, the workflow records which gate failed in `stop_reason`
 and the CLI appends an explicit warning instead of presenting the answer as
 successful:
 
-- **Still not grounded** (`max_retries_not_grounded`):
+* **Still not grounded** (`max_retries_not_grounded`):
 
   > *Warning: This answer did not pass the grounding (anti-hallucination) check after the retry limit was reached. It may contain information that is not supported by the source documents, so do not treat it as fully reliable.*
 
-- **Grounded but still not useful** (`max_retries_not_useful`):
+* **Grounded but still not useful** (`max_retries_not_useful`):
 
   > *Warning: This answer did not pass the usefulness check after the retry limit was reached. It is grounded in the source documents but may not fully answer your question.*
 
@@ -287,13 +315,13 @@ Each graph run tracks its spend in state: `llm_call_count` (generations, query
 rewrites, web-result grading calls), `web_search_count` (Tavily searches), and
 `web_result_grading_count`. Three env-configurable budgets cap them:
 
-- `MAX_LLM_CALLS_PER_RUN` (default 30) — checked *before* each post-generation
+* `MAX_LLM_CALLS_PER_RUN` (default 30) — checked *before* each post-generation
   grading round; once spent, the run stops immediately through a
   `budget_exhausted` stop reason rather than spending more.
-- `MAX_WEB_SEARCHES_PER_RUN` (default 5) — a spent search budget stops the
+* `MAX_WEB_SEARCHES_PER_RUN` (default 5) — a spent search budget stops the
   "not useful" retry loop (looping toward a search that can't run is waste)
   and defensively skips any search the node is still asked to perform.
-- `MAX_WEB_RESULTS_TO_GRADE` (default 15) — once spent, remaining web results
+* `MAX_WEB_RESULTS_TO_GRADE` (default 15) — once spent, remaining web results
   are dropped *ungraded and unused* (conservative: unvetted content never
   reaches generation); the run itself continues.
 
@@ -321,14 +349,14 @@ at its call site, logged by category only (exception type, never messages that
 could carry secrets), recorded as a `stop_reason`, and surfaced to the user as
 a caveat appended by the CLI:
 
-| Failure | Behavior | `stop_reason` |
-|---|---|---|
-| Chroma retriever | Degrade to web-search fallback (or the deterministic insufficient-context answer in privacy mode) | `retrieval_error` |
-| Tavily search | Continue with local documents only; the failed attempt still counts against the web-search budget | `web_search_error` |
-| Generation LLM | Stop immediately with a safe placeholder answer — the failed generation is never graded or presented as normal | `generation_error` |
-| Query rewriter | Fall back to searching with the original question; the retry loop continues fully gated | `tool_error` |
-| Relevance grader (local chunk or web result) | Drop the ungraded content — unvetted content never reaches generation; the rest continues | `tool_error` |
-| Hallucination / answer grader | Stop and deliver the answer explicitly flagged as unverified | `tool_error` |
+| Failure                                      | Behavior                                                                                                       | `stop_reason`      |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Chroma retriever                             | Degrade to web-search fallback (or the deterministic insufficient-context answer in privacy mode)              | `retrieval_error`  |
+| Tavily search                                | Continue with local documents only; the failed attempt still counts against the web-search budget              | `web_search_error` |
+| Generation LLM                               | Stop immediately with a safe placeholder answer — the failed generation is never graded or presented as normal | `generation_error` |
+| Query rewriter                               | Fall back to searching with the original question; the retry loop continues fully gated                        | `tool_error`       |
+| Relevance grader (local chunk or web result) | Drop the ungraded content — unvetted content never reaches generation; the rest continues                      | `tool_error`       |
+| Hallucination / answer grader                | Stop and deliver the answer explicitly flagged as unverified                                                   | `tool_error`       |
 
 Degraded runs keep their `stop_reason` to the end with one deliberate
 exception: a *transient* `tool_error` (a dropped chunk/result or a failed
@@ -354,14 +382,14 @@ This loads the Markdown documents from `data/acmecorp_internal_docs/`, splits th
 
 The corpus is six fictional internal documents — created for this project, containing no real company data or copyrighted policies:
 
-| Document | Category | Sample question it answers |
-|---|---|---|
-| `vpn_policy.md` | it_security | "How do I request VPN access?" |
-| `expense_reimbursement_policy.md` | finance | "What expenses require manager approval?" |
-| `incident_response_playbook.md` | it_security | "When should a security incident be escalated to Sev-1?" |
-| `on_call_escalation_policy.md` | operations | "Who gets paged for after-hours production incidents?" |
-| `data_retention_policy.md` | compliance | "How long are audit logs retained?" |
-| `employee_onboarding_guide.md` | hr | "What should a new employee do during their first week?" |
+| Document                          | Category    | Sample question it answers                               |
+| --------------------------------- | ----------- | -------------------------------------------------------- |
+| `vpn_policy.md`                   | it_security | "How do I request VPN access?"                           |
+| `expense_reimbursement_policy.md` | finance     | "What expenses require manager approval?"                |
+| `incident_response_playbook.md`   | it_security | "When should a security incident be escalated to Sev-1?" |
+| `on_call_escalation_policy.md`    | operations  | "Who gets paged for after-hours production incidents?"   |
+| `data_retention_policy.md`        | compliance  | "How long are audit logs retained?"                      |
+| `employee_onboarding_guide.md`    | hr          | "What should a new employee do during their first week?" |
 
 Each document has an effective date, a policy owner, concrete rules (approval thresholds, ack SLAs, retention periods), escalation paths, an exceptions process, and contacts; documents cross-reference each other so multi-document questions retrieve coherently, with eval rows now checking multi-document provenance. Every document carries provenance metadata (`source`, `title`, `source_type: "local_corpus"`, `document_category`) that survives chunking and feeds the `Sources:` section. To use your own documents, drop Markdown files into the corpus folder (and optionally extend `DOCUMENT_CATEGORIES` in `ingestion.py`), then re-run ingestion.
 
@@ -372,7 +400,7 @@ uv run python main.py
 ```
 
 ```
-Enterprise Knowledge Assistant
+Agentic RAG Assistant for Enterprise Document Q&A
 Type 'exit' to quit.
 
 Enter your question:
@@ -432,10 +460,10 @@ uv run pytest -v
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs two parallel
 jobs on every push and pull request — both keys-free:
 
-- **`mocked-tests`**: the three fully mocked suites (`tests/node/`,
+* **`mocked-tests`**: the three fully mocked suites (`tests/node/`,
   `tests/graph/`, `tests/evals/`), which also doubles as a regression test that
   imports stay side-effect-free.
-- **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
   engine-API surface: `graph/engine.py`, `graph/config.py`,
   `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).
 
@@ -507,35 +535,42 @@ accepted, and the alternatives deliberately not chosen. Start with the
 
 ### Mocked unit tests vs. API-based chain tests
 
-| | `tests/node/` + `tests/graph/` + `tests/evals/` (unit) | `tests/chains/` (integration) |
-|---|---|---|
-| What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model |
-| External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories | Real OpenAI API calls |
-| Requirements | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
-| Speed / cost | Seconds, free | ~1 minute, small API cost |
-| Status | 305 tests passing (69 node + 200 graph + 36 evals) | 38 tests passing |
+|                | `tests/node/` + `tests/graph/` + `tests/evals/` (unit)                                                                       | `tests/chains/` (integration)                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model                      |
+| External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories           | Real OpenAI API calls                                                                         |
+| Requirements   | No API keys                                                                                                                  | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
+| Speed / cost   | Seconds, free                                                                                                                | ~1 minute, small API cost                                                                     |
+| Status         | 305 tests passing (69 node + 200 graph + 36 evals)                                                                           | 38 tests passing                                                                              |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
 ## Current Limitations
 
-- **Single-turn CLI** — no conversation memory; each question is independent. No API/web surface.
-- **Observability is `print()`-based** — no structured logging, timing, or token/cost tracking out of the box (LangSmith tracing can be enabled via env vars).
-- **Per-document sequential grading** — relevance grading makes one LLM call per chunk.
-- **Prompt-injection defense is prompt-level only** — the generation prompt explicitly treats retrieved content (especially web results) as untrusted evidence, never as instructions ([ADR 010](docs/adr/010-prompt-injection-defense.md)). This is a first-line mitigation, not a complete solution: the relevance gate checks topicality, not safety, and there is no injection detection, content sanitization, or domain allowlisting. Generation has no tools to call, which limits — but does not eliminate — the impact of injected instructions.
+* **Single-turn CLI** — no conversation memory; each question is independent. No API/web surface.
+* **Observability is split across two layers, but not yet production-grade** — LangSmith tracing is supported through environment variables, and the engine records lightweight per-run metadata (`run_id`, node path, timings, counters, stop reasons, and optional trace JSON). However, console logs are still `print()`-based, there is no structured logging or metrics backend, and the README does not yet include trace screenshots or saved LangSmith trace examples.
+* **Per-document sequential grading** — relevance grading makes one LLM call per chunk/result, so latency and cost scale with the number of items graded.
+* **Grounding feedback is coarse-grained** — failed grounding currently produces a fixed corrective instruction, not a rationale listing which claims were unsupported.
+* **Prompt-injection defense is prompt-level only** — the generation prompt explicitly treats retrieved content, especially web results, as untrusted evidence, never as instructions ([ADR 010](docs/adr/010-prompt-injection-defense.md)). This is a first-line mitigation, not a complete solution: the relevance gate checks topicality, not safety, and there is no injection detection, content sanitization, or domain allowlisting. Generation has no tools to call, which limits — but does not eliminate — the impact of injected instructions.
 
 ## Future Improvements
 
-- Structured logging and documented LangSmith tracing setup.
-- Grader-scored (LLM-as-judge) eval metrics on top of the deterministic harness in `evals/`.
-- Batched relevance grading.
+* Structured logging and metrics-friendly observability.
+* README/report evidence for LangSmith traces, such as screenshots or example trace links.
+* Grader-scored (LLM-as-judge) eval metrics on top of the deterministic harness in `evals/`.
+* Rationale-bearing grounding feedback that identifies unsupported claims.
+* Batched relevance grading.
 
-## What This Project Demonstrates
+## Engineering Highlights
 
-For reviewers and hiring managers, this codebase is intended to show:
+This project implements several engineering patterns for production-oriented LLM applications:
 
-- **Agentic workflow design beyond toy RAG** — a real CRAG implementation with conditional routing, multi-gate self-correction, and a deliberately bounded retry loop (including the subtle decision to grade the final generation *before* enforcing the cap).
-- **Dependency-injection discipline in an LLM codebase** — every external client lives behind a lazy cached factory, keeping imports side-effect-free and making the entire graph testable without keys, network, or cost.
-- **A deliberate testing strategy** — fast, deterministic, fully mocked unit tests for orchestration logic, strictly separated from clearly labeled, key-gated integration tests for prompt/model behavior.
-- **Structured LLM outputs as control flow** — Pydantic schemas (`RouteQuery`, `RetrievalGrade`, `GradeHallucination`, `GradeAnswer`) turn model judgments into typed booleans that drive graph edges, rather than parsing free text.
-- **Honest scoping** — the limitations above are documented on purpose: the project optimizes for demonstrating the correction-loop architecture clearly, not for pretending to be production infrastructure.
+* **Agentic RAG workflow design** — a CRAG-style LangGraph workflow with conditional routing, document relevance grading, answer grounding checks, usefulness checks, and bounded self-correction loops.
+
+* **Controlled dependency boundaries** — external clients such as OpenAI, Chroma, and Tavily are constructed behind lazy cached factories, keeping imports side-effect-free and making the graph testable without API keys, network access, or runtime cost.
+
+* **Deterministic orchestration testing** — the orchestration layer is covered by fast, fully mocked unit tests, while prompt and model behavior are isolated in clearly labeled integration tests that require explicit API access.
+
+* **Structured LLM outputs for control flow** — Pydantic schemas such as `RouteQuery`, `RetrievalGrade`, `GradeHallucination`, and `GradeAnswer` convert model judgments into typed routing decisions instead of relying on free-text parsing.
+
+* **Explicit reliability boundaries** — privacy mode, retry limits, budget caps, graceful degradation, `stop_reason` values, and deterministic source formatting make failure modes visible instead of silently presenting unverified answers as successful.

@@ -450,22 +450,16 @@ Run the mocked suites with `uv run pytest tests/node/ tests/graph/ tests/evals/ 
 ## 15. Known limitations & future improvements
 
 Limitations (deliberate scope):
-- Single-turn CLI; no conversation memory or API surface.
-- Console observability is `print()`-based; the engine adds per-run run_id / node path / timings / optional trace JSON, but there is no structured logging or metrics backend. LangSmith tracing available via env vars but undocumented in traces/screenshots.
-- Sequential per-chunk / per-result grading (latency and cost scale with k).
-- Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
-- Prompt-injection defense is prompt-level only (ADR 010): no injection detection, content sanitization, or domain allowlisting; generation has no tools to call, which limits but does not eliminate the impact of injected instructions.
 
-Future improvements (rough priority): LangSmith tracing evidence + structured
-logging; grader-scored (LLM-as-judge) metrics on top of the deterministic
-eval harness; rationale-bearing grounding feedback; batched grading.
+* Single-turn CLI; no conversation memory or API surface.
+* Observability currently has two layers: LangSmith tracing can be enabled via environment variables for full LangChain/LangGraph trace inspection, and the engine records lightweight CI-safe metadata (`run_id`, node path, per-node timings, total duration, counters, stop reasons, and optional trace JSON). However, console logging is still `print()`-based, there is no structured logging or metrics backend, and the documentation does not yet include trace screenshots or trace-link evidence.
+* Sequential per-chunk / per-result grading (latency and cost scale with k).
+* Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
+* Prompt-injection defense is prompt-level only (ADR 010): no injection detection, content sanitization, or domain allowlisting; generation has no tools to call, which limits but does not eliminate the impact of injected instructions.
 
-GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every
-push and pull request — both keys-free:
+Future improvements (rough priority): structured logging and metrics-friendly observability; README/report evidence for LangSmith traces; grader-scored (LLM-as-judge) metrics on top of the deterministic eval harness; rationale-bearing grounding feedback; batched grading.
 
-- **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` +
-  `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run
-  are excluded.
-- **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
-  engine-API surface: `graph/engine.py`, `graph/config.py`,
-  `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).
+GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every push and pull request — both keys-free:
+
+* **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface: `graph/engine.py`, `graph/config.py`, `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).
