@@ -31,7 +31,7 @@ failure handling, evals). This root document is the repository-level overview.
 ├── office_agent/                # ✅ Enterprise Office Agent v1 (router + Knowledge Q&A + mock Email/Calendar/Ticket-Task/Daily-Briefing)
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
-│   └── adr/                     # Architecture Decision Records 001–014 (repo-level; index in docs/adr/README.md)
+│   └── adr/                     # Architecture Decision Records 001–015 (repo-level; index in docs/adr/README.md)
 ├── evals/                       # Behavioral eval harness for enterprise_rag (dataset, runner, report) — not in CI
 ├── tests/                       # node/ + graph/ + evals/ (fully mocked) and chains/ (integration, key-gated)
 ├── .github/workflows/ci.yml     # CI: fully mocked suites + lint — no API keys
