@@ -16,7 +16,7 @@ so each case passes a list of Document objects, mirroring GraphState.
 import pytest
 from langchain_core.documents import Document
 
-from graph.chains.hallucination_grader import (
+from enterprise_rag.graph.chains.hallucination_grader import (
     GradeHallucination,
     hallucination_grader,
 )

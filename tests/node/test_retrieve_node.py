@@ -1,5 +1,5 @@
 """
-Unit tests for the retrieve node (graph/nodes/retrieve.py).
+Unit tests for the retrieve node (enterprise_rag/graph/nodes/retrieve.py).
 
 The retriever is mocked via monkeypatch (patching get_node_retriever), so no real
 Chroma / embeddings call happens. Tests focus on node state input/output.
@@ -9,13 +9,13 @@ import importlib
 
 from langchain_core.documents import Document
 
-from graph.consts import STOP_REASON_RETRIEVAL_ERROR
-from graph.nodes.retrieve import retrieve
+from enterprise_rag.graph.consts import STOP_REASON_RETRIEVAL_ERROR
+from enterprise_rag.graph.nodes.retrieve import retrieve
 
-# graph/nodes/__init__.py re-exports the `retrieve` function under the same name
-# as its submodule, so `import graph.nodes.retrieve as ...` would bind the
+# enterprise_rag/graph/nodes/__init__.py re-exports the `retrieve` function under the same name
+# as its submodule, so `import enterprise_rag.graph.nodes.retrieve as ...` would bind the
 # function, not the module. Resolve the real module for monkeypatching.
-retrieve_module = importlib.import_module("graph.nodes.retrieve")
+retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
 
 
 def _patch_retriever(monkeypatch, returned_docs):

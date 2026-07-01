@@ -15,8 +15,8 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.consts import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.consts import (
     STOP_REASON_WEB_SEARCH_ERROR,
     WEB_SEARCH_SOURCE,
     WEBSEARCH,
@@ -240,10 +240,10 @@ def test_format_answer_caveat_and_sources_coexist_caveat_first():
 def _patch_seams(monkeypatch, retrieved_docs):
     """Mock every external seam for an end-to-end provenance run."""
 
-    retrieve_module = importlib.import_module("graph.nodes.retrieve")
-    grade_module = importlib.import_module("graph.nodes.grade_documents")
-    generate_module = importlib.import_module("graph.nodes.generate")
-    web_module = importlib.import_module("graph.nodes.web_search")
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
 
     monkeypatch.setattr(
         retrieve_module,
@@ -349,7 +349,7 @@ def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch)
     )
     _patch_seams(monkeypatch, retrieved_docs=[])
 
-    web_module = importlib.import_module("graph.nodes.web_search")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
     monkeypatch.setattr(
         web_module,
         "get_web_search_tool",

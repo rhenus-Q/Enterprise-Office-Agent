@@ -56,19 +56,20 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"main.py" = ["F401", "E402"]         # intentional re-exports after load_dotenv()
-"graph/graph.py" = ["E402"]          # imports after load_dotenv()
-"evals/run_eval.py" = ["E402"]       # imports after sys.path insert
+"main.py" = ["F401", "E402"]                    # intentional re-exports after load_dotenv()
+"enterprise_rag/graph/graph.py" = ["E402"]      # imports after load_dotenv()
+"evals/run_eval.py" = ["E402"]                  # imports after sys.path insert
 "tests/**" = ["E731"]                # monkeypatch lambdas are the house style
 
 [tool.mypy]
 python_version = "3.11"
 files = [
-    "graph/engine.py",
-    "graph/config.py",
-    "graph/formatting.py",
-    "graph/state.py",
-    "graph/consts.py",
+    "enterprise_rag/graph/engine.py",
+    "enterprise_rag/graph/config.py",
+    "enterprise_rag/graph/formatting.py",
+    "enterprise_rag/graph/state.py",
+    "enterprise_rag/graph/consts.py",
+    "office_agent/",
 ]
 warn_unused_configs = true
 warn_unused_ignores = true
@@ -77,5 +78,10 @@ no_implicit_optional = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["graph.graph", "graph.nodes.*", "graph.chains.*", "ingestion"]
+module = [
+    "enterprise_rag.graph.graph",
+    "enterprise_rag.graph.nodes.*",
+    "enterprise_rag.graph.chains.*",
+    "enterprise_rag.ingestion",
+]
 follow_imports = "silent"

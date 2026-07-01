@@ -4,9 +4,23 @@ Guidance for Claude Code when working in this repository.
 
 ## 1. Project Overview
 
-An **enterprise internal-document Q&A assistant** built with **LangGraph**, implementing a
-self-correcting Agentic RAG (CRAG-style) workflow. It answers questions from an ingested
-knowledge base and falls back to web search when needed.
+This repository — **Enterprise Office Agent** — is organized as named capability modules
+(see [ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md)):
+
+- **`enterprise_rag/`** — ✅ **the completed module**, and the subject of everything below:
+  an **enterprise internal-document Q&A engine** built with **LangGraph**, implementing a
+  self-correcting Agentic RAG (CRAG-style) workflow. It answers questions from an ingested
+  knowledge base and falls back to web search when needed. Public entry point:
+  `enterprise_rag.graph.engine.answer_question()`.
+- **`office_agent/`** — 🚧 **planned, not implemented.** An intentionally empty placeholder
+  package for a future office-automation agent. Do **not** build office-agent features unless
+  explicitly asked; when that work starts it lives in `office_agent/` and **must not change or
+  regress `enterprise_rag` behavior or its tests** (same rules as §3: side-effect-free
+  imports, lazy `@lru_cache` external clients).
+
+Root docs (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) are repository-level;
+detailed engine usage lives in `enterprise_rag/README.md`. The rest of this file is guidance
+for working in `enterprise_rag`.
 
 **Stack:** LangGraph, LangChain, OpenAI (`gpt-5-mini`, `OpenAIEmbeddings`), Chroma (vector
 store), Tavily (web search). Managed with **uv**.
@@ -30,7 +44,7 @@ generate
 
 Three quality gates: **document relevance**, **answer grounding** (anti-hallucination), and
 **answer usefulness**. A `retries` counter in state caps the regenerate/websearch loop at
-`MAX_RETRIES = 5` (defined in `graph/graph.py`).
+`MAX_RETRIES = 5` (defined in `enterprise_rag/graph/graph.py`).
 
 External dependency failures (retriever, Tavily, generation LLM, graders, query rewriter)
 never crash the graph: each call site catches the exception, degrades or stops safely, and
@@ -42,22 +56,25 @@ type, never the message.
 
 | Path | Purpose |
 |------|---------|
-| `main.py` | CLI entry point. Loads `.env`, then runs an interactive Q&A loop over `graph.engine.answer_question()`. Re-exports the `graph/formatting.py` names (`format_answer`, `format_sources`, caveat notes) for backward compatibility. |
-| `graph/engine.py` | Canonical programmatic API: `answer_question(question, options) -> AnswerResult`, `AnswerOptions` (per-run `web_search_enabled` / `web_fallback_policy` / `run_id` / `trace_path` overrides; `None` = env default), and `seed_state()` — the single state-seeding helper shared by CLI, evals, and tests. Also owns the lightweight observability: every run gets a `run_id`, the executed `node_path` + per-step timings + `total_duration_ms` are collected by streaming graph updates (additive — merging the updates reproduces `invoke()`), and `trace_path` optionally writes a metadata-only trace JSON (never `page_content`, prompts, raw state, or keys). |
-| `graph/formatting.py` | Shared presentation: `stop_reason` caveats (`STOP_REASON_NOTES`) plus the deterministic `Sources:` section built from `Document` metadata (`format_answer` / `format_sources` / `source_lines`; local corpus vs. `web_search` supplement). Pure — no clients, no env reads. |
-| `ingestion.py` | Builds the knowledge base: loads the local Markdown corpus from `data/acmecorp_internal_docs/`, splits, embeds, persists to Chroma (idempotent: collection reset + deterministic chunk ids; provenance metadata `source`/`title`/`source_type`/`document_category`). Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
-| `data/acmecorp_internal_docs/` | Synthetic AcmeCorp enterprise corpus: 6 fictional internal Markdown documents (VPN, expenses, incident response, on-call, data retention, onboarding). No real company data — safe to edit/extend. |
-| `graph/graph.py` | Assembles the LangGraph `StateGraph`, wires nodes + conditional edges, exports compiled `app`. Holds `MAX_RETRIES` and the routing decision functions. |
-| `graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `web_fallback_policy` (resolved per run by the engine; graph decisions read it from state), `retries`, `stop_reason`, `insufficient_context`, `retry_feedback`, `search_query`, plus budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). |
-| `graph/config.py` | Env-driven runtime flags: `web_search_enabled()` (privacy mode), `web_fallback_policy()` / `normalize_web_fallback_policy()` (conservative/aggressive/disabled, default conservative; the env var is the *default source* — the engine resolves the effective policy into per-run state), and the per-run budgets `max_llm_calls_per_run()` / `max_web_searches_per_run()` / `max_web_results_to_grade()`. |
-| `graph/consts.py` | Node-name string constants (`RETRIEVE`, `GRADE_DOCUMENTS`, `GENERATE`, `WEBSEARCH`, `WEB_SEARCH_DISABLED_NOTICE`) and `stop_reason` values. |
-| `graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `web_fallback_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`, `budget_exhausted_notice`, `tool_error_notice`) that record `stop_reason`, and `clear_transient_tool_error` (success-path pass-through: clears a stale transient `tool_error` once both gates pass). |
-| `graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. |
+| `main.py` | CLI entry point. Loads `.env`, then runs an interactive Q&A loop over `enterprise_rag.graph.engine.answer_question()`. Re-exports the `enterprise_rag/graph/formatting.py` names (`format_answer`, `format_sources`, caveat notes) for backward compatibility. |
+| `enterprise_rag/__init__.py` | Package marker + docstring for the RAG engine. No clients, no side effects. |
+| `enterprise_rag/README.md` | Module-level documentation: detailed engine setup, usage, privacy mode, fallback policy, programmatic API, budgets, and failure handling (the content that used to dominate the root README). |
+| `office_agent/` | Reserved placeholder package for the future Enterprise Office Agent. Docstring-only `__init__.py`; **no features implemented.** Do not add office-agent code unless asked, and never at the cost of `enterprise_rag` behavior/tests. |
+| `enterprise_rag/graph/engine.py` | Canonical programmatic API: `answer_question(question, options) -> AnswerResult`, `AnswerOptions` (per-run `web_search_enabled` / `web_fallback_policy` / `run_id` / `trace_path` overrides; `None` = env default), and `seed_state()` — the single state-seeding helper shared by CLI, evals, and tests. Also owns the lightweight observability: every run gets a `run_id`, the executed `node_path` + per-step timings + `total_duration_ms` are collected by streaming graph updates (additive — merging the updates reproduces `invoke()`), and `trace_path` optionally writes a metadata-only trace JSON (never `page_content`, prompts, raw state, or keys). |
+| `enterprise_rag/graph/formatting.py` | Shared presentation: `stop_reason` caveats (`STOP_REASON_NOTES`) plus the deterministic `Sources:` section built from `Document` metadata (`format_answer` / `format_sources` / `source_lines`; local corpus vs. `web_search` supplement). Pure — no clients, no env reads. |
+| `enterprise_rag/ingestion.py` | Builds the knowledge base: loads the local Markdown corpus from `enterprise_rag/data/acmecorp_internal_docs/`, splits, embeds, persists to Chroma (idempotent: collection reset + deterministic chunk ids; provenance metadata `source`/`title`/`source_type`/`document_category`). Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
+| `enterprise_rag/data/acmecorp_internal_docs/` | Synthetic AcmeCorp enterprise corpus: 6 fictional internal Markdown documents (VPN, expenses, incident response, on-call, data retention, onboarding). No real company data — safe to edit/extend. |
+| `enterprise_rag/graph/graph.py` | Assembles the LangGraph `StateGraph`, wires nodes + conditional edges, exports compiled `app`. Holds `MAX_RETRIES` and the routing decision functions. |
+| `enterprise_rag/graph/state.py` | `GraphState` TypedDict: `question`, `documents`, `generation`, `web_search`, `web_search_enabled`, `web_fallback_policy` (resolved per run by the engine; graph decisions read it from state), `retries`, `stop_reason`, `insufficient_context`, `retry_feedback`, `search_query`, plus budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). |
+| `enterprise_rag/graph/config.py` | Env-driven runtime flags: `web_search_enabled()` (privacy mode), `web_fallback_policy()` / `normalize_web_fallback_policy()` (conservative/aggressive/disabled, default conservative; the env var is the *default source* — the engine resolves the effective policy into per-run state), and the per-run budgets `max_llm_calls_per_run()` / `max_web_searches_per_run()` / `max_web_results_to_grade()`. |
+| `enterprise_rag/graph/consts.py` | Node-name string constants (`RETRIEVE`, `GRADE_DOCUMENTS`, `GENERATE`, `WEBSEARCH`, `WEB_SEARCH_DISABLED_NOTICE`) and `stop_reason` values. |
+| `enterprise_rag/graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `web_fallback_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`, `budget_exhausted_notice`, `tool_error_notice`) that record `stop_reason`, and `clear_transient_tool_error` (success-path pass-through: clears a stale transient `tool_error` once both gates pass). |
+| `enterprise_rag/graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. |
 | `tests/node/` | Unit tests for node functions. Fully mocked — no API keys needed. |
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
 | `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
 | `tests/evals/` | Mocked unit tests for the eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
-| `evals/` | Behavioral eval harness: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. Not part of CI. |
+| `evals/` | Behavioral eval harness: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `enterprise_rag.graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. Not part of CI. |
 | `evals/history/` | Append-only, metadata-only eval history records (one JSON per full run; never answer text, `page_content`, prompts, or raw state). The harness only writes new records — never edits/deletes. `evals/history/*.json` is gitignored by default (the dir is tracked via `.gitkeep`); force-add (`git add -f`) to share a known-good baseline. |
 | `docs/adr/` | Architecture Decision Records (001–011) with an index in `docs/adr/README.md`. When a documented decision changes, update or supersede the matching ADR. |
 | `docs/roadmap/` | Tracked process artifacts (see `docs/roadmap/README.md`): `spec/`, `plan/`, `implementation/`, `commands-review/`, plus per-topic `<topic>-review/` dirs (e.g. `architecture-review/`, `security-review/`, `failure-modes-review/`, `test-coverage-review/`). Specs/plans/reports use a short feature slug. `docs/roadmap/<topic>-review/` is the convention for timestamped reports from project-level `<topic>-review` commands (architecture, security, failure-modes, test-coverage); these use dated `<YYYY-MM-DD>-<focus-slug>-<topic>-review.md` collision-safe filenames and must not overwrite prior reports. `docs/roadmap/commands-review/` remains for command-file review reports (e.g. `/review-command`). |
@@ -74,14 +91,14 @@ type, never the message.
   structures unless explicitly asked.
 - **No broad architecture changes.** Avoid restructuring the graph or rewriting modules wholesale.
 - **`GraphState` fields are plain last-value channels.** Do not add `typing.Annotated` reducers /
-  accumulating channels: `graph/engine.py` merges streamed node updates with `dict.update()`, which
+  accumulating channels: `enterprise_rag/graph/engine.py` merges streamed node updates with `dict.update()`, which
   only reproduces `app.invoke()` for last-value channels. If a reducer is ever needed, revisit that merge first.
 - **Refactors should be small, mechanical, and reviewable.** Prefer minimal diffs.
 - **Lazy external clients (required pattern).** `ChatOpenAI`, `OpenAIEmbeddings`,
   `TavilySearch` (`langchain-tavily`), `Chroma`, retrievers, and any API-backed tool must be constructed
   inside a lazy factory — use `@lru_cache(maxsize=1) def get_x(): ...` — never at module level.
-- **Imports must be side-effect-free.** Importing any module (`graph.graph`, `graph.nodes.*`,
-  `graph.chains.*`, `ingestion`) must NOT require API keys or network, and must NOT construct
+- **Imports must be side-effect-free.** Importing any module (`enterprise_rag.graph.graph`, `enterprise_rag.graph.nodes.*`,
+  `enterprise_rag.graph.chains.*`, `ingestion`) must NOT require API keys or network, and must NOT construct
   any external client.
 - **Backward-compatible chain names.** Chain modules expose `get_*()` factories; old
   module-level names (e.g. `generation_chain`, `question_router`) remain available via a lazy
@@ -125,7 +142,7 @@ uv sync --group dev
 uv run pre-commit install
 
 # Build the Chroma index (one-time, before first run)
-uv run python ingestion.py
+uv run python -m enterprise_rag.ingestion
 
 # Run the assistant
 uv run python main.py
@@ -151,22 +168,22 @@ uv run pre-commit run --all-files
 
 # Syntax-only check (no test execution)
 $files = @(
-    "graph/graph.py",
-    "graph/nodes/generate.py",
-    "graph/nodes/retrieve.py",
-    "graph/nodes/web_search.py",
-    "graph/nodes/grade_documents.py",
-    "graph/chains/generation.py",
-    "graph/chains/retrieval_grader.py",
-    "graph/chains/question_router.py",
-    "graph/chains/hallucination_grader.py",
-    "graph/chains/answer_grader.py",
-    "ingestion.py",
+    "enterprise_rag/graph/graph.py",
+    "enterprise_rag/graph/nodes/generate.py",
+    "enterprise_rag/graph/nodes/retrieve.py",
+    "enterprise_rag/graph/nodes/web_search.py",
+    "enterprise_rag/graph/nodes/grade_documents.py",
+    "enterprise_rag/graph/chains/generation.py",
+    "enterprise_rag/graph/chains/retrieval_grader.py",
+    "enterprise_rag/graph/chains/question_router.py",
+    "enterprise_rag/graph/chains/hallucination_grader.py",
+    "enterprise_rag/graph/chains/answer_grader.py",
+    "enterprise_rag/ingestion.py",
     "main.py"
 )
 
 uv run python -m py_compile $files
 
 # Verify imports construct no clients and need no keys
-uv run python -c "import graph.graph, graph.nodes, graph.chains, ingestion; print('IMPORT OK')"
+uv run python -c "import enterprise_rag.graph.graph, enterprise_rag.graph.nodes, enterprise_rag.graph.chains, ingestion; print('IMPORT OK')"
 ```

@@ -28,22 +28,22 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-import graph.graph as graph_module
-from graph.consts import (
+import enterprise_rag.graph.graph as graph_module
+from enterprise_rag.graph.consts import (
     RETRIEVE,
     STOP_REASON_WEB_FALLBACK_DISABLED,
     STOP_REASON_WEB_SEARCH_DISABLED,
     WEBSEARCH,
 )
-from graph.engine import AnswerOptions, answer_question
+from enterprise_rag.graph.engine import AnswerOptions, answer_question
 
-# Resolve the real node submodules for monkeypatching (graph/nodes/__init__.py
+# Resolve the real node submodules for monkeypatching (enterprise_rag/graph/nodes/__init__.py
 # re-exports the node functions under the same names as their submodules).
-retrieve_module = importlib.import_module("graph.nodes.retrieve")
-grade_module = importlib.import_module("graph.nodes.grade_documents")
-generate_module = importlib.import_module("graph.nodes.generate")
-web_module = importlib.import_module("graph.nodes.web_search")
-rewrite_module = importlib.import_module("graph.nodes.rewrite_query")
+retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
 
 # Sentinels: payload markers must never surface in answers/sources; the benign
 # answer is what a mocked generation returns.

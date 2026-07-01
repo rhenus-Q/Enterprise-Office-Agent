@@ -15,8 +15,8 @@ so only unambiguous examples are used here.
 
 import pytest
 
-from graph.chains.question_router import RouteQuery, question_router
-from graph.consts import RETRIEVE, WEBSEARCH
+from enterprise_rag.graph.chains.question_router import RouteQuery, question_router
+from enterprise_rag.graph.consts import RETRIEVE, WEBSEARCH
 from tests.conftest import requires_openai
 
 # Questions that should go to vector retrieval (all on indexed AcmeCorp policy topics)
