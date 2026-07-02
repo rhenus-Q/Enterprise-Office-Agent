@@ -699,12 +699,23 @@ def _table_cell(text, limit=200):
     return flattened[:limit] + ("…" if len(flattened) > limit else "")
 
 
-def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
+def render_markdown(
+    evaluated, metrics, dataset_path, *, delta_lines=None, include_answer_text=True
+):
     """Render the full eval report as Markdown.
 
     When delta_lines is provided (a list of strings from render_delta_section),
     the delta section is inserted after the Metrics section. When None, the
     output is byte-identical to the pre-history format.
+
+    include_answer_text: when True (default) the per-question section renders the
+    truncated user question and formatted answer, as before. When False (privacy
+    mode, `--no-answer-text`) that section renders only a placeholder note — no
+    question text and no generated/formatted answer text reach the Markdown. The
+    metadata sections are unchanged in both modes: the Metrics table, the delta
+    section, and the per-question results table (row ids, pass/fail, stop
+    reasons, counters, and failed-check names) carry no answer content, so
+    disabling answer text never removes per-row status.
     """
 
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
@@ -764,15 +775,29 @@ def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
             f"| {summary['llm_call_count']} | {summary['web_search_count']} | {failed} |"
         )
 
-    lines += ["", "## Answers (truncated)", ""]
-    for entry in evaluated:
-        row, summary = entry["row"], entry["summary"]
+    if include_answer_text:
+        lines += ["", "## Answers (truncated)", ""]
+        for entry in evaluated:
+            row, summary = entry["row"], entry["summary"]
+            lines += [
+                f"### {row['id']}",
+                "",
+                f"**Q:** {_table_cell(row['question'])}",
+                "",
+                f"**A:** {_table_cell(summary['formatted_answer'], limit=400)}",
+                "",
+            ]
+    else:
+        # Privacy mode (--no-answer-text): omit every question/answer excerpt.
+        # The per-question status table above already carries the per-row
+        # metadata, so the report stays complete without any content.
         lines += [
-            f"### {row['id']}",
             "",
-            f"**Q:** {_table_cell(row['question'])}",
+            "## Answers",
             "",
-            f"**A:** {_table_cell(summary['formatted_answer'], limit=400)}",
+            "Answer text omitted by privacy setting (`--no-answer-text`). Question "
+            "and answer excerpts are not written to this report; see the Metrics "
+            "and Per-question results tables above for per-row status.",
             "",
         ]
 
@@ -784,12 +809,24 @@ def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
 # ---------------------------------------------------------------------------
 
 
-def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None, no_history=False):
+def run_eval(
+    rows,
+    output_path,
+    dataset_path,
+    *,
+    history_dir=None,
+    baseline=None,
+    no_history=False,
+    include_answer_text=True,
+):
     """Run rows through the real graph (REAL API calls) and write the report.
 
     history_dir: if set, reads/writes history records and renders a delta section.
     baseline: explicit path to a baseline record (overrides auto-discovery).
     no_history: if True, renders the delta section but skips writing the record.
+    include_answer_text: if False (privacy mode), the Markdown report omits all
+    question/answer excerpts. Only the report is affected — evaluation, scoring,
+    and the metadata-only history record are unchanged.
     """
 
     # Imported here so --validate-only never touches the graph. State seeding
@@ -882,7 +919,13 @@ def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None
     # Render report (with delta section when history is enabled).
     delta_lines = render_delta_section(delta) if history_dir is not None else None
     Path(output_path).write_text(
-        render_markdown(evaluated, metrics, dataset_path, delta_lines=delta_lines),
+        render_markdown(
+            evaluated,
+            metrics,
+            dataset_path,
+            delta_lines=delta_lines,
+            include_answer_text=include_answer_text,
+        ),
         encoding="utf-8",
     )
 
@@ -934,6 +977,15 @@ def main(argv=None):
         metavar="PATH",
         help="Directory for history records (default: evals/history/).",
     )
+    parser.add_argument(
+        "--no-answer-text",
+        action="store_true",
+        help=(
+            "Privacy mode: omit all question/answer excerpts from the Markdown "
+            "report. Use for sensitive/private datasets. Scoring and history "
+            "records are unaffected."
+        ),
+    )
     args = parser.parse_args(argv)
 
     rows = load_dataset(args.dataset)
@@ -960,6 +1012,7 @@ def main(argv=None):
             history_dir=args.history_dir,
             baseline=args.baseline,
             no_history=args.no_history,
+            include_answer_text=not args.no_answer_text,
         )
     except HistoryBaselineError as exc:
         print(f"ERROR: {exc}")

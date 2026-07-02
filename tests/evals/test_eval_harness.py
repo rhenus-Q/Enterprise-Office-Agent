@@ -7,15 +7,20 @@ aggregation, and report rendering. The real dataset file is validated here so
 a malformed row fails fast in CI-safe tests rather than mid-eval.
 """
 
+import json
+
 from langchain_core.documents import Document
 
+import evals.run_eval as run_eval_module
 from enterprise_rag.graph.consts import WEB_SEARCH_SOURCE
 from evals.run_eval import (
     CATEGORIES,
     DEFAULT_DATASET,
+    build_history_record,
     compute_metrics,
     evaluate_row,
     load_dataset,
+    main,
     normalize_for_contains,
     render_markdown,
     summarize_result,
@@ -704,6 +709,111 @@ def test_render_markdown_includes_partial_counter_note():
 
     assert "Router and grader calls are not individually tracked" in report
     assert "not billing-accurate" in report
+
+
+# ---------------------------------------------------------------------------
+# Answer-text privacy control (--no-answer-text)
+# ---------------------------------------------------------------------------
+
+
+def test_render_markdown_includes_answer_text_by_default():
+    """Default (backward-compatible) report still renders truncated Q/A."""
+    evaluated = _evaluated_fixture()
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+
+    assert "## Answers (truncated)" in report
+    assert "**Q:**" in report
+    assert "**A:**" in report
+
+
+def test_render_markdown_omits_answer_text_when_disabled():
+    """include_answer_text=False drops the Q/A excerpts and renders a placeholder."""
+    evaluated = _evaluated_fixture()
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(evaluated, metrics, "evals/questions.jsonl", include_answer_text=False)
+
+    assert "## Answers (truncated)" not in report
+    assert "**Q:**" not in report
+    assert "**A:**" not in report
+    assert "Answer text omitted by privacy setting" in report
+
+
+def test_render_markdown_privacy_mode_excludes_question_and_answer_markers():
+    """Distinctive markers in the question AND the answer never reach the report."""
+    row = _row(id="secretrow", question="my question SECRET-Q-MARKER-123")
+    summary = _summary(
+        answer="the answer SECRET-A-MARKER-456",
+        formatted_answer="the answer SECRET-A-MARKER-456",
+    )
+    evaluated = [{"row": row, "summary": summary, **evaluate_row(row, summary)}]
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(evaluated, metrics, "evals/questions.jsonl", include_answer_text=False)
+
+    assert "SECRET-Q-MARKER-123" not in report
+    assert "SECRET-A-MARKER-456" not in report
+    # ...but the row is still accounted for by its metadata.
+    assert "secretrow" in report
+
+
+def test_render_markdown_privacy_mode_retains_metadata():
+    """Privacy mode keeps aggregate metrics, the per-question table, ids, PASS/FAIL,
+    stop reasons and failed-check columns."""
+    evaluated = _evaluated_fixture()
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(evaluated, metrics, "evals/questions.jsonl", include_answer_text=False)
+
+    assert "## Metrics" in report
+    assert "Overall passed | 6 / 6" in report
+    assert "## Per-question results" in report
+    assert "| stop_reason |" in report  # metadata column header present
+    assert "failed checks |" in report
+    assert "PASS" in report
+    for entry in evaluated:
+        assert entry["row"]["id"] in report
+
+
+def test_history_record_is_metadata_only_regardless_of_answer_text():
+    """The history record never carries Q/A content — independent of the report
+    privacy flag (it is built from metrics + per-row metadata only)."""
+    row = _row(id="h1", question="Q SECRET-Q-MARKER-777")
+    summary = _summary(answer="A SECRET-A-MARKER-888", formatted_answer="A SECRET-A-MARKER-888")
+    evaluated = [{"row": row, "summary": summary, **evaluate_row(row, summary)}]
+    metrics = compute_metrics(evaluated)
+
+    record = build_history_record(
+        evaluated,
+        metrics,
+        "evals/questions.jsonl",
+        {"row_count": 1, "ids": ["h1"], "dataset_sha256": ""},
+        timestamp="2026-07-02T00:00:00Z",
+        run_id="run-1",
+    )
+
+    blob = json.dumps(record)
+    assert "SECRET-Q-MARKER-777" not in blob
+    assert "SECRET-A-MARKER-888" not in blob
+    assert record["rows"][0]["id"] == "h1"  # metadata retained
+
+
+def test_cli_no_answer_text_flag_wires_include_answer_text(monkeypatch):
+    """`--no-answer-text` is threaded from argparse to run_eval (default True)."""
+    calls = []
+
+    def _spy_run_eval(rows, output_path, dataset_path, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(run_eval_module, "run_eval", _spy_run_eval)
+
+    assert main(["--no-answer-text"]) == 0
+    assert calls[-1]["include_answer_text"] is False
+
+    assert main([]) == 0
+    assert calls[-1]["include_answer_text"] is True
 
 
 # ---------------------------------------------------------------------------
