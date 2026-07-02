@@ -5,7 +5,7 @@ Reads an entirely fictional AcmeCorp approval queue and audit log from
 `office_agent/mock_data/approvals.json` and `.../audit_log.json` and produces
 concise, deterministic summaries. There is NO LLM and NO connection to Jira /
 Linear / Asana / Trello / Slack / Gmail / Outlook / Google Calendar or any
-service — Phase 7 (Office Agent v1.5) is local-only and CI-safe. It never calls
+service — Phase 7 (Office Agent v1.6) is local-only and CI-safe. It never calls
 the Enterprise RAG engine.
 
 Supported views (case-insensitive; deterministic precedence in `_select_view`):
