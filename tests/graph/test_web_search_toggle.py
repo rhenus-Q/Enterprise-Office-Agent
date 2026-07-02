@@ -147,6 +147,68 @@ def test_route_question_disabled_always_retrieves_without_calling_router(monkeyp
 
 
 # ---------------------------------------------------------------------------
+# route_question: router LLM failure falls back to local retrieval
+# ---------------------------------------------------------------------------
+
+
+def _patch_failing_router(monkeypatch, exc):
+    """Patch get_question_router so its invoke() raises the given exception."""
+
+    calls = {"count": 0}
+
+    class FailingRouter:
+        def invoke(self, payload):
+            calls["count"] += 1
+            raise exc
+
+    monkeypatch.setattr(graph_module, "get_question_router", lambda: FailingRouter())
+    return calls
+
+
+def test_route_question_router_failure_falls_back_to_retrieve(monkeypatch):
+    # A router LLM failure must degrade to local retrieval, never crash the
+    # graph and never escalate straight to web search.
+    _patch_failing_router(monkeypatch, TimeoutError("router timed out"))
+
+    result = route_question({"question": "Q", "web_search_enabled": True})
+
+    assert result == RETRIEVE
+
+
+def test_route_question_router_failure_does_not_retry(monkeypatch):
+    calls = _patch_failing_router(monkeypatch, RuntimeError("boom"))
+
+    route_question({"question": "Q", "web_search_enabled": True})
+
+    assert calls["count"] == 1  # the router is called once, then we fall back
+
+
+def test_route_question_router_failure_banner_has_only_the_exception_type(monkeypatch, capsys):
+    # The failure banner is metadata-only: it names the exception TYPE but never
+    # the exception message or the question (console logs may be aggregated).
+    secret_message = "CONFIRMED-SECRET-ROUTER-MESSAGE-sk-live-0123456789"
+    _patch_failing_router(monkeypatch, RuntimeError(secret_message))
+
+    route_question({"question": "CONFIRMED-SECRET-QUESTION", "web_search_enabled": True})
+
+    out = capsys.readouterr().out
+    assert "---ROUTING FAILED (RuntimeError): FALLING BACK TO RETRIEVE---" in out
+    assert secret_message not in out
+    assert "CONFIRMED-SECRET-QUESTION" not in out
+
+
+def test_route_question_privacy_mode_skips_router_even_if_it_would_fail(monkeypatch):
+    # Privacy mode must skip the router entirely: a router that WOULD raise is
+    # never consulted, so the failure path is unreachable in privacy mode.
+    calls = _patch_failing_router(monkeypatch, RuntimeError("must not be called"))
+
+    result = route_question({"question": "Q", "web_search_enabled": False})
+
+    assert result == RETRIEVE
+    assert calls["count"] == 0
+
+
+# ---------------------------------------------------------------------------
 # decide_to_generate
 # ---------------------------------------------------------------------------
 

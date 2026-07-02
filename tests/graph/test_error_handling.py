@@ -307,6 +307,23 @@ def test_app_survives_retriever_failure_in_privacy_mode_without_web_calls(monkey
     assert result["documents"] == []  # empty context -> safe deterministic answer
 
 
+def test_app_survives_router_failure_and_continues_through_local_retrieval(monkeypatch):
+    # The router LLM fails on the very first external call. The graph must not
+    # crash: it falls back to local retrieval and produces a normal answer.
+    def failing_router():
+        return SimpleNamespace(invoke=lambda p: (_ for _ in ()).throw(TimeoutError("router down")))
+
+    monkeypatch.setattr(graph_module, "get_question_router", failing_router)
+    _patch_graders(monkeypatch, grounded=True, useful=True)
+    web_calls = _patch_all_node_seams(monkeypatch, docs_relevant=True)
+
+    result = graph_module.app.invoke(_initial_state())  # must not raise
+
+    assert result["generation"] == "FINAL ANSWER"  # answered from local retrieval
+    assert web_calls == []  # fell back to retrieve, not straight to web search
+    assert result["stop_reason"] == ""  # the pure router edge records no stop reason
+
+
 def test_app_survives_tavily_failure_and_answers_from_local_documents(monkeypatch):
     # One retrieved chunk is irrelevant -> web fallback -> Tavily fails ->
     # the run continues with the (empty after filtering) local context.

@@ -173,6 +173,11 @@ Three pure decision functions in `enterprise_rag/graph/graph.py`:
   `websearch` (current/external information).
 - Privacy mode on → always `retrieve`, **without calling the router LLM** (the
   question never leaves the local environment, and the call is saved).
+- Router LLM failure → **falls back to `retrieve`** (the safe, local-first
+  default), so a router timeout / auth / quota / network / parse error degrades
+  to local retrieval instead of crashing the graph. Because this is a *pure*
+  conditional edge, it cannot write state, so no `stop_reason` is recorded for a
+  router failure — the run continues through the normal quality gates (see §13).
 
 **`decide_to_generate`** (after document grading)
 - All chunks relevant → `generate`.
@@ -470,8 +475,16 @@ Every external call is wrapped in a `try/except Exception` at its existing
 seam. The design rules:
 
 - **Failures in nodes write `stop_reason` directly** (nodes are the only
-  legal state writers). Failures inside the pure `grade_generation` edge
-  return a dedicated outcome routed to the `tool_error_notice` node instead.
+  legal state writers). Failures inside a pure conditional edge cannot write
+  state: `grade_generation` returns a dedicated outcome routed to the
+  `tool_error_notice` node instead, and `route_question` falls back to
+  `retrieve` **without** recording a `stop_reason` (a router failure therefore
+  produces no caveat — the run simply degrades to local retrieval).
+- **Unexpected internal / programmer errors may still propagate.** The
+  guarantee above covers the wrapped external-dependency seams; a truly
+  unexpected error (e.g. a bug in a node) is not caught by a top-level
+  catch-all and may surface from `answer_question()`. There is intentionally
+  no blanket `try/except` around the whole run.
 - **Console banners log only the exception type** (e.g.
   `---WEB SEARCH FAILED (TimeoutError): ...---`) — never the message, which
   could carry secrets, keys, or paths.
@@ -487,6 +500,7 @@ Per dependency:
 
 | Failure | Reaction | Continues? |
 |---|---|---|
+| Question router (`route_question`) | Fall back to `retrieve` (local-first); pure edge, so no `stop_reason` and no caveat | yes |
 | Retriever / Chroma (`retrieve`) | Empty documents + `web_search=True` → degrade to web fallback (privacy mode: deterministic insufficient-context answer); `grade_documents` preserves the incoming flag | yes |
 | Tavily (`websearch`) | Local documents only (stale web supplement already dropped); attempt budgeted | yes |
 | Generation LLM (`generate`) | Safe placeholder answer + `generation_error`; `grade_generation` routes straight to `END` — never graded | no |
