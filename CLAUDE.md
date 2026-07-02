@@ -12,19 +12,23 @@ This repository — **Enterprise Office Agent** — is organized as named capabi
   self-correcting Agentic RAG (CRAG-style) workflow. It answers questions from an ingested
   knowledge base and falls back to web search when needed. Public entry point:
   `enterprise_rag.graph.engine.answer_question()`.
-- **`office_agent/`** — ✅ **implemented: the Enterprise Office Agent (v1 + v1.5).** A
+- **`office_agent/`** — ✅ **implemented through v1.6 / Phase 7 (seven capabilities).** A
   deterministic, LLM-free intent router — entry point `office_agent.engine.answer_office_request(user_input)`
-  — over local capabilities: **Knowledge Q&A** (a thin adapter over the `enterprise_rag`
-  engine), **Email Summary**, **Calendar Lookup**, **Task / Ticket Assistant**, **Daily
-  Briefing**, (Phase 6 / v1.5) **Meeting Agent / Meeting Prep**, and (Phase 7 / v1.5)
-  **Workflow / Approval Agent**. All tools except Knowledge
-  Q&A run on local mock data with no LLM and no external services. Office-agent work **must not
-  change or regress `enterprise_rag` behavior or its tests** (§3 rules apply: side-effect-free
-  imports, lazy `@lru_cache` external clients). See [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md)
-  and [ADR 015](docs/adr/015-office-agent-v1-architecture.md); office-agent working rules are in §3.
+  — over local capabilities. Version map: **v1 / Phases 1–5** — **Knowledge Q&A** (a thin
+  adapter over the `enterprise_rag` engine), **Email Summary**, **Calendar Lookup**,
+  **Task / Ticket Assistant**, **Daily Briefing**; **v1.5 / Phase 6** — **Meeting Agent /
+  Meeting Prep**; **v1.6 / Phase 7** — **Workflow / Approval Agent**. All tools except
+  Knowledge Q&A run on local mock data with no LLM and no external services. Office-agent
+  work **must not change or regress `enterprise_rag` behavior or its tests** (§3 rules apply:
+  side-effect-free imports, lazy `@lru_cache` external clients). See
+  [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md) (the dedicated Office Agent
+  demo / usage doc) and [ADR 015](docs/adr/015-office-agent-v1-architecture.md); office-agent
+  working rules are in §3.
 
 Root docs (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) are repository-level;
-detailed engine usage lives in `enterprise_rag/README.md` and `docs/office-agent-v1-demo.md`.
+detailed engine usage lives in `enterprise_rag/README.md`, the dedicated Office Agent demo /
+usage doc is `docs/office-agent-v1-demo.md`, and engineering / release docs live under
+`docs/engineering/` and `docs/releases/`.
 Most of this file is guidance for working in `enterprise_rag`; office-agent-specific rules are
 called out in §3.
 
@@ -65,7 +69,7 @@ type, never the message.
 | `main.py` | CLI entry point. Loads `.env`, then runs an interactive Q&A loop over `enterprise_rag.graph.engine.answer_question()`. Re-exports the `enterprise_rag/graph/formatting.py` names (`format_answer`, `format_sources`, caveat notes) for backward compatibility. |
 | `enterprise_rag/__init__.py` | Package marker + docstring for the RAG engine. No clients, no side effects. |
 | `enterprise_rag/README.md` | Module-level documentation: detailed engine setup, usage, privacy mode, fallback policy, programmatic API, budgets, and failure handling (the content that used to dominate the root README). |
-| `office_agent/` | The **Enterprise Office Agent** (v1 + v1.5 Meeting Agent + Workflow / Approval Agent). Deterministic keyword router (`router.py`), `answer_office_request()` entry point (`engine.py`), typed intent constants + `ToolResult` schemas (`schemas.py`), unsupported-intent + presentation (`formatting.py`), and `tools/` — `knowledge` (thin `enterprise_rag` adapter) plus `email`, `calendar`, `tickets`, `briefing`, `meeting`, `approvals` (local mock-data tools). Local-only and LLM-free except the Knowledge Q&A adapter; mock data in `mock_data/` is read-only and anchored to the data (not the system clock) — approve/reject and follow-up tasks are *simulated*, never written back. Must never regress `enterprise_rag`. See `docs/office-agent-v1-demo.md` and ADR 015. |
+| `office_agent/` | The **Enterprise Office Agent** — seven capabilities: the v1 / Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7 Workflow / Approval Agent. Deterministic keyword router (`router.py`), `answer_office_request()` entry point (`engine.py`), typed intent constants + `ToolResult` schemas (`schemas.py`), unsupported-intent + presentation (`formatting.py`), and `tools/` — `knowledge` (thin `enterprise_rag` adapter) plus `email`, `calendar`, `tickets`, `briefing`, `meeting`, `approvals` (local mock-data tools). Local-only and LLM-free except the Knowledge Q&A adapter; mock data in `mock_data/` is read-only and anchored to the data (not the system clock) — approve/reject and follow-up tasks are *simulated*, never written back. Must never regress `enterprise_rag`. See `docs/office-agent-v1-demo.md` and ADR 015. |
 | `enterprise_rag/graph/engine.py` | Canonical programmatic API: `answer_question(question, options) -> AnswerResult`, `AnswerOptions` (per-run `web_search_enabled` / `web_fallback_policy` / `run_id` / `trace_path` overrides; `None` = env default), and `seed_state()` — the single state-seeding helper shared by CLI, evals, and tests. Also owns the lightweight observability: every run gets a `run_id`, the executed `node_path` + per-step timings + `total_duration_ms` are collected by streaming graph updates (additive — merging the updates reproduces `invoke()`), and `trace_path` optionally writes a metadata-only trace JSON (never `page_content`, prompts, raw state, or keys). |
 | `enterprise_rag/graph/formatting.py` | Shared presentation: `stop_reason` caveats (`STOP_REASON_NOTES`) plus the deterministic `Sources:` section built from `Document` metadata (`format_answer` / `format_sources` / `source_lines`; local corpus vs. `web_search` supplement). Pure — no clients, no env reads. |
 | `enterprise_rag/ingestion.py` | Builds the knowledge base: loads the local Markdown corpus from `enterprise_rag/data/acmecorp_internal_docs/`, splits, embeds, persists to Chroma (idempotent: collection reset + deterministic chunk ids; provenance metadata `source`/`title`/`source_type`/`document_category`). Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
