@@ -208,23 +208,71 @@ def _run_graph_with_trace(
 # Maximum length of the redacted question preview stored in trace output.
 QUESTION_PREVIEW_MAX_CHARS = 80
 
-# Obvious secret-like values scrubbed from the question before it is previewed
-# in trace output. Each entry is (pattern, replacement). Prefix-style keys are
-# matched before the generic key=value form so e.g. `api_key=sk-...` is fully
-# redacted regardless of which rule fires first. This is best-effort hygiene for
-# debug artifacts, not a guarantee that every possible secret shape is caught.
+# Obvious secret-like values scrubbed from the question before it enters
+# GraphState (and thus before it reaches the retriever, router, graders,
+# generator, the outbound web-search query, or the trace preview). Each entry is
+# (pattern, replacement); patterns are applied in order. Prefix-style keys are
+# matched before the generic key=value / key:value forms so e.g. `api_key=sk-...`
+# is fully redacted regardless of which rule fires first. This is best-effort
+# hygiene, not a guarantee that every possible secret shape is caught; the
+# patterns are kept deliberately specific to avoid redacting ordinary prose,
+# UUIDs, plain URLs, or normal Base64 text.
+#
+# Covered: OpenAI (`sk-...`), Anthropic (`sk-ant-...`), GitHub PAT/classic
+# (`github_pat_...` / `ghp_...`), AWS access-key ids (`AKIA`/`ASIA` + 16 chars),
+# JWTs (three dot-separated base64url segments starting `eyJ`), Google/GCP API
+# keys (`AIza...`), Slack tokens (`xox[abprs]-...`), `Bearer <token>` values,
+# credentials embedded in common database connection-string URIs (password
+# only), and generic `key=value` / `key:value` secrets (api_key / apikey / token
+# / password / secret). None of the patterns cross a newline.
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"sk-ant-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # Anthropic-style keys
     (re.compile(r"sk-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # OpenAI-style keys
     (re.compile(r"github_pat_[A-Za-z0-9_]+"), "[REDACTED]"),  # GitHub fine-grained PAT
     (re.compile(r"ghp_[A-Za-z0-9]+"), "[REDACTED]"),  # GitHub classic token
-    # Generic key=value secrets (api_key / token / password / secret), case-insensitive.
+    # AWS access-key ids: AKIA (long-term) / ASIA (temporary STS) + 16 upper-alnum
+    # chars. Case-sensitive and bounded, so ordinary uppercase words are ignored.
+    (re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "[REDACTED]"),
+    # JWTs: three dot-separated base64url segments, header starting `eyJ`. The two
+    # required dots prevent matching an ordinary word or a 2-segment `eyJ...`.
+    (re.compile(r"\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), "[REDACTED]"),
+    # Google / GCP API keys: `AIza` + key chars (>= 20 to stay specific).
+    (re.compile(r"\bAIza[0-9A-Za-z_\-]{20,}"), "[REDACTED]"),
+    # Slack tokens: bot / app / user / refresh / session families
+    # (xoxb / xoxa / xoxp / xoxr / xoxs). Focused, not a broad `xox.*`.
+    (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]+"), "[REDACTED]"),
+    # Bearer tokens: redact the value, keep the `Bearer` label. The 8-char minimum
+    # avoids swallowing an ordinary word after the English word "bearer".
+    (re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._\-]{8,}"), r"\1 [REDACTED]"),
+    # Credentials in common DB connection-string URIs: redact ONLY the password
+    # (between `user:` and `@`), preserving scheme, user, host, and path. Explicit,
+    # security-focused scheme allowlist — not every possible URI scheme.
+    (
+        re.compile(
+            r"(?i)\b(postgresql|postgres|mysql|mongodb\+srv|mongodb|redis)"
+            r"://([^\s:/@]+):([^\s@]+)@"
+        ),
+        r"\1://\2:[REDACTED]@",
+    ),
+    # Generic key=value secrets (api_key / apikey / token / password / secret).
     (re.compile(r"(?i)\b(api_key|apikey|token|password|secret)\s*=\s*\S+"), r"\1=[REDACTED]"),
+    # Generic key:value secrets (colon form; complements the key=value rule).
+    # A non-empty value is required, so a bare "password:" is left untouched.
+    (
+        re.compile(r"(?i)\b(api_key|apikey|token|password|secret)(\s*:\s*)\S+"),
+        r"\1\2[REDACTED]",
+    ),
 )
 
 
 def _redact_secrets(text: str) -> str:
-    """Replace obvious secret-like substrings with `[REDACTED]`."""
+    """Replace obvious secret-like substrings with `[REDACTED]` (best-effort).
+
+    Deterministic and side-effect-free: applies each `_SECRET_PATTERNS` rule in
+    order and returns the scrubbed copy. The original text is never logged or
+    retained. See the `_SECRET_PATTERNS` comment for the covered formats and the
+    deliberate specificity that guards against over-redaction.
+    """
 
     redacted = text
     for pattern, replacement in _SECRET_PATTERNS:
