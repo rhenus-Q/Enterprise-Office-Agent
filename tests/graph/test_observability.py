@@ -14,6 +14,7 @@ import importlib
 import json
 from types import SimpleNamespace
 
+import pytest
 from langchain_core.documents import Document
 
 import enterprise_rag.graph.graph as graph_module
@@ -287,6 +288,174 @@ def test_redact_secrets_replaces_secret_like_values():
         redacted = _redact_secrets(question)
         assert "[REDACTED]" in redacted, question
         assert leaked not in redacted, question
+
+
+# Expanded coverage (second hardening batch). Each row is
+# (question, leaked_fragment_that_must_be_gone, substring_that_must_remain_or_None).
+_EXPANDED_SECRET_CASES = [
+    # AWS access-key ids.
+    pytest.param(
+        "rotate AKIAIOSFODNN7EXAMPLE before monday",
+        "AKIAIOSFODNN7EXAMPLE",
+        "rotate",
+        id="aws-akia",
+    ),
+    pytest.param(
+        "temp creds ASIAIOSFODNN7EXAMPLE here",
+        "ASIAIOSFODNN7EXAMPLE",
+        "temp creds",
+        id="aws-asia",
+    ),
+    # JWT (three dot-separated segments).
+    pytest.param(
+        "my jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturevalue ok",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturevalue",
+        "my jwt",
+        id="jwt",
+    ),
+    # Bearer tokens (label preserved).
+    pytest.param(
+        "Authorization: Bearer abcdef1234567890",
+        "abcdef1234567890",
+        "Authorization: Bearer",
+        id="bearer-labeled",
+    ),
+    pytest.param("Bearer abcdef1234567890", "abcdef1234567890", "Bearer", id="bearer-bare"),
+    # Slack tokens.
+    pytest.param(
+        "slack xoxb-123456789012-123456789012-abcdefghijklmnopqrstuvwxyz",
+        "xoxb-123456789012-123456789012-abcdefghijklmnopqrstuvwxyz",
+        "slack",
+        id="slack-xoxb",
+    ),
+    pytest.param(
+        "key xoxp-123456789012-123456789012-123456789012-abcdef",
+        "xoxp-123456789012-123456789012-123456789012-abcdef",
+        None,
+        id="slack-xoxp",
+    ),
+    # Google / GCP API key.
+    pytest.param(
+        "gcp AIzaSyD_example_value_with_expected_length end",
+        "AIzaSyD_example_value_with_expected_length",
+        "gcp",
+        id="google-aiza",
+    ),
+    # Colon-separated generic secrets.
+    pytest.param("password: hunter2", "hunter2", "password", id="colon-password"),
+    pytest.param("token: abcdef123456", "abcdef123456", "token", id="colon-token"),
+    pytest.param("api_key: secret-value", "secret-value", "api_key", id="colon-api_key"),
+    pytest.param("apikey: secret-value", "secret-value", "apikey", id="colon-apikey"),
+    pytest.param("secret: secret-value", "secret-value", "secret", id="colon-secret"),
+    # Credentials in connection-string URIs (password only; rest preserved).
+    pytest.param(
+        "postgres://user:password@db.example.com/database",
+        "password",
+        "postgres://user:",
+        id="uri-postgres",
+    ),
+    pytest.param(
+        "postgresql://user:password@db.example.com/database",
+        "password",
+        "db.example.com/database",
+        id="uri-postgresql",
+    ),
+    pytest.param(
+        "mysql://user:password@db.example.com/database",
+        "password",
+        "mysql://user:",
+        id="uri-mysql",
+    ),
+    pytest.param(
+        "mongodb://user:password@db.example.com/database",
+        "password",
+        "mongodb://user:",
+        id="uri-mongodb",
+    ),
+    pytest.param(
+        "mongodb+srv://user:password@cluster.example.com/database",
+        "password",
+        "mongodb+srv://user:",
+        id="uri-mongodb-srv",
+    ),
+    pytest.param(
+        "redis://user:password@redis.example.com/0",
+        "password",
+        "redis.example.com/0",
+        id="uri-redis",
+    ),
+]
+
+
+@pytest.mark.parametrize("question, leaked, must_remain", _EXPANDED_SECRET_CASES)
+def test_expanded_redaction_positive_cases(question, leaked, must_remain):
+    """Each newly supported secret format is scrubbed to [REDACTED]; harmless
+    surrounding label/scheme text is preserved where applicable."""
+
+    redacted = _redact_secrets(question)
+
+    assert "[REDACTED]" in redacted, question
+    assert leaked not in redacted, question
+    if must_remain is not None:
+        assert must_remain in redacted, question
+
+
+# Boundary / negative cases that must NOT be redacted at all (over-redaction guard).
+_NON_SECRET_CASES = [
+    pytest.param("please send me the token for the standup meeting", id="prose-token"),
+    pytest.param("the constant THISISNOTANAWSKEYVALUE is fine", id="uppercase-not-aws"),
+    pytest.param(
+        "header eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0 has only two parts", id="jwt-2-segments"
+    ),
+    pytest.param("visit https://user.example.com/path for the docs", id="url-no-password"),
+    pytest.param("xoxo hugs to the whole team", id="xox-not-slack"),
+    pytest.param("how do I reset the password:", id="colon-empty-value"),
+]
+
+
+@pytest.mark.parametrize("question", _NON_SECRET_CASES)
+def test_expanded_redaction_does_not_over_redact(question):
+    """Ordinary prose, non-AWS uppercase ids, 2-segment eyJ strings, password-less
+    URLs, non-Slack xox words, and empty colon values are left untouched."""
+
+    assert _redact_secrets(question) == question
+
+
+def test_redaction_does_not_consume_following_lines():
+    """A secret on one line is redacted without swallowing the next line."""
+
+    text = "password: hunter2\nkeep this second line fully intact"
+    redacted = _redact_secrets(text)
+
+    assert "hunter2" not in redacted
+    assert "[REDACTED]" in redacted
+    assert "keep this second line fully intact" in redacted
+    assert redacted.count("\n") == text.count("\n")  # newline structure preserved
+
+
+def test_answer_question_seeds_redacted_new_format_secret(monkeypatch):
+    """Integration: a newly supported secret shape (AWS key) is redacted before the
+    graph is invoked, and the original input hash is unchanged."""
+
+    captured = {}
+
+    class _CapturingApp:
+        def invoke(self, state):
+            captured["question"] = state["question"]
+            return {**state, "generation": "A"}
+
+    monkeypatch.setattr(graph_module, "app", _CapturingApp())
+    question = "rotate AKIAIOSFODNN7EXAMPLE before monday"
+
+    result = answer_question(question)
+
+    # The graph, the result, and raw_state all see only the redacted question.
+    assert "AKIAIOSFODNN7EXAMPLE" not in captured["question"]
+    assert "AKIAIOSFODNN7EXAMPLE" not in result.question
+    assert "AKIAIOSFODNN7EXAMPLE" not in result.raw_state["question"]
+    assert result.input_redacted is True
+    # Hashing is unchanged: still over the ORIGINAL input.
+    assert result.question_sha256 == hashlib.sha256(question.encode()).hexdigest()
 
 
 def test_non_secret_question_passes_through_unchanged(monkeypatch):
