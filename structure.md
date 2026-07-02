@@ -486,11 +486,18 @@ seam. The design rules:
   `tool_error_notice` node instead, and `route_question` falls back to
   `retrieve` **without** recording a `stop_reason` (a router failure therefore
   produces no caveat — the run simply degrades to local retrieval).
-- **Unexpected internal / programmer errors may still propagate.** The
-  guarantee above covers the wrapped external-dependency seams; a truly
-  unexpected error (e.g. a bug in a node) is not caught by a top-level
-  catch-all and may surface from `answer_question()`. There is intentionally
-  no blanket `try/except` around the whole run.
+- **Unexpected internal / programmer errors may still propagate
+  (`answer_question()` exception contract).** The guarantee above covers the
+  *expected* external-dependency failures at their wrapped seams — those
+  normally return an `AnswerResult` carrying degraded behavior and/or a
+  machine-readable `stop_reason`. It is not a total guarantee: a truly
+  unexpected error (a bug in a node, a programmer error, any future unwrapped
+  seam) is not caught by a top-level catch-all and may surface from
+  `answer_question()`, which therefore does **not** promise an `AnswerResult`
+  for every possible exception. There is intentionally no blanket `try/except`
+  around the whole run, so callers that require process isolation or an
+  always-structured API response must add their own exception handling at the
+  integration boundary.
 - **Console banners log only the exception type** (e.g.
   `---WEB SEARCH FAILED (TimeoutError): ...---`) — never the message, which
   could carry secrets, keys, or paths.
