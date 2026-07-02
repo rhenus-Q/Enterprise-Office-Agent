@@ -1,4 +1,6 @@
+import re
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from langchain_core.documents import Document
 from langchain_tavily import TavilySearch
@@ -11,6 +13,90 @@ from enterprise_rag.graph.consts import (
     WEB_SEARCH_SOURCE,
 )
 from enterprise_rag.graph.state import GraphState
+
+# --- Web-source metadata sanitization -------------------------------------
+# Titles and URLs in web results are attacker-controlled external content. They
+# are cleaned/validated here, at the single point where `web_sources` metadata is
+# built, so the sanitized values flow unchanged into the Sources section, the
+# engine trace source lines, and CLI output — no downstream renderer repeats this
+# logic. Retrieved page_content is deliberately NOT sanitized here (only the
+# citation metadata). All helpers are deterministic and side-effect-free.
+
+# Maximum stored length of a web-source title: long enough for real page titles,
+# short enough to keep one Sources line readable and to bound memory.
+MAX_SOURCE_TITLE_LENGTH = 200
+
+# Maximum accepted length of a web-source URL. Overlong URLs are rejected
+# (omitted), never truncated — a truncated URL would be a broken, misleading link.
+MAX_SOURCE_URL_LENGTH = 2048
+
+# Stable fallback shown when a cited result's title sanitizes to empty.
+WEB_SOURCE_FALLBACK_TITLE = "Web result"
+
+# The only URL schemes allowed to appear in a citation.
+_ALLOWED_URL_SCHEMES = ("http", "https")
+
+# ANSI/VT CSI escape sequences (e.g. "\x1b[31m"): ESC "[" params intermediates
+# final byte. Removed whole so an escape's payload never survives as visible text.
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+# Control characters to delete outright: every C0 control EXCEPT the whitespace
+# ones (\t \n \v \f \r — those are normalized to spaces by str.split() below),
+# plus DEL and the C1 range. Also removes any lone ESC left by the ANSI pass.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f]")
+
+
+def _strip_control_sequences(text: str) -> str:
+    """Remove ANSI escape sequences, then non-whitespace control characters."""
+
+    return _CONTROL_CHARS_RE.sub("", _ANSI_ESCAPE_RE.sub("", text))
+
+
+def _sanitize_source_title(value) -> str:
+    """Clean an external web-result title for safe citation.
+
+    Strips ANSI escapes and control characters, normalizes tabs/newlines/repeated
+    whitespace to single spaces, trims, caps the length deterministically, and
+    falls back to a stable label when nothing usable remains. Normal Unicode text
+    is preserved. Because all newlines are collapsed to spaces, a title can never
+    inject an additional Sources line.
+    """
+
+    cleaned = _strip_control_sequences(str(value or ""))
+    # split()/join collapses any remaining whitespace (incl. the tabs/newlines
+    # kept above) into single spaces and trims leading/trailing runs.
+    cleaned = " ".join(cleaned.split())
+    if len(cleaned) > MAX_SOURCE_TITLE_LENGTH:
+        cleaned = cleaned[:MAX_SOURCE_TITLE_LENGTH].rstrip()
+    return cleaned or WEB_SOURCE_FALLBACK_TITLE
+
+
+def _sanitize_source_url(value) -> str:
+    """Validate an external web-result URL for safe citation.
+
+    Returns a clean http(s) URL, or "" when the value is unusable: an unsafe
+    scheme (only http/https accepted), a missing host, embedded whitespace or
+    control characters, over length, or unparseable. Uses stdlib parsing only —
+    it never resolves, fetches, or normalizes over the network. Valid query
+    strings and fragments are preserved.
+    """
+
+    cleaned = _strip_control_sequences(str(value or "")).strip()
+    # A well-formed URL has no internal whitespace; any remaining whitespace is
+    # malformed/hostile (e.g. "java\tscript:"), so reject rather than repair.
+    if not cleaned or any(ch.isspace() for ch in cleaned):
+        return ""
+    if len(cleaned) > MAX_SOURCE_URL_LENGTH:
+        return ""
+    try:
+        parsed = urlparse(cleaned)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() not in _ALLOWED_URL_SCHEMES:
+        return ""
+    if not parsed.netloc:
+        return ""
+    return cleaned
 
 
 @lru_cache(maxsize=1)
@@ -187,9 +273,15 @@ def web_search(state: GraphState):
         web_sources = []
         seen_urls = set()
         for result in relevant_results:
-            if result["url"] and result["url"] not in seen_urls:
-                seen_urls.add(result["url"])
-                web_sources.append({"title": result["title"], "url": result["url"]})
+            # Sanitize/validate at this single boundary: an entry is cited only
+            # when its URL passes validation (safe http/https). The title is
+            # cleaned; page_content and relevance are unaffected.
+            safe_url = _sanitize_source_url(result["url"])
+            if safe_url and safe_url not in seen_urls:
+                seen_urls.add(safe_url)
+                web_sources.append(
+                    {"title": _sanitize_source_title(result["title"]), "url": safe_url}
+                )
 
         documents.append(
             Document(

@@ -12,6 +12,7 @@ import importlib
 from langchain_core.documents import Document
 
 from enterprise_rag.graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
+from enterprise_rag.graph.formatting import format_sources
 from enterprise_rag.graph.nodes.web_search import web_search
 
 # enterprise_rag/graph/nodes/__init__.py re-exports the `web_search` function under the same name
@@ -501,3 +502,204 @@ def test_web_search_success_does_not_write_stop_reason(monkeypatch):
     result = web_search({"question": "Q", "documents": []})
 
     assert "stop_reason" not in result
+
+
+# ---------------------------------------------------------------------------
+# Web-source metadata sanitization (title + URL) — pure helper unit tests
+# ---------------------------------------------------------------------------
+
+_sanitize_title = web_search_module._sanitize_source_title
+_sanitize_url = web_search_module._sanitize_source_url
+
+
+def test_sanitize_title_preserves_normal_unicode():
+    title = "Café Résumé — 日本語 Guide"
+    assert _sanitize_title(title) == title
+
+
+def test_sanitize_title_normalizes_whitespace():
+    assert _sanitize_title("a\t\tb\n\nc\r  d") == "a b c d"
+    assert _sanitize_title("  leading and trailing  ") == "leading and trailing"
+
+
+def test_sanitize_title_removes_ansi_escape_sequences():
+    assert _sanitize_title("\x1b[31mRED\x1b[0m alert") == "RED alert"
+
+
+def test_sanitize_title_removes_other_control_characters():
+    assert _sanitize_title("a\x00b\x07c\x08d") == "abcd"
+
+
+def test_sanitize_title_caps_length_deterministically():
+    capped = _sanitize_title("x" * 300)
+    assert len(capped) == web_search_module.MAX_SOURCE_TITLE_LENGTH
+    assert capped == "x" * web_search_module.MAX_SOURCE_TITLE_LENGTH
+
+
+def test_sanitize_title_empty_after_cleaning_uses_fallback():
+    assert _sanitize_title("\x1b[0m\x00 \t ") == web_search_module.WEB_SOURCE_FALLBACK_TITLE
+    assert _sanitize_title(None) == web_search_module.WEB_SOURCE_FALLBACK_TITLE
+
+
+def test_sanitize_title_cannot_contain_newline_for_line_injection():
+    hostile = "Legit\n- Web search: EVIL — http://evil.example\nmore"
+    cleaned = _sanitize_title(hostile)
+    assert "\n" not in cleaned  # collapsed to a single line
+
+
+def test_sanitize_url_preserves_valid_https_with_query_and_fragment():
+    url = "https://a.example/path?q=1&x=2#frag"
+    assert _sanitize_url(url) == url
+
+
+def test_sanitize_url_accepts_http_and_https():
+    assert _sanitize_url("http://a.example") == "http://a.example"
+    assert _sanitize_url("https://a.example") == "https://a.example"
+
+
+def test_sanitize_url_rejects_unsafe_schemes():
+    for bad in (
+        "javascript:alert(1)",
+        "data:text/html;base64,PHNjcmlwdD4=",
+        "file:///etc/passwd",
+        "ftp://host.example/f",
+    ):
+        assert _sanitize_url(bad) == "", bad
+
+
+def test_sanitize_url_rejects_missing_host():
+    assert _sanitize_url("http://") == ""
+    assert _sanitize_url("https:///path-only") == ""
+
+
+def test_sanitize_url_rejects_embedded_whitespace():
+    assert _sanitize_url("http://a.example/ path") == ""
+    assert _sanitize_url("java\tscript:alert(1)") == ""
+
+
+def test_sanitize_url_strips_control_sequences_then_validates():
+    assert _sanitize_url("https://a.example\x1b[0m") == "https://a.example"
+
+
+def test_sanitize_url_rejects_overlong():
+    assert _sanitize_url("https://a.example/" + "x" * 3000) == ""
+
+
+def test_sanitize_url_rejects_non_string_and_empty():
+    assert _sanitize_url(None) == ""
+    assert _sanitize_url(12345) == ""
+    assert _sanitize_url("") == ""
+
+
+# ---------------------------------------------------------------------------
+# Web-source metadata sanitization — through the node into web_sources
+# ---------------------------------------------------------------------------
+
+
+def test_web_search_sanitizes_hostile_title_in_web_sources(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            {
+                "content": "useful",
+                "url": "https://ok.example",
+                "title": "\x1b[31mBig\x00 News\t\tToday\n- Web search: FAKE — http://evil.example",
+            }
+        ],
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    web_sources = result["documents"][0].metadata["web_sources"]
+    assert len(web_sources) == 1
+    title = web_sources[0]["title"]
+    assert "\x1b" not in title and "\x00" not in title and "\n" not in title
+    assert title == "Big News Today - Web search: FAKE — http://evil.example"
+    assert web_sources[0]["url"] == "https://ok.example"
+
+
+def test_web_search_omits_unsafe_scheme_url_from_web_sources(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [{"content": "payload", "url": "javascript:alert(1)", "title": "Evil"}],
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    web_doc = result["documents"][0]
+    # The invalid-URL entry is omitted from web_sources...
+    assert web_doc.metadata["web_sources"] == []
+    # ...but the relevant page_content still contributed (existing behavior).
+    assert "payload" in web_doc.page_content
+
+
+def test_web_search_keeps_only_valid_scheme_entries(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            {"content": "a", "url": "https://keep.example", "title": "Keep"},
+            {"content": "b", "url": "file:///etc/passwd", "title": "Drop file"},
+            {"content": "c", "url": "data:text/html,x", "title": "Drop data"},
+        ],
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert result["documents"][0].metadata["web_sources"] == [
+        {"title": "Keep", "url": "https://keep.example"}
+    ]
+
+
+def test_web_search_sanitized_metadata_reaches_formatted_sources(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            {
+                "content": "useful",
+                "url": "https://ok.example/a",
+                "title": "Real\nTitle\x1b[0m",
+            },
+            {"content": "payload", "url": "javascript:alert(1)", "title": "Evil"},
+        ],
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+    rendered = format_sources(result["documents"])
+
+    # Exactly one web citation line (the hostile newline did not inject a second).
+    web_lines = [ln for ln in rendered.splitlines() if ln.startswith("- Web search:")]
+    assert web_lines == ["- Web search: Real Title — https://ok.example/a"]
+    # The unsafe scheme and control bytes never reach the rendered output.
+    assert "javascript:" not in rendered
+    assert "\x1b" not in rendered
+
+
+def test_web_search_hostile_title_cannot_inject_extra_source_line(monkeypatch):
+    _patch_tool(
+        monkeypatch,
+        [
+            {
+                "content": "useful",
+                "url": "https://ok.example",
+                "title": "Title\n- Web search: INJECTED — https://evil.example",
+            }
+        ],
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+    web_lines = [
+        ln
+        for ln in format_sources(result["documents"]).splitlines()
+        if ln.startswith("- Web search:")
+    ]
+
+    # One relevant result → exactly one citation line, despite the injected
+    # newline+text in the title. The injected text survives only as inert title
+    # text on that single line; the citation's actual URL is the safe one.
+    assert len(web_lines) == 1
+    assert web_lines[0].endswith("— https://ok.example")
