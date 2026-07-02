@@ -734,3 +734,74 @@ def test_real_graph_privacy_run_traces_without_web(monkeypatch):
     assert result.web_search_count == 0
     assert result.node_path[0] == "retrieve"
     assert "websearch" not in result.node_path
+
+
+# ---------------------------------------------------------------------------
+# Exception contract: an unexpected mid-run error propagates unchanged
+#
+# answer_question() handles *expected* dependency failures at their component
+# boundaries, but there is intentionally no broad catch-all around the graph
+# run: an unexpected internal error must propagate to the caller unchanged,
+# never be swallowed or converted into an AnswerResult. These tests lock that
+# documented contract (engine docstring + structure.md §13).
+# ---------------------------------------------------------------------------
+
+
+class _MidStreamError(Exception):
+    """Distinctive local exception type, so the assertions prove the exact
+    error identity/type is preserved (not wrapped or replaced)."""
+
+
+class _RaisingStreamApp:
+    """Mirrors LangGraph's update stream but fails partway.
+
+    stream() yields one {node: update} chunk per entry in `pre_updates`, then
+    raises _MidStreamError — standing in for an unexpected internal error that
+    surfaces while the graph is running. With an empty `pre_updates` it raises
+    before yielding its first update.
+    """
+
+    def __init__(self, pre_updates):
+        self.pre_updates = pre_updates
+
+    def stream(self, state, stream_mode="updates"):
+        assert stream_mode == "updates"
+        for node_name, update in self.pre_updates:
+            yield {node_name: update}
+        raise _MidStreamError("boom mid-run")
+
+
+def test_mid_stream_exception_propagates_unchanged(monkeypatch, tmp_path):
+    # The app streams one valid update and then raises. The same exception type
+    # must propagate out of answer_question() — not be swallowed, not become an
+    # AnswerResult, not be replaced by another exception type.
+    fake = _RaisingStreamApp([("retrieve", {"documents": []})])
+    monkeypatch.setattr(graph_module, "app", fake)
+    trace_file = tmp_path / "run.json"
+
+    with pytest.raises(_MidStreamError) as excinfo:
+        answer_question("Q", AnswerOptions(trace_path=trace_file))
+
+    # The exact exception instance propagated (message preserved), proving it
+    # was neither wrapped nor converted.
+    assert str(excinfo.value) == "boom mid-run"
+
+    # No partial trace file: the write happens only after a successful run, so
+    # a failed stream leaves nothing behind.
+    assert not trace_file.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_exception_before_first_update_propagates_unchanged(monkeypatch, tmp_path):
+    # The app raises before yielding any update at all. Same contract: the
+    # exception propagates and no trace file is written.
+    fake = _RaisingStreamApp([])
+    monkeypatch.setattr(graph_module, "app", fake)
+    trace_file = tmp_path / "run.json"
+
+    with pytest.raises(_MidStreamError) as excinfo:
+        answer_question("Q", AnswerOptions(trace_path=trace_file))
+
+    assert str(excinfo.value) == "boom mid-run"
+    assert not trace_file.exists()
+    assert list(tmp_path.iterdir()) == []
