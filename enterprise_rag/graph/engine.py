@@ -369,6 +369,17 @@ def answer_question(
     inputs still correlate) and the `input_redacted` flag; it is never stored
     in the result, raw_state, or trace. Redaction does not change routing,
     privacy mode, or the fallback policy.
+
+    Exception contract: *expected* external-dependency failures (retriever,
+    web search, generation LLM, graders, query rewriter, router) are handled
+    at their component boundaries and normally produce degraded behavior
+    and/or a machine-readable `stop_reason`, so those cases still return an
+    AnswerResult. This is NOT a total guarantee: unexpected internal errors,
+    programmer errors, and any future unwrapped seam may still propagate to
+    the caller — `answer_question()` does not promise an AnswerResult for
+    every possible exception, and it adds no top-level catch-all. Callers that
+    require process isolation or an always-structured API response must add
+    their own exception handling at the integration boundary.
     """
 
     if options is None:
