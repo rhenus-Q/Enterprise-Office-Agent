@@ -22,10 +22,12 @@ from enterprise_rag.graph.consts import RETRIEVE
 from enterprise_rag.graph.engine import (
     QUESTION_PREVIEW_MAX_CHARS,
     AnswerOptions,
+    AnswerResult,
     _redact_secrets,
     answer_question,
     build_trace,
 )
+from enterprise_rag.graph.formatting import source_lines
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -591,6 +593,43 @@ def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
     # Policy/privacy unchanged by redaction.
     assert result.web_search_enabled is True
     assert result.web_fallback_policy == "conservative"
+
+
+def test_sanitized_web_source_metadata_reaches_trace_source_lines(monkeypatch):
+    # A hostile web title + an unsafe-scheme URL sanitized by the web_search node
+    # must reach the metadata-only trace `sources` already cleaned: the unsafe
+    # entry omitted, the title stripped of control bytes and newlines.
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+
+    monkeypatch.setattr(
+        web_module,
+        "get_web_search_tool",
+        lambda: SimpleNamespace(
+            invoke=lambda payload: [
+                {"content": "useful", "url": "https://ok.example/a", "title": "Real\nTitle\x1b[0m"},
+                {"content": "payload", "url": "javascript:alert(1)", "title": "Evil"},
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        web_module,
+        "get_retrieval_grader",
+        lambda: SimpleNamespace(invoke=lambda payload: SimpleNamespace(is_relevant=True)),
+    )
+
+    documents = web_module.web_search({"question": "Q", "documents": []})["documents"]
+
+    # AnswerResult.sources is what build_trace serializes into the trace file.
+    result = AnswerResult(
+        question="Q",
+        answer="A",
+        stop_reason="",
+        sources=source_lines(documents),
+    )
+    trace = build_trace(result)
+
+    assert trace["sources"] == ["- Web search: Real Title — https://ok.example/a"]
+    assert all("javascript:" not in line and "\x1b" not in line for line in trace["sources"])
 
 
 # ---------------------------------------------------------------------------
