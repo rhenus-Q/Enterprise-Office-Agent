@@ -11,7 +11,11 @@ import importlib
 
 from langchain_core.documents import Document
 
-from enterprise_rag.graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
+from enterprise_rag.graph.consts import (
+    STOP_REASON_RETRIEVAL_ERROR,
+    STOP_REASON_TOOL_ERROR,
+    STOP_REASON_WEB_SEARCH_ERROR,
+)
 from enterprise_rag.graph.formatting import format_sources
 from enterprise_rag.graph.nodes.web_search import web_search
 
@@ -501,6 +505,29 @@ def test_web_search_success_does_not_write_stop_reason(monkeypatch):
 
     result = web_search({"question": "Q", "documents": []})
 
+    assert "stop_reason" not in result
+
+
+def test_grader_failure_preserves_existing_persistent_stop_reason(monkeypatch):
+    # A transient per-result grading failure inside web_search must not
+    # overwrite a persistent whole-source degradation (retrieval_error)
+    # recorded upstream — that reason must survive to the final caveat.
+    _patch_tool(monkeypatch, [{"content": "boom"}, {"content": "good"}])
+
+    class FlakyGrader:
+        def invoke(self, payload):
+            if payload["document"] == "boom":
+                raise RuntimeError("grader is down")
+            return _FakeGrade(True)
+
+    monkeypatch.setattr(web_search_module, "get_retrieval_grader", lambda: FlakyGrader())
+
+    result = web_search(
+        {"question": "Q", "documents": [], "stop_reason": STOP_REASON_RETRIEVAL_ERROR}
+    )
+
+    assert len(result["documents"]) == 1  # the ungraded result is still dropped
+    # The transient tool_error must not be written over retrieval_error.
     assert "stop_reason" not in result
 
 

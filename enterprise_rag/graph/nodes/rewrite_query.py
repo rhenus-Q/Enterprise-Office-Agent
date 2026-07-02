@@ -39,12 +39,18 @@ def rewrite_query(state: GraphState):
         print(
             f"---QUERY REWRITE FAILED ({type(exc).__name__}): FALLING BACK TO THE ORIGINAL QUESTION---"
         )
-        return {
+        result = {
             "search_query": "",
             # The failed attempt was still a real API call; count it.
             "llm_call_count": state.get("llm_call_count", 0) + 1,
-            "stop_reason": STOP_REASON_TOOL_ERROR,
         }
+        # Record the transient tool_error only when no earlier reason is set:
+        # a persistent whole-source degradation (e.g. retrieval_error) must
+        # not be overwritten by this transient rewrite failure — it should
+        # survive to the final user-facing caveat.
+        if not state.get("stop_reason"):
+            result["stop_reason"] = STOP_REASON_TOOL_ERROR
+        return result
 
     # Metadata-only banner: never log the rewritten query itself (nor the
     # question / previous answer it derives from) — logs may be aggregated.

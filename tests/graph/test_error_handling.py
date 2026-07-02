@@ -446,3 +446,41 @@ def test_app_successful_answer_keeps_retrieval_error(monkeypatch):
 
     assert result["generation"] == "FINAL ANSWER"
     assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
+
+
+def test_app_compound_failure_keeps_retrieval_error_over_transient_grading_failure(monkeypatch):
+    # Compound failure regression: local retrieval fails (retrieval_error), the
+    # run degrades to web search where one result's relevance-grading call
+    # fails transiently (that result is dropped), and the vetted remainder
+    # produces an answer that passes both gates. The persistent retrieval_error
+    # must survive to the end: the transient tool_error must NOT overwrite it
+    # (and therefore cannot be cleared away on the successful path), so the user
+    # still sees the retrieval-degradation caveat.
+    _patch_router(monkeypatch, RETRIEVE)
+    _patch_graders(monkeypatch, grounded=True, useful=True)
+    _patch_all_node_seams(monkeypatch, retriever_raises=True)
+
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    monkeypatch.setattr(
+        web_module,
+        "get_web_search_tool",
+        lambda: SimpleNamespace(invoke=lambda p: [{"content": "boom"}, {"content": "good"}]),
+    )
+
+    class FlakyGrader:
+        def invoke(self, payload):
+            if payload["document"] == "boom":
+                raise RuntimeError("grader hiccup")
+            return SimpleNamespace(is_relevant=True)
+
+    monkeypatch.setattr(web_module, "get_retrieval_grader", lambda: FlakyGrader())
+
+    result = graph_module.app.invoke(_initial_state())
+
+    assert result["generation"] == "FINAL ANSWER"
+    # The persistent whole-source reason survived the transient grading failure.
+    assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
+    # The vetted web result was still used despite the compound failure.
+    assert any(d.metadata.get("source") == "web_search" for d in result["documents"])
+    # And the user-facing caveat still reflects the retrieval degradation.
+    assert RETRIEVAL_ERROR_NOTE in format_answer(result)
