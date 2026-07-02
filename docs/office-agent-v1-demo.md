@@ -1,16 +1,27 @@
-# Office Agent v1 — demo & usage
+# Office Agent v1.6 — demo & usage
 
-Office Agent v1 is a small, deterministic assistant that routes a free-text
+The Office Agent is a small, deterministic assistant that routes a free-text
 request to one of its capabilities and returns a structured response. It lives
 in [`office_agent/`](../office_agent/) and is the office-automation companion to
 the completed [`enterprise_rag`](../enterprise_rag/README.md) engine.
 
-> **v1.5 (Phase 6)** adds a **Meeting Agent / Meeting Prep** capability
+## Version map
+
+The Office Agent has grown across three releases; all seven capabilities ship
+today:
+
+| Release | Phase | Capabilities added |
+|---|---|---|
+| **v1** | Phases 1–5 | Knowledge Q&A, Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing |
+| **v1.5** | Phase 6 | Meeting Agent / Meeting Prep |
+| **v1.6** | Phase 7 | Workflow / Approval Agent |
+
+> **v1.5 (Phase 6)** added a **Meeting Agent / Meeting Prep** capability
 > (`meeting_agent`) — an advanced *composition* tool that combines the local
 > calendar, inbox, and ticket/task mock data into one deterministic meeting-prep
 > sheet. See [Meeting Agent / Meeting Prep](#meeting-agent--meeting-prep) below.
 >
-> **v1.5 (Phase 7)** adds a **Workflow / Approval Agent** capability
+> **v1.6 (Phase 7)** added a **Workflow / Approval Agent** capability
 > (`workflow_approval`) — a deterministic mock approval assistant over a local
 > approval queue + audit log, with *simulated* approve/reject decisions and
 > follow-up tasks (mock data is never mutated). See
@@ -165,7 +176,7 @@ review board"`, `"meeting prep for the budget workshop"`.
 
 ## Workflow / Approval Agent
 
-Workflow / Approval Agent (`workflow_approval`, added in v1.5 / Phase 7) is a
+Workflow / Approval Agent (`workflow_approval`, added in v1.6 / Phase 7) is a
 deterministic mock approval assistant over a local approval queue
 ([`mock_data/approvals.json`](../office_agent/mock_data/approvals.json)) and audit
 log ([`mock_data/audit_log.json`](../office_agent/mock_data/audit_log.json)). It

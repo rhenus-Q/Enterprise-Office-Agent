@@ -6,8 +6,9 @@
 
 > This is the `enterprise_rag` module of the [Enterprise Office Agent](../README.md)
 > repository — the completed Enterprise Document Q&A / RAG engine. It is the only
-> module implemented today; `office_agent/` is a reserved placeholder for future
-> office-automation work. See the [repo-level README](../README.md) for the big
+> completed module here; `office_agent/` is the deterministic Office Agent
+> companion module that routes office-style requests to local mock tools and uses
+> `enterprise_rag` only for Knowledge Q&A. See the [repo-level README](../README.md) for the big
 > picture and [structure.md](../structure.md) for the architecture deep-dive.
 
 ## Overview

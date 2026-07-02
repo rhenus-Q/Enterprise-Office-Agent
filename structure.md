@@ -23,12 +23,37 @@ The repository is organized as named capability modules (see
   (`enterprise_rag/graph/…`, `enterprise_rag/ingestion.py`,
   `enterprise_rag/data/…`); its public entry point is
   `enterprise_rag.graph.engine.answer_question()`.
-- **`office_agent/`** — the implemented **Enterprise Office Agent** (v1, plus the
-  v1.5 / Phase 6 Meeting Agent). A deterministic, LLM-free intent router over
-  local capabilities; public entry point
+- **`office_agent/`** — the implemented **Enterprise Office Agent** (through
+  v1.6 / Phase 7: seven capabilities). A deterministic, LLM-free intent router
+  over local capabilities; public entry point
   `office_agent.engine.answer_office_request()`. It is documented in
   [The Office Agent module](#the-office-agent-module) at the end of this file, and
   must not change or regress `enterprise_rag` behavior or its tests.
+
+**Module boundary (why the two modules stay decoupled):**
+
+- **`enterprise_rag/` owns all RAG behavior** — retrieval, grading, generation,
+  the LangGraph state machine, prompts, and provenance. Nothing outside
+  `enterprise_rag/` reimplements any of it.
+- **`office_agent/` owns deterministic office-workflow routing and tools** — a
+  keyword router plus one tool per intent. It is **not** a LangGraph graph; it is
+  a thin keyword router + tool dispatch.
+- **`office_agent` must not duplicate `enterprise_rag` internals.** The only
+  crossing point is the **Knowledge Q&A adapter** (`office_agent/tools/knowledge.py`),
+  which calls `enterprise_rag.graph.engine.answer_question()` and reuses its
+  formatting; it does not reimplement retrieval, generation, or graph logic.
+- **The mock Office Agent tools are local-only, deterministic, CI-safe, and
+  read-only by default.** They read `office_agent/mock_data/` lazily, anchor
+  dates to the data (not the system clock), and never contact an external
+  service. **Simulated actions** (task creation, approve/reject) are computed in
+  the response and **must not mutate the repo mock data** — the only write path is
+  an explicit persistence *seam* (`record_decision(..., persist_path=...)`) used
+  by tests against a caller-provided path (e.g. pytest's `tmp_path`).
+- **Tests do not call external services.** The `tests/office_agent/` suite is
+  fully mocked/deterministic (the Knowledge adapter is patched), and the
+  `enterprise_rag` mocked suites patch every lazy client seam.
+- The dedicated Office Agent demo / usage doc is
+  [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md).
 - **Repo root** — `main.py` (thin CLI over the engine), `tests/`, `evals/`, and
   `docs/adr/` are repository-level. Root docs
   (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) stay repo-level;
@@ -497,7 +522,9 @@ GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every p
 ## The Office Agent module
 
 `office_agent/` is the repository's second implemented module: the **Enterprise
-Office Agent** (v1, plus the v1.5 / Phase 6 Meeting Agent). It is the
+Office Agent**, implemented through v1.6 / Phase 7 with seven capabilities (v1 /
+Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7
+Workflow / Approval Agent). It is the
 office-automation companion to the `enterprise_rag` engine and is intentionally
 small, deterministic, and — except for Knowledge Q&A — local and LLM-free. It is
 **not** a LangGraph graph; it is a thin keyword router + tool dispatch.
@@ -539,7 +566,7 @@ small, deterministic, and — except for Knowledge Q&A — local and LLM-free. I
 | `tickets.py` | `ticket_assistant` | Local mock `mock_data/tickets.json` + `mock_data/tasks.json` |
 | `briefing.py` | `daily_briefing` | Aggregates the email + calendar + ticket mock data |
 | `meeting.py` | `meeting_agent` | Composes the calendar + email + ticket/task mock data for one meeting (**v1.5 / Phase 6**) |
-| `approvals.py` | `workflow_approval` | Local mock `mock_data/approvals.json` + `mock_data/audit_log.json` (**v1.5 / Phase 7**) |
+| `approvals.py` | `workflow_approval` | Local mock `mock_data/approvals.json` + `mock_data/audit_log.json` (**v1.6 / Phase 7**) |
 
 **`enterprise_rag` is not duplicated inside `office_agent`.** The Knowledge Q&A
 tool is a thin *adapter* that calls
@@ -567,7 +594,7 @@ suggested agenda, risks/blockers, and recommended follow-ups. It **does not call
 the Enterprise RAG pipeline** — "relevant knowledge areas" are inferred from
 labels, not retrieved — and it uses no LLM and no external services.
 
-**Workflow / Approval Agent (v1.5 / Phase 7)** is a deterministic mock approval
+**Workflow / Approval Agent (v1.6 / Phase 7)** is a deterministic mock approval
 assistant over the local approval queue (`approvals.json`) and audit log
 (`audit_log.json`). It supports list/filter views (all, pending, assigned-to-me,
 high-priority, approved, rejected, and topic filters like "expense approvals"),
