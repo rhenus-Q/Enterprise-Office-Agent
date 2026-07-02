@@ -309,8 +309,11 @@ def web_search(state: GraphState):
         "web_result_grading_count": web_result_grading_count,
         "llm_call_count": llm_call_count,
     }
-    # Only write stop_reason on failure: a normal pass must not clobber a
-    # reason recorded by an earlier node.
-    if grading_error:
+    # Record the transient tool_error only when no earlier reason is set: a
+    # normal pass must not clobber a reason recorded by an earlier node, and a
+    # transient per-result grading failure must not overwrite a persistent
+    # whole-source degradation (e.g. retrieval_error) that the user should
+    # still see in the final caveat.
+    if grading_error and not state.get("stop_reason"):
         result["stop_reason"] = STOP_REASON_TOOL_ERROR
     return result

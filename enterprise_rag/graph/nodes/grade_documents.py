@@ -57,8 +57,11 @@ def grade_documents(state: GraphState):
         "documents": filtered_docs,
         "web_search": web_search,
     }
-    # Only write stop_reason on failure: a normal pass must not clobber a
-    # reason recorded by an earlier node (e.g. retrieval_error).
-    if grading_error:
+    # Record the transient tool_error only when no earlier reason is set: a
+    # normal pass must not clobber an existing reason, and neither must a
+    # transient grading failure overwrite a persistent whole-source
+    # degradation (e.g. retrieval_error) — that more specific reason must
+    # survive to the final user-facing caveat.
+    if grading_error and not state.get("stop_reason"):
         result["stop_reason"] = STOP_REASON_TOOL_ERROR
     return result

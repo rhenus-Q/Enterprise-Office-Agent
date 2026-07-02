@@ -400,10 +400,16 @@ an error caveat. Whole-source degradations (`retrieval_error`,
 `web_search_error`) persist even on success — an entire evidence source was
 unavailable, which the user should see — and the terminal `tool_error`
 (verification itself failed, recorded by `tool_error_notice`) always ends the
-run flagged. Terminal notice nodes overwrite an earlier reason when a later
-failure ends the run — the reason that actually stopped the run wins. Nodes
-only write `stop_reason` on failure, so a successful step never clobbers an
-earlier recorded reason (the success-path cleanup node is the one deliberate
+run flagged. This persistence is enforced at the write site: a mid-run node
+records a **transient** `tool_error` (`grade_documents`, `websearch`,
+`rewrite_query`) **only when no earlier `stop_reason` is already set**, so a
+later transient failure can never overwrite a persistent whole-source reason
+(and therefore can never be cleared away by the success-path cleanup, which
+only clears `tool_error`). Terminal notice nodes are unaffected — they still
+deliberately write their final reason when a later failure ends the run, so
+the reason that actually stopped the run wins. Nodes otherwise only write
+`stop_reason` on failure, so a successful step never clobbers an earlier
+recorded reason (the success-path cleanup node is the one deliberate
 exception).
 
 ### Answer provenance (Sources section)

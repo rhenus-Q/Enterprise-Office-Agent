@@ -8,7 +8,7 @@ state input/output and on graceful degradation when the rewriter fails.
 
 import importlib
 
-from enterprise_rag.graph.consts import STOP_REASON_TOOL_ERROR
+from enterprise_rag.graph.consts import STOP_REASON_RETRIEVAL_ERROR, STOP_REASON_TOOL_ERROR
 from enterprise_rag.graph.nodes.rewrite_query import rewrite_query
 
 # enterprise_rag/graph/nodes/__init__.py re-exports the `rewrite_query` function under the same
@@ -116,3 +116,19 @@ def test_rewriter_failure_still_counts_the_llm_call(monkeypatch):
     result = rewrite_query({"question": "Q", "generation": "A", "llm_call_count": 3})
 
     assert result["llm_call_count"] == 4
+
+
+def test_rewriter_failure_preserves_existing_persistent_stop_reason(monkeypatch):
+    # A transient rewrite failure must not overwrite a persistent whole-source
+    # degradation (retrieval_error) recorded upstream — that reason must
+    # survive to the final caveat.
+    _patch_failing_rewriter(monkeypatch)
+
+    result = rewrite_query(
+        {"question": "Q", "generation": "A", "stop_reason": STOP_REASON_RETRIEVAL_ERROR}
+    )
+
+    assert result["search_query"] == ""  # still falls back to the original question
+    assert result["llm_call_count"] == 1  # the failed attempt is still counted
+    # The transient tool_error must not clobber the persistent reason.
+    assert "stop_reason" not in result

@@ -9,7 +9,7 @@ import importlib
 
 from langchain_core.documents import Document
 
-from enterprise_rag.graph.consts import STOP_REASON_TOOL_ERROR
+from enterprise_rag.graph.consts import STOP_REASON_RETRIEVAL_ERROR, STOP_REASON_TOOL_ERROR
 from enterprise_rag.graph.nodes.grade_documents import grade_documents
 
 # enterprise_rag/graph/nodes/__init__.py re-exports the `grade_documents` function under the same
@@ -135,6 +135,30 @@ def test_success_does_not_write_stop_reason(monkeypatch):
 
     result = grade_documents({"question": "Q", "documents": docs})
 
+    assert "stop_reason" not in result
+
+
+def test_grader_failure_preserves_existing_retrieval_error(monkeypatch):
+    # A transient grading failure must not overwrite a persistent whole-source
+    # degradation recorded upstream (retrieve set retrieval_error) — that more
+    # specific reason must survive to the final caveat.
+    keep = Document(page_content="good")
+    ungraded = Document(page_content="boom")
+    _patch_grader_with_failures(monkeypatch, {"good": True, "boom": "raise"})
+
+    result = grade_documents(
+        {
+            "question": "Q",
+            "documents": [keep, ungraded],
+            "stop_reason": STOP_REASON_RETRIEVAL_ERROR,
+        }
+    )
+
+    assert result["documents"] == [keep]  # ungraded content still dropped
+    assert result["web_search"] is True  # web fallback still requested
+    # The transient tool_error did NOT clobber the persistent reason.
+    assert result.get("stop_reason") != STOP_REASON_TOOL_ERROR
+    # And it is left unset here, so the channel keeps retrieval_error.
     assert "stop_reason" not in result
 
 
