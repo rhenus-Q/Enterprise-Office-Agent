@@ -6,7 +6,7 @@ Pure and deterministic — no external dependencies, no API keys.
 
 import pytest
 
-from office_agent.router import route_request
+from office_agent.router import _INTENT_RULES, route_request
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
     INTENT_DAILY_BRIEFING,
@@ -16,6 +16,7 @@ from office_agent.schemas import (
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     INTENT_WORKFLOW_APPROVAL,
+    OFFICE_INTENTS,
 )
 
 # Obvious enterprise knowledge / policy / document questions (from the spec).
@@ -195,3 +196,97 @@ def test_router_is_case_insensitive():
     assert route_request("PREPARE ME FOR MY NEXT MEETING").intent == INTENT_MEETING_AGENT
     assert route_request("SHOW PENDING APPROVALS").intent == INTENT_WORKFLOW_APPROVAL
     assert route_request("APPROVE APR-001").intent == INTENT_WORKFLOW_APPROVAL
+
+
+# ---------------------------------------------------------------------------
+# Golden routing table (regression fence)
+# ---------------------------------------------------------------------------
+# Each row pins a representative request phrase to the intent the router MUST
+# return today. The overlap rows deliberately mention words that belong to more
+# than one intent, so they exercise the precedence order encoded in
+# office_agent.router._INTENT_RULES:
+#
+#   email_summary -> workflow_approval -> ticket_assistant -> meeting_agent ->
+#   calendar_lookup -> daily_briefing -> knowledge_qa -> unknown
+#
+# with an explicit APR-<n> id matched at the workflow_approval position (2),
+# i.e. ahead of ticket/task (3) but behind an explicit email request (1).
+#
+# This table documents CURRENT behavior, not a wish list. A change to routing
+# precedence or keywords should surface here as a clear, reviewable diff. Do NOT
+# edit an expected intent merely to make a changed router pass — first confirm
+# the new behavior is intended and update the router docs alongside it.
+GOLDEN_ROUTES = [
+    # --- One representative phrase per intent --------------------------------
+    ("summarize my unread emails", INTENT_EMAIL_SUMMARY),
+    ("show pending approvals", INTENT_WORKFLOW_APPROVAL),
+    ("show open tickets", INTENT_TICKET_ASSISTANT),
+    ("prepare me for my next meeting", INTENT_MEETING_AGENT),
+    ("what meetings do I have today?", INTENT_CALENDAR_LOOKUP),
+    ("give me my daily briefing", INTENT_DAILY_BRIEFING),
+    ("what is the VPN access policy?", INTENT_KNOWLEDGE_QA),
+    ("order lunch for the team", INTENT_UNKNOWN),
+    # --- Overlap: email + meeting -> email wins (precedence 1 > 5) -----------
+    ("summarize emails about the VPN rollout meeting", INTENT_EMAIL_SUMMARY),
+    # --- Overlap: briefing + email -> email wins (precedence 1 > 6) ----------
+    ("include unread emails in my morning briefing", INTENT_EMAIL_SUMMARY),
+    # --- Overlap: approval + task -> approval wins (precedence 2 > 3) --------
+    ("create a follow-up task for the pending approval", INTENT_WORKFLOW_APPROVAL),
+    # --- Overlap: approval + meeting prep -> approval wins (precedence 2 > 4) -
+    ("prepare me for the vendor approval meeting", INTENT_WORKFLOW_APPROVAL),
+    # --- Overlap: ticket + follow-up task (no approval) -> ticket wins -------
+    #     precedence 3; the "vpn" knowledge keyword at 7 does not steal it.
+    ("create a follow-up task for the VPN ticket", INTENT_TICKET_ASSISTANT),
+    # --- Overlap: meeting prep + calendar -> meeting prep wins (4 > 5) -------
+    ("meeting prep for tomorrow's calendar", INTENT_MEETING_AGENT),
+    # --- Overlap: briefing + knowledge -> briefing wins (6 > 7) --------------
+    ("what should I focus on in the VPN rollout?", INTENT_DAILY_BRIEFING),
+    # --- Overlap: calendar + knowledge -> calendar wins (5 > 7) --------------
+    ("do I have schedule conflicts before the compliance review?", INTENT_CALENDAR_LOOKUP),
+    # --- Explicit APR-<n> ids -> workflow_approval ---------------------------
+    ("APR-001", INTENT_WORKFLOW_APPROVAL),
+    ("what is the status of APR-042?", INTENT_WORKFLOW_APPROVAL),
+    # APR id is matched at the workflow position (2), ahead of ticket/task (3):
+    ("create a follow-up task for APR-001", INTENT_WORKFLOW_APPROVAL),
+    ("show audit log for APR-001", INTENT_WORKFLOW_APPROVAL),
+    # ...but an explicit email request (precedence 1) still beats an APR id:
+    ("email me the status of APR-001", INTENT_EMAIL_SUMMARY),
+    # A plain audit-log / retention question (no APR id, no approval word) is
+    # Knowledge Q&A, not workflow:
+    ("what is our audit log retention policy?", INTENT_KNOWLEDGE_QA),
+    # --- Unsupported requests -> unknown -------------------------------------
+    ("book a flight to Berlin", INTENT_UNKNOWN),
+    ("", INTENT_UNKNOWN),
+]
+
+
+@pytest.mark.parametrize("phrase, expected_intent", GOLDEN_ROUTES)
+def test_golden_routes(phrase, expected_intent):
+    """Every golden phrase routes to exactly the pinned intent."""
+
+    assert route_request(phrase).intent == expected_intent
+
+
+def test_router_surface_matches_declared_intents():
+    """The intents the router can emit == the declared OFFICE_INTENTS.
+
+    Guards against version drift between office_agent.schemas (the declared
+    intent surface, kept in lockstep with the engine dispatch) and
+    office_agent.router (the rules that actually produce those intents): adding
+    an intent constant without a routing rule, or a routing rule for an
+    undeclared intent, breaks this test.
+    """
+
+    router_intents = {intent for intent, _ in _INTENT_RULES} | {INTENT_UNKNOWN}
+    assert router_intents == set(OFFICE_INTENTS)
+
+
+def test_golden_table_covers_every_declared_intent():
+    """The golden table exercises exactly the declared intents (incl. unknown).
+
+    Keeps the regression fence complete: a newly declared intent must gain both
+    a routing rule (previous test) and a golden phrase here.
+    """
+
+    covered = {expected for _, expected in GOLDEN_ROUTES}
+    assert covered == set(OFFICE_INTENTS)

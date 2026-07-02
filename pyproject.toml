@@ -69,6 +69,8 @@ files = [
     "enterprise_rag/graph/formatting.py",
     "enterprise_rag/graph/state.py",
     "enterprise_rag/graph/consts.py",
+    "enterprise_rag/graph/nodes/",
+    "enterprise_rag/graph/chains/",
     "office_agent/",
 ]
 warn_unused_configs = true
@@ -77,11 +79,13 @@ warn_redundant_casts = true
 no_implicit_optional = true
 check_untyped_defs = true
 
+# graph.py and ingestion.py stay out of the type-checked scope; when in-scope
+# modules import them, follow the imports silently rather than reporting errors
+# from those (still unchecked) files. The graph nodes and chains are now checked
+# directly via the `files` list above, so they are intentionally NOT silenced.
 [[tool.mypy.overrides]]
 module = [
     "enterprise_rag.graph.graph",
-    "enterprise_rag.graph.nodes.*",
-    "enterprise_rag.graph.chains.*",
     "enterprise_rag.ingestion",
 ]
 follow_imports = "silent"
