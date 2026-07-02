@@ -132,6 +132,12 @@ def seed_state(
     main.py, evals/run_eval.py, and test helpers). None means "resolve from
     the environment"; explicit values are used as-is (the policy is
     normalized, with invalid values falling back to conservative).
+
+    Input boundary: `seed_state()` does NOT redact secrets. Best-effort input
+    redaction happens in `answer_question()` *before* it calls this helper, so
+    calling `app.invoke(seed_state(question))` directly bypasses that redaction
+    guarantee. Supported application callers should go through
+    `answer_question()`.
     """
 
     if web_search_enabled is None:

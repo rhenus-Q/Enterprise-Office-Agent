@@ -69,6 +69,32 @@ def test_rewrite_query_success_does_not_write_stop_reason(monkeypatch):
     assert "stop_reason" not in result
 
 
+def test_rewrite_query_does_not_log_query_or_input_content(monkeypatch, capsys):
+    """The success banner is metadata-only: the rewritten query, the original
+    question, and the previous answer must never reach stdout (console logs may
+    be aggregated in production), while the query is still returned in state."""
+
+    sensitive_query = "CONFIRMED-SENSITIVE-REWRITE-sk-live-0123456789"
+    _patch_rewriter(monkeypatch, new_query=sensitive_query)
+
+    result = rewrite_query(
+        {
+            "question": "CONFIRMED-SENSITIVE-QUESTION",
+            "generation": "CONFIRMED-SENSITIVE-PREVIOUS-ANSWER",
+        }
+    )
+
+    out = capsys.readouterr().out
+    # A fixed, metadata-only banner is emitted...
+    assert "---SEARCH QUERY REWRITTEN---" in out
+    # ...but no content-bearing value leaks into stdout.
+    assert sensitive_query not in out
+    assert "CONFIRMED-SENSITIVE-QUESTION" not in out
+    assert "CONFIRMED-SENSITIVE-PREVIOUS-ANSWER" not in out
+    # The rewritten query is still returned in state for the next web search.
+    assert result["search_query"] == sensitive_query
+
+
 # ---------------------------------------------------------------------------
 # Graceful degradation: rewriter failure
 # ---------------------------------------------------------------------------

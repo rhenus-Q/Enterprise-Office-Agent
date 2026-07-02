@@ -46,7 +46,9 @@ def rewrite_query(state: GraphState):
             "stop_reason": STOP_REASON_TOOL_ERROR,
         }
 
-    print(f"---NEW SEARCH QUERY: {new_query}---")
+    # Metadata-only banner: never log the rewritten query itself (nor the
+    # question / previous answer it derives from) — logs may be aggregated.
+    print("---SEARCH QUERY REWRITTEN---")
 
     return {
         "search_query": new_query,
