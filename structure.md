@@ -346,6 +346,26 @@ principled exception in both modes: the deterministic insufficient-context
 answer skips the graders — it contains no claims to verify, and regenerating
 from the same empty context cannot improve it (see §5).
 
+### Input redaction boundary
+
+Separately from web-search privacy, `answer_question()` performs **best-effort
+secret redaction** on the incoming question *before* it seeds state, so
+secret-like values do not reach the retriever, router, graders, generator, or
+the outbound web-search query (`enterprise_rag/graph/engine.py`). This is an
+`answer_question()`-level guarantee: **`seed_state()` does not independently
+redact input**, so calling `app.invoke(seed_state(question))` directly bypasses
+it. Supported application callers (the CLI, the eval harness, and the Office
+Agent knowledge adapter) always go through `answer_question()`; new callers
+should too.
+
+### LangSmith tracing (privacy caveat)
+
+Enabling LangSmith tracing (`LANGCHAIN_TRACING_V2=true`; see `.env.example`)
+sends prompts, user questions, retrieved document content, intermediate chain
+data, and model outputs to an external service (LangSmith). It is **independent
+of `WEB_SEARCH_ENABLED` and is not disabled by privacy mode** — leave it
+disabled in privacy-sensitive deployments.
+
 ## 10. stop_reason and user-facing caveats
 
 Terminal notice nodes record *why* a run ended without a passing answer;
