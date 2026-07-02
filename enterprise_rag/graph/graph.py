@@ -177,7 +177,20 @@ def route_question(state: GraphState) -> str:
         return RETRIEVE
 
     question = state["question"]
-    route = get_question_router().invoke({"question": question})
+
+    # The router LLM is an external call like any other, so a failure (timeout,
+    # auth/quota error, network error, structured-output parse error) must not
+    # crash the graph. Fall back to local retrieval — the safe, local-first
+    # default that keeps the run alive and usually answers from the curated
+    # corpus. This conditional edge is pure and cannot write state, so no
+    # stop_reason is recorded here; the run continues through the normal gates.
+    try:
+        route = get_question_router().invoke({"question": question})
+    except Exception as exc:
+        # Log only the exception type: messages may carry secrets, prompts,
+        # endpoints, or the question itself.
+        print(f"---ROUTING FAILED ({type(exc).__name__}): FALLING BACK TO RETRIEVE---")
+        return RETRIEVE
 
     if route.datasource == WEBSEARCH:
         print("---ROUTE TO WEB SEARCH---")
