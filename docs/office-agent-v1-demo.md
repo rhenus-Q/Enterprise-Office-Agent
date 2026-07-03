@@ -212,7 +212,38 @@ me?"`, `"show urgent approvals"`, `"what is the status of APR-001?"`, `"approve
 APR-001"`, `"reject APR-002"`, `"create a follow-up task for APR-001"`, `"show
 audit log for APR-001"`, `"show expense approvals"`.
 
+## Optional: LLM-assisted email digest (default off)
+
+The Email Summary tool has one **optional, default-off** LLM enhancement. When
+`OFFICE_LLM_ENABLED` is set to a truthy value (`true`/`1`/`yes`/`on`), a single
+structured-output `gpt-5-mini` call reads the filtered emails' bodies and appends a
+`Digest (LLM-assisted):` block — a short summary, extracted action items (each tied
+to a source email id, with a deadline only when the body states one), and a
+priority order. A second optional setting, `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS`
+(default 60), bounds that call.
+
+Key properties:
+
+- **Default demo stays key-free.** With the flag unset (the default), no LLM client
+  is constructed and the email output is byte-for-byte the deterministic summary —
+  every other capability remains local and LLM-free.
+- **Grounded and bounded.** The digest crosses into the tool only as a validated
+  model; action-item and priority ids are checked against the filtered emails, and
+  the model has no ability to send, reply, delete, or persist anything.
+- **Honest fallback.** Any failure (timeout, API error, parse or grounding failure)
+  returns the standard deterministic summary plus a one-line caveat and a
+  `llm_assist_error` stop reason — the Office Agent never crashes because of the
+  assist.
+
+Enable it for a demo with a real key by setting `OFFICE_LLM_ENABLED=true` in your
+environment (see `.env.example`), then asking an email question such as
+`"summarize my emails"`. The gated real-model test lives under
+`tests/office_chains/` and the offline dataset check is
+`uv run python evals/office_assist/run_office_assist_eval.py --validate-only`.
+
 See [ADR 015](adr/015-office-agent-v1-architecture.md) for the architecture
-decision behind the original five-capability Office Agent v1, and
+decision behind the original five-capability Office Agent v1,
 [ADR 016](adr/016-office-agent-capability-extensions.md) for the later Meeting and
-Workflow / Approval extensions (the current seven-capability architecture).
+Workflow / Approval extensions (the current seven-capability architecture), and
+[ADR 017](adr/017-office-agent-llm-assist-email-digest.md) for this optional
+LLM-assisted email digest.
