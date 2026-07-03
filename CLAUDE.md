@@ -106,7 +106,7 @@ type, never the message.
   only reproduces `app.invoke()` for last-value channels. If a reducer is ever needed, revisit that merge first.
 - **Refactors should be small, mechanical, and reviewable.** Prefer minimal diffs.
 - **Lazy external clients (required pattern).** `ChatOpenAI`, `OpenAIEmbeddings`,
-  `TavilySearch` (`langchain-tavily`), `Chroma`, retrievers, and any API-backed tool must be constructed
+  `TavilyClient` (`tavily-python`), `Chroma`, retrievers, and any API-backed tool must be constructed
   inside a lazy factory — use `@lru_cache(maxsize=1) def get_x(): ...` — never at module level.
 - **Imports must be side-effect-free.** Importing any module (`enterprise_rag.graph.graph`, `enterprise_rag.graph.nodes.*`,
   `enterprise_rag.graph.chains.*`, `ingestion`) must NOT require API keys or network, and must NOT construct

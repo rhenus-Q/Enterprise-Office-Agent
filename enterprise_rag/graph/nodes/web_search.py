@@ -1,12 +1,17 @@
 import re
 from functools import lru_cache
+from typing import Any
 from urllib.parse import urlparse
 
 from langchain_core.documents import Document
-from langchain_tavily import TavilySearch
+from tavily import TavilyClient
 
 from enterprise_rag.graph.chains.retrieval_grader import get_retrieval_grader
-from enterprise_rag.graph.config import max_web_results_to_grade, max_web_searches_per_run
+from enterprise_rag.graph.config import (
+    external_request_timeout_seconds,
+    max_web_results_to_grade,
+    max_web_searches_per_run,
+)
 from enterprise_rag.graph.consts import (
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_ERROR,
@@ -99,36 +104,66 @@ def _sanitize_source_url(value) -> str:
     return cleaned
 
 
+# Number of web results requested per search (unchanged from the previous tool).
+MAX_WEB_RESULTS = 3
+
+
 @lru_cache(maxsize=1)
-def get_web_search_tool():
+def get_tavily_client() -> TavilyClient:
     """
-    Lazily build and cache the Tavily search tool (langchain-tavily).
-    Deferring construction keeps module import free of Tavily API-key validation,
-    which also makes the web_search node easy to mock in tests.
+    Lazily build and cache the official Tavily SDK client (tavily-python).
 
-    Timeout limitation (documented, not worked around): langchain-tavily 0.2.18
-    issues its search via `requests.post(...)` with no timeout and exposes no
-    public parameter to configure one — extra `.invoke()` kwargs become Tavily
-    API request-body fields, not `requests` client options — so a request
-    timeout cannot be wired here without patching library internals (avoided by
-    design; no thread/signal/watchdog workaround). The per-run web-search budget
-    still bounds the NUMBER of calls; the OpenAI embeddings path IS timed out via
-    `external_request_timeout_seconds()` (see enterprise_rag/ingestion.py).
+    Deferring construction keeps module import side-effect-free: the SDK reads
+    TAVILY_API_KEY only when the client is constructed (first use at runtime),
+    not at import time, and tests mock the seam so no key or network is needed.
     """
 
-    return TavilySearch(max_results=3)
+    return TavilyClient()
+
+
+class TavilySearchAdapter:
+    """
+    Thin adapter preserving the node's `get_web_search_tool().invoke({"query": q})`
+    interface over the official Tavily SDK.
+
+    `TavilyClient.search()` returns the raw API dict (`{"results": [...], ...}`)
+    — the same shape `_extract_results` already parses — so the response is
+    returned unchanged (no normalization). The explicit `timeout`
+    (EXTERNAL_REQUEST_TIMEOUT_SECONDS, resolved per call so an env override is
+    honored) bounds the HTTP request; `max_results` is unchanged.
+    """
+
+    def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+        query = str(payload["query"])
+        return get_tavily_client().search(
+            query=query,
+            max_results=MAX_WEB_RESULTS,
+            timeout=external_request_timeout_seconds(),
+        )
+
+
+@lru_cache(maxsize=1)
+def get_web_search_tool() -> TavilySearchAdapter:
+    """
+    Lazily build and cache the web-search adapter (see TavilySearchAdapter).
+
+    This is the single seam the web_search node calls and the tests patch;
+    keeping it preserves the `.invoke({"query": ...})` interface unchanged.
+    """
+
+    return TavilySearchAdapter()
 
 
 def _extract_results(search_results):
     """
     Defensively pull usable results out of a Tavily response.
 
-    langchain-tavily's TavilySearch returns a dict with a "results" list; the
-    legacy community tool returned the list directly, and error responses can
-    be a plain string or an {"error": ...} dict. Accept both shapes, skip
-    anything malformed, and keep only entries with non-empty text content.
-    Each usable entry is reduced to {"content", "url", "title"} ("" when a
-    field is missing) so page-level provenance survives alongside the text.
+    The Tavily SDK's `search()` returns a dict with a "results" list; error
+    responses can also surface as a plain string or an {"error": ...} dict.
+    Accept both shapes, skip anything malformed, and keep only entries with
+    non-empty text content. Each usable entry is reduced to
+    {"content", "url", "title"} ("" when a field is missing) so page-level
+    provenance survives alongside the text.
     """
 
     if isinstance(search_results, dict):

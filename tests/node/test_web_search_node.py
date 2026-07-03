@@ -9,8 +9,10 @@ gate applied to external web results before they are appended.
 
 import importlib
 
+import pytest
 from langchain_core.documents import Document
 
+from enterprise_rag.graph.config import DEFAULT_EXTERNAL_REQUEST_TIMEOUT_SECONDS
 from enterprise_rag.graph.consts import (
     STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_TOOL_ERROR,
@@ -291,8 +293,8 @@ def test_web_search_results_without_urls_yield_empty_web_sources(monkeypatch):
 
 
 def test_web_search_parses_dict_shaped_tavily_response(monkeypatch):
-    # langchain-tavily's TavilySearch returns {"results": [...]} rather than a
-    # bare list; both shapes must work.
+    # The Tavily SDK's search() returns {"results": [...]} rather than a bare
+    # list; both shapes must work.
     _patch_tool(
         monkeypatch,
         {
@@ -313,7 +315,7 @@ def test_web_search_parses_dict_shaped_tavily_response(monkeypatch):
 
 
 def test_web_search_handles_error_dict_response_without_crashing(monkeypatch):
-    # langchain-tavily returns {"error": ...} on wrapped failures.
+    # Some Tavily error responses surface as an {"error": ...} dict.
     _patch_tool(monkeypatch, {"error": "rate limited"})
     grader_calls = _patch_grader(monkeypatch)
 
@@ -730,3 +732,113 @@ def test_web_search_hostile_title_cannot_inject_extra_source_line(monkeypatch):
     # text on that single line; the citation's actual URL is the safe one.
     assert len(web_lines) == 1
     assert web_lines[0].endswith("— https://ok.example")
+
+
+# ---------------------------------------------------------------------------
+# Tavily SDK adapter + explicit request timeout (EXTERNAL_REQUEST_TIMEOUT_SECONDS)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingTavilyClient:
+    """Fake tavily.TavilyClient: records search() kwargs, returns a fixed dict,
+    makes no network call and needs no API key."""
+
+    def __init__(self, response):
+        self._response = response
+        self.search_calls = []
+
+    def search(self, **kwargs):
+        self.search_calls.append(kwargs)
+        return self._response
+
+
+def _patch_tavily_client(monkeypatch, response):
+    """Patch the lazy SDK client factory so the REAL adapter runs against a fake
+    client (no real TavilyClient, no key, no network)."""
+
+    client = _RecordingTavilyClient(response)
+    monkeypatch.setattr(web_search_module, "get_tavily_client", lambda: client)
+    return client
+
+
+def test_get_web_search_tool_is_the_sdk_adapter():
+    # Migration guard: the factory returns the tavily-python adapter, and the
+    # module imports the official SDK client (not langchain_tavily).
+    tool = web_search_module.get_web_search_tool()
+    assert isinstance(tool, web_search_module.TavilySearchAdapter)
+    assert hasattr(web_search_module, "TavilyClient")
+    assert not hasattr(web_search_module, "TavilySearch")
+
+
+def test_adapter_calls_client_search_with_default_timeout_and_max_results(monkeypatch):
+    monkeypatch.delenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", raising=False)
+    client = _patch_tavily_client(monkeypatch, {"results": []})
+
+    response = web_search_module.get_web_search_tool().invoke({"query": "what is RAG?"})
+
+    assert len(client.search_calls) == 1
+    call = client.search_calls[0]
+    assert call["query"] == "what is RAG?"  # query passed through unchanged
+    assert call["max_results"] == 3  # preserved from the previous tool
+    assert call["timeout"] == DEFAULT_EXTERNAL_REQUEST_TIMEOUT_SECONDS  # default reaches search()
+    assert response == {"results": []}  # SDK response returned unchanged
+
+
+def test_adapter_passes_env_timeout_override_to_search(monkeypatch):
+    monkeypatch.setenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", "15")
+    client = _patch_tavily_client(monkeypatch, {"results": []})
+
+    web_search_module.get_web_search_tool().invoke({"query": "q"})
+
+    assert client.search_calls[0]["timeout"] == 15
+
+
+@pytest.mark.parametrize("value", ["abc", "0", "-5", ""])
+def test_adapter_invalid_timeout_falls_back_to_default(monkeypatch, value):
+    monkeypatch.setenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", value)
+    client = _patch_tavily_client(monkeypatch, {"results": []})
+
+    web_search_module.get_web_search_tool().invoke({"query": "q"})
+
+    assert client.search_calls[0]["timeout"] == DEFAULT_EXTERNAL_REQUEST_TIMEOUT_SECONDS
+
+
+def test_node_parses_sdk_dict_response_through_real_adapter(monkeypatch):
+    # The real adapter + a fake client returning the SDK dict shape: the node
+    # parses/grades/sanitizes exactly as before (proves shape compatibility).
+    _patch_tavily_client(
+        monkeypatch,
+        {
+            "query": "Q",
+            "results": [{"content": "alpha", "url": "https://a.example", "title": "Page A"}],
+            "response_time": 0.4,
+        },
+    )
+    _patch_grader(monkeypatch)
+
+    result = web_search({"question": "Q", "documents": []})
+
+    assert len(result["documents"]) == 1
+    assert result["documents"][0].page_content == "alpha"
+    assert result["documents"][0].metadata["web_sources"] == [
+        {"title": "Page A", "url": "https://a.example"}
+    ]
+
+
+def test_client_timeout_exception_follows_existing_failure_path(monkeypatch):
+    # A Tavily SDK timeout raised from client.search must degrade like any
+    # web-search failure — through the REAL adapter this time.
+    class _TimingOutClient:
+        def search(self, **kwargs):
+            raise TimeoutError("tavily timed out")
+
+    monkeypatch.setattr(web_search_module, "get_tavily_client", lambda: _TimingOutClient())
+    grader_calls = _patch_grader(monkeypatch)
+
+    local = Document(page_content="local chunk")
+    result = web_search({"question": "Q", "documents": [local], "web_search_count": 2})
+
+    assert result["documents"] == [local]  # local docs preserved, nothing appended
+    assert result["web_search_count"] == 3  # the failed attempt is still counted
+    assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_ERROR  # persistent failure reason
+    assert grader_calls == []  # no unverified Tavily result graded/appended

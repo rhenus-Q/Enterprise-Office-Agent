@@ -340,7 +340,7 @@ def test_app_web_routed_answer_cites_the_search(monkeypatch):
 
 
 def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch):
-    # With URL-bearing Tavily results (langchain-tavily dict shape), the
+    # With URL-bearing Tavily results (Tavily SDK dict shape), the
     # Sources section cites the actual pages instead of the query.
     monkeypatch.setattr(
         graph_module,

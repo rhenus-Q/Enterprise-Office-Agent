@@ -90,7 +90,7 @@ State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with thirteen 
 | LLM                | OpenAI `gpt-5-mini` (router, graders, generation — all structured output via Pydantic) |
 | Embeddings         | `OpenAIEmbeddings`                                                                     |
 | Vector store       | Chroma (local persistence)                                                             |
-| Web search         | Tavily (`langchain-tavily`)                                                            |
+| Web search         | Tavily (`tavily-python` SDK)                                                            |
 | Chains             | LangChain LCEL                                                                         |
 | Package management | uv (`pyproject.toml` + committed `uv.lock`)                                            |
 | Testing            | pytest (mocked unit tests + key-gated integration tests)                               |
