@@ -82,7 +82,7 @@ through the `enterprise_rag` engine.
 │   ├── office-agent-v1-demo.md  #   Dedicated Office Agent demo & usage doc (all seven capabilities)
 │   ├── engineering/             #   Onboarding, testing strategy, release checklist
 │   ├── releases/                #   Release notes (office-agent-v1.6.md)
-│   └── adr/                     #   Architecture Decision Records 001–015 (repo-level; index in docs/adr/README.md)
+│   └── adr/                     #   Architecture Decision Records 001–016 (repo-level; index in docs/adr/README.md)
 ├── evals/                       # Behavioral eval harness for enterprise_rag (dataset, runner, report) — not in CI
 ├── tests/                       # node/ + graph/ + evals/ + office_agent/ (fully mocked) and chains/ (integration, key-gated)
 ├── .github/workflows/ci.yml     # CI: fully mocked suites + lint — no API keys
@@ -216,8 +216,11 @@ deliberately excluded.
 - **[`docs/adr/`](docs/adr/README.md)** — Architecture Decision Records: *why* the
   code is the way it is. The package refactor that introduced this module layout is
   [ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md);
-  the Office Agent architecture is
-  [ADR 015](docs/adr/015-office-agent-v1-architecture.md).
+  the original five-capability Office Agent v1 architecture is
+  [ADR 015](docs/adr/015-office-agent-v1-architecture.md), and the later Meeting
+  and Workflow / Approval capability extensions (the current seven-capability
+  inventory and router precedence) are
+  [ADR 016](docs/adr/016-office-agent-capability-extensions.md).
 
 ## Working in this repository
 

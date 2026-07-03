@@ -212,5 +212,7 @@ me?"`, `"show urgent approvals"`, `"what is the status of APR-001?"`, `"approve
 APR-001"`, `"reject APR-002"`, `"create a follow-up task for APR-001"`, `"show
 audit log for APR-001"`, `"show expense approvals"`.
 
-See [ADR 015](adr/015-office-agent-v1-architecture.md) for the full architecture
-decision behind Office Agent v1.
+See [ADR 015](adr/015-office-agent-v1-architecture.md) for the architecture
+decision behind the original five-capability Office Agent v1, and
+[ADR 016](adr/016-office-agent-capability-extensions.md) for the later Meeting and
+Workflow / Approval extensions (the current seven-capability architecture).

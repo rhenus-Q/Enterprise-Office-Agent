@@ -9,6 +9,13 @@ Builds on: [ADR 014](014-enterprise-rag-package-and-office-agent-placeholder.md)
 reserved the module path; this ADR records the architecture of the Office Agent
 v1 that now fills it.
 
+> **Historical note.** This ADR records the **original five-capability v1
+> architecture** and is preserved as history — it is deliberately not rewritten as
+> though later capabilities existed when it was accepted. The subsequent Meeting
+> Agent / Meeting Prep and Workflow / Approval Agent extensions (and the current
+> seven-capability inventory and router precedence) are documented in
+> [ADR 016](016-office-agent-capability-extensions.md), which extends this record.
+
 ## Context
 
 `enterprise_rag` is the completed Enterprise Document Q&A engine, exposed through
