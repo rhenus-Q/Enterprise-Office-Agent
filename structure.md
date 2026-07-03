@@ -659,5 +659,8 @@ is local-only and deterministic by default (`--include-knowledge` additionally
 exercises the real RAG pipeline, which needs the `enterprise_rag` setup and API
 keys). Full usage and the capability list are in
 [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md); the architecture
-decision behind the module is
-[ADR 015](docs/adr/015-office-agent-v1-architecture.md).
+decisions behind the module are
+[ADR 015](docs/adr/015-office-agent-v1-architecture.md) (the original
+five-capability v1) and
+[ADR 016](docs/adr/016-office-agent-capability-extensions.md) (the later Meeting
+and Workflow / Approval extensions — the current seven-capability architecture).
