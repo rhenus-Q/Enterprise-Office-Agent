@@ -24,6 +24,8 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from enterprise_rag.graph.config import external_request_timeout_seconds
+
 load_dotenv()
 
 
@@ -145,7 +147,10 @@ def build_vectorstore():
     documents = load_documents()
     splits = split_documents(documents)
 
-    embeddings = OpenAIEmbeddings()
+    # `timeout` (the alias of OpenAIEmbeddings' request_timeout) bounds the
+    # wall-clock of each embeddings HTTP request, mirroring the ChatOpenAI
+    # timeout in the chains.
+    embeddings = OpenAIEmbeddings(timeout=external_request_timeout_seconds())
 
     # Idempotent rebuild: drop any previous index of the same collection.
     Chroma(
@@ -179,7 +184,10 @@ def get_retriever():
         VectorStoreRetriever
     """
 
-    embeddings = OpenAIEmbeddings()
+    # `timeout` bounds each query-embedding HTTP request (the retriever's only
+    # external call; Chroma similarity search itself is local). A timeout raises
+    # like any retriever failure and is mapped to retrieval_error by the node.
+    embeddings = OpenAIEmbeddings(timeout=external_request_timeout_seconds())
 
     vectorstore = Chroma(
         collection_name=COLLECTION_NAME,
