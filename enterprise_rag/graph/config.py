@@ -135,3 +135,21 @@ def llm_request_timeout_seconds() -> int:
     return _positive_int_from_env(
         "LLM_REQUEST_TIMEOUT_SECONDS", DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS
     )
+
+
+# Per-request timeout (seconds) for non-chat external calls — currently the
+# OpenAI embeddings request that backs the retriever (and the ingestion build).
+# Mirrors the LLM chat timeout so a hung embeddings/HTTP request cannot stall a
+# run; a timeout raises like any other retriever failure, which the retrieve
+# node already maps to retrieval_error, so the success path is unchanged.
+# Invalid or non-positive values fall back to the default.
+DEFAULT_EXTERNAL_REQUEST_TIMEOUT_SECONDS = 60
+
+
+def external_request_timeout_seconds() -> int:
+    """Per-request timeout (seconds) for non-chat external calls, e.g. the OpenAI
+    embeddings request behind the retriever (EXTERNAL_REQUEST_TIMEOUT_SECONDS)."""
+
+    return _positive_int_from_env(
+        "EXTERNAL_REQUEST_TIMEOUT_SECONDS", DEFAULT_EXTERNAL_REQUEST_TIMEOUT_SECONDS
+    )

@@ -105,6 +105,15 @@ def get_web_search_tool():
     Lazily build and cache the Tavily search tool (langchain-tavily).
     Deferring construction keeps module import free of Tavily API-key validation,
     which also makes the web_search node easy to mock in tests.
+
+    Timeout limitation (documented, not worked around): langchain-tavily 0.2.18
+    issues its search via `requests.post(...)` with no timeout and exposes no
+    public parameter to configure one — extra `.invoke()` kwargs become Tavily
+    API request-body fields, not `requests` client options — so a request
+    timeout cannot be wired here without patching library internals (avoided by
+    design; no thread/signal/watchdog workaround). The per-run web-search budget
+    still bounds the NUMBER of calls; the OpenAI embeddings path IS timed out via
+    `external_request_timeout_seconds()` (see enterprise_rag/ingestion.py).
     """
 
     return TavilySearch(max_results=3)
