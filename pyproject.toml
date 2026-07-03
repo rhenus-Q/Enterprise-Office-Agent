@@ -15,7 +15,6 @@ dependencies = [
     "beautifulsoup4",
     "python-dotenv",
     "pydantic",
-    "langchain-tavily>=0.2.18",
 ]
 
 # This is an application, not a library to be packaged/installed; tell uv not to build the project itself as a package.
@@ -89,3 +88,9 @@ module = [
     "enterprise_rag.ingestion",
 ]
 follow_imports = "silent"
+
+# tavily-python ships no py.typed; ignore its missing stubs where the
+# web_search node imports TavilyClient directly.
+[[tool.mypy.overrides]]
+module = ["tavily.*"]
+ignore_missing_imports = true
