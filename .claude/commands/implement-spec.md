@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(git ls-files:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -15,6 +15,16 @@ Use as few tools as possible.
 Do not create or switch git branches.
 
 Do not commit automatically.
+
+## Step 0. Validate input
+
+If `$ARGUMENTS` is empty, stop before reading any files and ask the user to
+provide an exact spec or implementation-plan path:
+
+`Please provide a spec or implementation plan path.`
+
+Do not let an empty argument fall through to the generic file-not-found path in
+Step 3.
 
 ## Required locations
 
@@ -200,6 +210,11 @@ Unless the plan or spec explicitly approves an exception:
 * Do not run API-key-requiring commands.
 * Do not commit automatically.
 * Do not create or switch branches.
+* Preserve the Office Agent's deterministic design: keep routing deterministic
+  keyword-based, keep the local mock capabilities LLM-free and free of external
+  services, keep the mock data read-only, keep simulated actions from mutating the
+  repository's `office_agent/mock_data/` files, and keep the Knowledge Q&A adapter
+  boundary with `enterprise_rag` intact.
 
 ## Step 8. Validate
 
@@ -207,12 +222,18 @@ Run only validation commands approved by the plan or spec.
 
 Usually safe commands are:
 
+Run each keys-free suite as its own command so each matches its own scoped
+`allowed-tools` permission (do not combine test directories into one `pytest`
+invocation — the permission match then depends on which directory appears first):
+
 ```powershell
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
+uv run pytest tests/node/ -q
+uv run pytest tests/graph/ -q
 uv run pytest tests/evals/ -q
-uv run pytest tests/node/ tests/graph/ tests/evals/ -q
+uv run pytest tests/office_agent/ -q
 uv run python evals/run_eval.py --validate-only
 ```
 
@@ -230,9 +251,17 @@ If `docs/roadmap/implementation/implementation-template.md` exists, create the d
 
 `docs/roadmap/implementation/`
 
-Then create:
+Then choose a collision-safe report path. Before writing, use `Glob` (or an
+equivalent permitted existence check) to select the first unused path in this
+order:
 
-`docs/roadmap/implementation/<feature-slug>-implementation-report.md`
+* `docs/roadmap/implementation/<feature-slug>-implementation-report.md`
+* `docs/roadmap/implementation/<feature-slug>-implementation-report-2.md`
+* `docs/roadmap/implementation/<feature-slug>-implementation-report-3.md`
+* continue incrementing the numeric suffix until an unused path is found
+
+Do not overwrite an existing implementation report. Write only to the selected
+unused path, and use that exact selected path in the Step 10 final response.
 
 Use `docs/roadmap/implementation/implementation-template.md` as the structure.
 
@@ -252,7 +281,7 @@ Include:
 
 * Source plan path, if read.
 * Source spec path, if read.
-* Implementation report path, if created.
+* Implementation report path, if created (the exact collision-safe path selected in Step 9).
 * Files changed.
 * Tests run and results.
 * Whether full eval was run.
