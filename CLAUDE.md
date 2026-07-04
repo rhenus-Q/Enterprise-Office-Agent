@@ -19,8 +19,10 @@ This repository — **Enterprise Office Agent** — is organized as named capabi
   **Task / Ticket Assistant**, **Daily Briefing**; **v1.5 / Phase 6** — **Meeting Agent /
   Meeting Prep**; **v1.6 / Phase 7** — **Workflow / Approval Agent**. All tools except
   Knowledge Q&A run on local mock data with no LLM and no external services — the sole
-  exception is an **optional, default-off** LLM email digest ([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)),
-  which stays inert unless `OFFICE_LLM_ENABLED` is set. Office-agent
+  exceptions are two **optional, default-off** LLM assists, the email digest
+  ([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)) and the Daily Briefing
+  narrative ([ADR 018](docs/adr/018-office-agent-llm-assist-daily-briefing.md)), both gated
+  by the single `OFFICE_LLM_ENABLED` switch and inert unless it is set. Office-agent
   work **must not change or regress `enterprise_rag` behavior or its tests** (§3 rules apply:
   side-effect-free imports, lazy `@lru_cache` external clients). See
   [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md) (the dedicated Office Agent
@@ -71,7 +73,7 @@ type, never the message.
 | `main.py` | CLI entry point. Loads `.env`, then runs an interactive Q&A loop over `enterprise_rag.graph.engine.answer_question()`. Re-exports the `enterprise_rag/graph/formatting.py` names (`format_answer`, `format_sources`, caveat notes) for backward compatibility. |
 | `enterprise_rag/__init__.py` | Package marker + docstring for the RAG engine. No clients, no side effects. |
 | `enterprise_rag/README.md` | Module-level documentation: detailed engine setup, usage, privacy mode, fallback policy, programmatic API, budgets, and failure handling (the content that used to dominate the root README). |
-| `office_agent/` | The **Enterprise Office Agent** — seven capabilities: the v1 / Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7 Workflow / Approval Agent. Deterministic keyword router (`router.py`), `answer_office_request()` entry point (`engine.py`), typed intent constants + `ToolResult` schemas (`schemas.py`), unsupported-intent + presentation (`formatting.py`), `tools/` — `knowledge` (thin `enterprise_rag` adapter) plus `email`, `calendar`, `tickets`, `briefing`, `meeting`, `approvals` (local mock-data tools), and `llm_assist/` — the **optional, default-off** LLM email-digest layered on the `email` tool (gated by `OFFICE_LLM_ENABLED`; [ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)). Local-only and LLM-free except the Knowledge Q&A adapter and (only when explicitly enabled) the email digest; mock data in `mock_data/` is read-only and anchored to the data (not the system clock) — approve/reject and follow-up tasks are *simulated*, never written back. Must never regress `enterprise_rag`. See `docs/office-agent-v1-demo.md` and ADRs 015–017. |
+| `office_agent/` | The **Enterprise Office Agent** — seven capabilities: the v1 / Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7 Workflow / Approval Agent. Deterministic keyword router (`router.py`), `answer_office_request()` entry point (`engine.py`), typed intent constants + `ToolResult` schemas (`schemas.py`), unsupported-intent + presentation (`formatting.py`), `tools/` — `knowledge` (thin `enterprise_rag` adapter) plus `email`, `calendar`, `tickets`, `briefing`, `meeting`, `approvals` (local mock-data tools), and `llm_assist/` — two **optional, default-off** LLM assists, the email digest layered on the `email` tool ([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)) and the Daily Briefing narrative layered on the `briefing` tool ([ADR 018](docs/adr/018-office-agent-llm-assist-daily-briefing.md)), both gated by the single `OFFICE_LLM_ENABLED` switch. Local-only and LLM-free except the Knowledge Q&A adapter and (only when explicitly enabled) those two assists; mock data in `mock_data/` is read-only and anchored to the data (not the system clock) — approve/reject and follow-up tasks are *simulated*, never written back. Must never regress `enterprise_rag`. See `docs/office-agent-v1-demo.md` and ADRs 015–018. |
 | `enterprise_rag/graph/engine.py` | Canonical programmatic API: `answer_question(question, options) -> AnswerResult`, `AnswerOptions` (per-run `web_search_enabled` / `web_fallback_policy` / `run_id` / `trace_path` overrides; `None` = env default), and `seed_state()` — the single state-seeding helper shared by CLI, evals, and tests. Also owns the lightweight observability: every run gets a `run_id`, the executed `node_path` + per-step timings + `total_duration_ms` are collected by streaming graph updates (additive — merging the updates reproduces `invoke()`), and `trace_path` optionally writes a metadata-only trace JSON (never `page_content`, prompts, raw state, or keys). |
 | `enterprise_rag/graph/formatting.py` | Shared presentation: `stop_reason` caveats (`STOP_REASON_NOTES`) plus the deterministic `Sources:` section built from `Document` metadata (`format_answer` / `format_sources` / `source_lines`; local corpus vs. `web_search` supplement). Pure — no clients, no env reads. |
 | `enterprise_rag/ingestion.py` | Builds the knowledge base: loads the local Markdown corpus from `enterprise_rag/data/acmecorp_internal_docs/`, splits, embeds, persists to Chroma (idempotent: collection reset + deterministic chunk ids; provenance metadata `source`/`title`/`source_type`/`document_category`). Exposes `get_retriever()` (lazy, `@lru_cache`). Run once before `main.py`. |
@@ -122,12 +124,16 @@ type, never the message.
   keep it that way unless a task explicitly says otherwise:
   - **No LLM routing.** Classify intents with the existing keyword router + intent constants /
     typed schemas (`schemas.py`); do not introduce an LLM router.
-  - **One optional, default-off LLM assist only.** The single sanctioned LLM path outside
-    Knowledge Q&A is the email digest in `office_agent/llm_assist/` ([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)):
-    gated by `OFFICE_LLM_ENABLED` (default off), single-pass structured output, validated
-    `EmailDigest` boundary, deterministic grounding + `llm_assist_error` fallback, no action
-    surface. Preserve its **byte-for-byte flag-off** guarantee; adding LLM assistance to any
-    other capability requires a new ADR. Follow the repo LLM pattern (lazy `@lru_cache` factory,
+  - **Two optional, default-off LLM assists only.** The sanctioned LLM paths outside
+    Knowledge Q&A live in `office_agent/llm_assist/`: the email digest layered on the `email`
+    tool ([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md), validated
+    `EmailDigest` boundary) and the Daily Briefing narrative layered on the `briefing` tool
+    ([ADR 018](docs/adr/018-office-agent-llm-assist-daily-briefing.md), validated
+    `BriefingNarrative` boundary over the pure `collect_briefing_facts()` fact set). Both are
+    gated by the single `OFFICE_LLM_ENABLED` switch (default off), single-pass structured
+    output, deterministic grounding + `llm_assist_error` fallback, no action surface. Preserve
+    each assist's **byte-for-byte flag-off** guarantee; adding LLM assistance to any other
+    capability requires a new ADR. Follow the repo LLM pattern (lazy `@lru_cache` factory,
     `gpt-5-mini`, `temperature=0`, bounded timeout, side-effect-free imports) and import nothing
     from `enterprise_rag`.
   - **Knowledge Q&A goes through the existing adapter over `enterprise_rag`** — never duplicate
@@ -140,9 +146,9 @@ type, never the message.
   - Same discipline as `enterprise_rag`: **side-effect-free imports**, lazy data/client access.
   - **`office_agent` tests stay fully mocked / CI-safe** — no OpenAI, Tavily, Chroma, or external
     services, and no real `enterprise_rag` graph call (patch the knowledge adapter) and no real
-    email-digest call (patch it at its seam). The one real-model digest test lives in
-    `tests/office_chains/` (gated by `requires_openai`, like `tests/chains/`), never in
-    `tests/office_agent/`.
+    LLM-assist call (patch the email digest / briefing narrative at their seams). The real-model
+    assist tests (one per assist) live in `tests/office_chains/` (gated by `requires_openai`,
+    like `tests/chains/`), never in `tests/office_agent/`.
 
 ## 4. Testing Rules
 

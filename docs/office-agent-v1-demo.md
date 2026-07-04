@@ -212,38 +212,58 @@ me?"`, `"show urgent approvals"`, `"what is the status of APR-001?"`, `"approve
 APR-001"`, `"reject APR-002"`, `"create a follow-up task for APR-001"`, `"show
 audit log for APR-001"`, `"show expense approvals"`.
 
-## Optional: LLM-assisted email digest (default off)
+## Optional: LLM assists (default off)
 
-The Email Summary tool has one **optional, default-off** LLM enhancement. When
-`OFFICE_LLM_ENABLED` is set to a truthy value (`true`/`1`/`yes`/`on`), a single
-structured-output `gpt-5-mini` call reads the filtered emails' bodies and appends a
-`Digest (LLM-assisted):` block — a short summary, extracted action items (each tied
-to a source email id, with a deadline only when the body states one), and a
-priority order. A second optional setting, `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS`
-(default 60), bounds that call.
+The Office Agent has **two** optional, default-off LLM enhancements, both gated by
+the single `OFFICE_LLM_ENABLED` switch (a truthy `true`/`1`/`yes`/`on`) and bounded
+by `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS` (default 60). Setting the flag turns on
+**both** at once; each keeps an independent byte-for-byte flag-off guarantee.
 
-Key properties:
+### Email digest
+
+When enabled, a single structured-output `gpt-5-mini` call reads the filtered
+emails' bodies and **appends** a `Digest (LLM-assisted):` block to the Email Summary
+— a short summary, extracted action items (each tied to a source email id, with a
+deadline only when the body states one), and a priority order.
+
+### Daily Briefing narrative
+
+When enabled, a single structured-output `gpt-5-mini` call synthesizes the day
+across emails, meetings, tickets/tasks, and workflow approvals and **prepends** a
+`Daily briefing narrative (LLM-assisted):` block — a short cross-source narrative
+plus a validated reference list (each citing a real `email-`/`cal-`/`TICK-`/`TASK-`/
+`APR-` id) — **above** a `Deterministic briefing (facts):`-labeled copy of the
+complete, unchanged deterministic briefing. The narrative is an interpretive layer;
+the deterministic facts remain the authoritative source of truth, and every
+reference is validated against a separately collected fact set before rendering.
+
+### Shared properties
 
 - **Default demo stays key-free.** With the flag unset (the default), no LLM client
-  is constructed and the email output is byte-for-byte the deterministic summary —
+  is constructed and both tools' output is byte-for-byte the deterministic result —
   every other capability remains local and LLM-free.
-- **Grounded and bounded.** The digest crosses into the tool only as a validated
-  model; action-item and priority ids are checked against the filtered emails, and
-  the model has no ability to send, reply, delete, or persist anything.
+- **Grounded and bounded.** Each assist crosses into its tool only as a validated
+  model; referenced ids are checked against the exact items the tool selected, and
+  the model has no ability to send, reply, approve, reject, delete, or persist
+  anything.
 - **Honest fallback.** Any failure (timeout, API error, parse or grounding failure)
-  returns the standard deterministic summary plus a one-line caveat and a
-  `llm_assist_error` stop reason — the Office Agent never crashes because of the
-  assist.
+  returns the standard deterministic output plus a one-line caveat and a
+  `llm_assist_error` stop reason — the Office Agent never crashes because of an
+  assist. (Observability distinguishes which assist failed via `ToolResult.tool`.)
 
-Enable it for a demo with a real key by setting `OFFICE_LLM_ENABLED=true` in your
+Enable them for a demo with a real key by setting `OFFICE_LLM_ENABLED=true` in your
 environment (see `.env.example`), then asking an email question such as
-`"summarize my emails"`. The gated real-model test lives under
-`tests/office_chains/` and the offline dataset check is
-`uv run python evals/office_assist/run_office_assist_eval.py --validate-only`.
+`"summarize my emails"` or a briefing question such as `"give me my daily
+briefing"`. The gated real-model tests live under `tests/office_chains/` and the
+offline dataset checks are
+`uv run python evals/office_assist/run_office_assist_eval.py --validate-only` and
+`uv run python evals/office_assist/run_briefing_assist_eval.py --validate-only`.
 
 See [ADR 015](adr/015-office-agent-v1-architecture.md) for the architecture
 decision behind the original five-capability Office Agent v1,
 [ADR 016](adr/016-office-agent-capability-extensions.md) for the later Meeting and
-Workflow / Approval extensions (the current seven-capability architecture), and
-[ADR 017](adr/017-office-agent-llm-assist-email-digest.md) for this optional
-LLM-assisted email digest.
+Workflow / Approval extensions (the current seven-capability architecture),
+[ADR 017](adr/017-office-agent-llm-assist-email-digest.md) for the optional
+LLM-assisted email digest, and
+[ADR 018](adr/018-office-agent-llm-assist-daily-briefing.md) for the optional
+LLM-assisted Daily Briefing narrative.
