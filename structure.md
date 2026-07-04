@@ -24,9 +24,12 @@ The repository is organized as named capability modules (see
   `enterprise_rag/data/…`); its public entry point is
   `enterprise_rag.graph.engine.answer_question()`.
 - **`office_agent/`** — the implemented **Enterprise Office Agent** (through
-  v1.6 / Phase 7: seven capabilities). A deterministic, LLM-free intent router
+  v1.6 / Phase 7: seven capabilities). A **deterministic-by-default** intent router
   over local capabilities; public entry point
-  `office_agent.engine.answer_office_request()`. It is documented in
+  `office_agent.engine.answer_office_request()`. The router and core tool workflows
+  are deterministic and LLM-free; two capabilities (Email Summary, Daily Briefing)
+  add an optional, default-off, single-pass LLM assist (`office_agent/llm_assist/`,
+  ADRs 017–018). It is documented in
   [The Office Agent module](#the-office-agent-module) at the end of this file, and
   must not change or regress `enterprise_rag` behavior or its tests.
 
@@ -371,6 +374,36 @@ data, and model outputs to an external service (LangSmith). It is **independent
 of `WEB_SEARCH_ENABLED` and is not disabled by privacy mode** — leave it
 disabled in privacy-sensitive deployments.
 
+### Rewritten-query egress (residual privacy path)
+
+The `not_useful → rewrite_query → websearch` retry rewrites the search query from
+the **previous (not-useful) answer**, which was generated from the local corpus
+(and possibly an earlier web supplement). So the outbound Tavily query is not
+always a copy of the user's question:
+
+```text
+curated corpus or prior web content
+→ generated answer
+→ rewritten search query
+→ external Tavily request
+```
+
+Bounding this path:
+
+- **Input redaction runs first.** `answer_question()` redacts secret-like values
+  from the user question *before* they enter state, so the original raw input does
+  not reach the retriever, generator, or the outbound query.
+- **Privacy mode removes the path entirely.** With `WEB_SEARCH_ENABLED=false` the
+  `websearch` node is unreachable and `rewrite_query` is never invoked, so nothing
+  derived from the corpus is ever sent to Tavily.
+- **Residual caveat.** The corpus shipped here is curated/synthetic, so this is
+  benign in this repository. But **input-question redaction does not guarantee
+  removal of every sensitive fragment that originates from retrieved corpus or web
+  content** and is then folded into the rewritten query. Callers with stricter
+  data-egress requirements should run in privacy mode and review their external
+  tracing/search configuration rather than relying on input redaction alone. This
+  is a residual egress path to be aware of, not a confirmed leak.
+
 ## 10. stop_reason and user-facing caveats
 
 Terminal notice nodes record *why* a run ended without a passing answer;
@@ -440,6 +473,21 @@ document content (the engine exposes the same lines as
 - Caveat ordering: the stop-reason caveat is printed *before* the sources,
   so a sources list next to an error never implies the answer was verified.
 
+### `AnswerResult.raw_state` is content-bearing (persistence caveat)
+
+`AnswerResult` exposes two very different surfaces. `sources`, `stop_reason`, the
+budget/observability counters, and the optional metadata-only trace JSON are the
+**safe** persistence/observability surfaces — the trace is metadata-only *by
+construction* (`build_trace` reads named fields; it never dumps `raw_state`). By
+contrast, **`AnswerResult.raw_state` is content-bearing**: it is a copy of the
+final `GraphState` and can contain the full retrieved `Document` objects (including
+`page_content`) and other internal runtime state. It is retained in memory
+intentionally, so callers that need the user-facing rendering can call
+`enterprise_rag.graph.formatting.format_answer(result.raw_state)`. It **must not be
+logged, serialized, or persisted indiscriminately** — doing so would spill document
+content the metadata trace deliberately keeps out. Keeping `raw_state` in memory is
+intentional; the metadata-only trace not serializing it is the point of the split.
+
 ## 11. Retry exhaustion
 
 `MAX_RETRIES = 5` caps total generations per question. Because the limit is
@@ -474,6 +522,16 @@ tracing/token usage rather than manual counters. Defaults sit above the worst
 case the `MAX_RETRIES` loop can produce, so the budgets never bind unless
 explicitly tightened; invalid or non-positive env values fall back to the
 defaults so a budget can never be accidentally disabled.
+
+**No total wall-clock deadline (operational limitation).** The budgets above bound
+*counts*, and `LLM_REQUEST_TIMEOUT_SECONDS` bounds a *single* LLM request, but the
+engine imposes **no one total wall-clock deadline over the complete run**. This is
+not an unbounded loop — the retry cap and the per-run budgets keep the number of
+steps finite — but several slow-yet-successful external calls (retrieval, multiple
+graded web results, repeated generations) can still add up to a long overall
+request. A future API front-end, queue worker, or service boundary that needs a
+hard end-to-end latency ceiling should enforce that total-request deadline itself
+(alongside the per-call timeout and the count budgets), as the engine does not.
 
 ## 13. External dependency failure handling
 
@@ -573,7 +631,11 @@ Office Agent**, implemented through v1.6 / Phase 7 with seven capabilities (v1 /
 Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7
 Workflow / Approval Agent). It is the
 office-automation companion to the `enterprise_rag` engine and is intentionally
-small, deterministic, and — except for Knowledge Q&A — local and LLM-free. It is
+small and **deterministic by default**: the router and every core tool workflow
+are deterministic and local, Knowledge Q&A delegates to `enterprise_rag`, and two
+capabilities (Email Summary, Daily Briefing) add an optional, default-off,
+single-pass LLM assist (`office_agent/llm_assist/`; see
+[Optional LLM assists](#optional-llm-assists-office_agentllm_assist) below). It is
 **not** a LangGraph graph; it is a thin keyword router + tool dispatch.
 
 **Design:**
@@ -619,8 +681,12 @@ small, deterministic, and — except for Knowledge Q&A — local and LLM-free. I
 tool is a thin *adapter* that calls
 `enterprise_rag.graph.engine.answer_question()` and reuses its formatting
 (caveats + `Sources:` section); no retrieval, generation, or graph logic is
-reimplemented. Knowledge Q&A is the only office tool that reaches an LLM /
-external services (through the RAG engine); every other tool is local mock data.
+reimplemented. Knowledge Q&A is the only office tool that reaches an LLM through
+the RAG engine; every other tool is backed by local mock data. Two of those tools
+(Email Summary, Daily Briefing) may **optionally** call `gpt-5-mini` directly for a
+default-off presentation/synthesis assist (see
+[Optional LLM assists](#optional-llm-assists-office_agentllm_assist)) — those
+assists read the already-selected local data and have no action surface.
 
 **Local mock data** (`office_agent/mock_data/`) — `emails.json`,
 `calendar_events.json`, `tickets.json`, `tasks.json`, `approvals.json`,
@@ -629,8 +695,10 @@ stay side-effect-free), treated as **read-only** (task "creation" and approve/
 reject decisions are *simulated*, never written back), and
 **anchored to the data rather than the system clock** ("today" / "next meeting"
 are resolved from the data), so every mock tool is deterministic and CI-safe. No
-external service is ever contacted (no Gmail / Outlook / Google Calendar / Slack /
-Jira / Linear / Asana / Trello).
+integration service is ever contacted (no Gmail / Outlook / Google Calendar /
+Slack / Jira / Linear / Asana / Trello); the only external call any office tool can
+make is the optional, default-off `gpt-5-mini` assist on Email Summary / Daily
+Briefing described above (and the RAG engine behind Knowledge Q&A).
 
 **Meeting Agent / Meeting Prep (v1.5 / Phase 6)** is an advanced *composition*
 capability. It selects one meeting deterministically ("next", best topic match on
@@ -652,6 +720,69 @@ mutate the mock data — `handle_approval_request` writes nothing, and the pure
 clock. An optional `record_decision(..., persist_path=...)` seam writes only to a
 caller-provided path (tests use `tmp_path`), never the repo mock data. Like the
 other mock tools it uses no LLM and contacts no external service.
+
+### Optional LLM assists (`office_agent/llm_assist/`)
+
+`office_agent/llm_assist/` is the **isolated boundary** for optional, structured,
+grounded Office LLM assistance. It hosts **two** assists — the **Email Digest**
+([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)) layered on the
+Email Summary tool, and the **Daily Briefing Narrative**
+([ADR 018](docs/adr/018-office-agent-llm-assist-daily-briefing.md)) layered on the
+Daily Briefing tool. Both:
+
+- share the single `OFFICE_LLM_ENABLED` switch (in `llm_assist/config.py`), which
+  is **default-off** — with the flag unset/false no `ChatOpenAI` client is
+  constructed and each tool's output is **byte-for-byte identical** to its
+  deterministic form;
+- make **one** bounded, single-pass structured-output call to `gpt-5-mini`
+  (`temperature=0`, per-request timeout from `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS`),
+  built lazily behind an `@lru_cache` factory (side-effect-free imports) and
+  importing nothing from `enterprise_rag`;
+- cross the boundary **only** as a validated Pydantic model (`EmailDigest` in
+  `models.py`, `BriefingNarrative` in `briefing_models.py`);
+- **ground every reference against deterministic source identifiers** — the email
+  digest against the filtered email ids, the briefing against the collected
+  `(source_type, id)` fact pairs — and render titles/subjects by looking them up
+  from the deterministic facts, never from the model;
+- on **any** failure (timeout, API error, structured-output parse failure,
+  validation error, grounding failure) return the **unchanged deterministic
+  output** plus an honest per-tool caveat and `stop_reason="llm_assist_error"`; the
+  assist never re-raises, and console logging is exception-type only;
+- have **no action surface** — no tools are bound; the model cannot send, approve,
+  reject, create, delete, mutate, or execute anything. It only re-synthesizes
+  already-selected local data.
+
+The assist flow is a single straight line, not a state machine:
+
+```text
+deterministic fact collection
+→ one bounded LCEL structured-output call
+→ grounding/validation
+→ deterministic rendering
+→ fallback to the original deterministic output (on any failure)
+```
+
+**Why LangChain/LCEL rather than LangGraph.** These assists are single-pass with
+no multi-node state machine, no conditional orchestration loop, no human interrupt,
+and no autonomous action execution — so a plain LCEL chain (`prompt | structured_llm`)
+is the right-sized tool. Using LangGraph here would add a graph with nothing to
+orchestrate. This is a deliberate scope match, **not** a limitation: the
+self-correcting graph lives where it is warranted (`enterprise_rag`), and the
+bounded narrative assists live where a single call suffices.
+
+**Daily Briefing critical-fact behavior.** The briefing narrative's fact set
+(`office_agent.tools.briefing.collect_briefing_facts`) is the single source of
+truth for both the LLM input and the grounding whitelist. Beyond `{source_type,
+id, title}`, meeting/ticket facts may carry deterministic **critical metadata**
+(e.g. `importance`, `priority`, `status`, `conflicts_with`, `critical_reasons`).
+At a high level the design requires that: every fact carrying one or more
+`critical_reasons` **must be covered** in the narrative and its references; for
+every supplied schedule conflict **both sides must be referenced** (a meeting whose
+`conflicts_with` names another id, and that other meeting); and conflict
+counterparts may be **retained beyond the ordinary per-source soft cap** so a
+conflict is never structurally omitted from the fact set. Duplicate references are
+deduplicated (not rejected) because references are a citation surface, not an
+ordering.
 
 **Demo & docs.** `scripts/demo_office_agent_v1.py` runs a few requests through
 `answer_office_request()` and prints the selected intent + response for each; it
