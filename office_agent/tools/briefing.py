@@ -23,19 +23,36 @@ Deterministic sorting:
 
 All loaders return fresh copies, so the briefing never mutates the mock data.
 Import is side-effect-free (data is read lazily by the underlying loaders).
+
+The deterministic briefing is the default and only behavior unless the optional,
+**default-off** LLM narrative (`office_agent.llm_assist.briefing_narrative`, gated
+by the shared `OFFICE_LLM_ENABLED` flag) is enabled. With the flag off, no LLM
+client is constructed and the output is byte-for-byte identical to the
+deterministic briefing; when on, a single structured-output call *prepends* an
+LLM-assisted narrative + validated reference list above the unchanged deterministic
+facts, and any failure falls back to the deterministic briefing with an honest
+caveat (see `_maybe_apply_llm_narrative`).
 """
 
+from office_agent.llm_assist import briefing_narrative
+from office_agent.llm_assist import config as llm_config
 from office_agent.schemas import INTENT_DAILY_BRIEFING, ToolResult
-from office_agent.tools import calendar, email, tickets
+from office_agent.tools import approvals, calendar, email, tickets
 
 # Tool name recorded on the ToolResult / response for observability.
 BRIEFING_TOOL_NAME = INTENT_DAILY_BRIEFING
 
-# Ticket priorities treated as urgent/high in the briefing.
+# Ticket / approval priorities treated as urgent/high in the briefing.
 _HIGH_TICKET_PRIORITIES = ("high", "urgent")
 
 # How many key email bullets to surface (counts carry the rest).
 _MAX_EMAIL_BULLETS = 2
+
+# Per-source cap on the item-level facts collected for the optional LLM narrative
+# (deterministic first-N after each source's documented sort). Bounds tokens and
+# keeps the grounding whitelist small; does NOT affect the rendered deterministic
+# sections above, which are unchanged.
+_MAX_FACTS_PER_SOURCE = 5
 
 
 def _email_section() -> list[str]:
@@ -153,11 +170,147 @@ def briefing_day() -> str:
     return today
 
 
+def _dedup_by_id(items: list[dict]) -> list[dict]:
+    """Return `items` with duplicate ids removed, preserving first-seen order."""
+
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for item in items:
+        item_id = str(item.get("id", ""))
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        unique.append(item)
+    return unique
+
+
+def _fact(source_type: str, item: dict, title_field: str) -> dict[str, str]:
+    """Build one `{source_type, id, title}` fact from a raw mock item (pure)."""
+
+    return {
+        "source_type": source_type,
+        "id": str(item.get("id", "")),
+        "title": str(item.get(title_field, "(untitled)")),
+    }
+
+
+def collect_briefing_facts() -> list[dict[str, str]]:
+    """Collect the bounded, item-level fact set for the optional LLM narrative (pure).
+
+    This is the single source of truth for BOTH the LLM input and the grounding
+    whitelist. It mutates nothing (loaders return fresh copies), reads no system
+    clock (the briefing day comes from the data), and applies a documented
+    per-source cap (`_MAX_FACTS_PER_SOURCE`, deterministic first-N after each
+    source's sort). Selection intentionally mirrors the rendered sections so the
+    facts stay consistent with them; approvals are added because the narrative
+    synthesizes them even though the rendered briefing does not list them.
+    """
+
+    facts: list[dict[str, str]] = []
+
+    # Emails: high-importance OR response-needed, deduped, newest first.
+    emails = email.load_emails()
+    selected_emails = [
+        e for e in emails if e.get("importance") == "high" or e.get("requires_response", False)
+    ]
+    selected_emails = _dedup_by_id(selected_emails)
+    selected_emails.sort(key=lambda e: e.get("received_at", ""), reverse=True)
+    facts += [_fact("email", e, "subject") for e in selected_emails[:_MAX_FACTS_PER_SOURCE]]
+
+    # Meetings: today's events, sorted by start time.
+    events = calendar.load_events()
+    day = briefing_day()
+    todays = sorted(
+        (ev for ev in events if ev.get("start_at", "")[:10] == day),
+        key=lambda ev: ev.get("start_at", ""),
+    )
+    facts += [_fact("meeting", ev, "title") for ev in todays[:_MAX_FACTS_PER_SOURCE]]
+
+    # Tickets: open OR high/urgent OR blocked OR assigned to me, deduped, by id.
+    all_tickets = tickets.load_tickets()
+    selected_tickets = [
+        t
+        for t in all_tickets
+        if t.get("status") == "open"
+        or t.get("priority") in _HIGH_TICKET_PRIORITIES
+        or t.get("status") == "blocked"
+        or t.get("assignee") == tickets.ASSIGNEE_ME
+    ]
+    selected_tickets = _dedup_by_id(selected_tickets)
+    selected_tickets.sort(key=lambda t: str(t.get("id", "")))
+    facts += [_fact("ticket", t, "title") for t in selected_tickets[:_MAX_FACTS_PER_SOURCE]]
+
+    # Tasks: open tasks, deduped, by id.
+    all_tasks = tickets.load_tasks()
+    selected_tasks = _dedup_by_id([t for t in all_tasks if t.get("status") == "open"])
+    selected_tasks.sort(key=lambda t: str(t.get("id", "")))
+    facts += [_fact("task", t, "title") for t in selected_tasks[:_MAX_FACTS_PER_SOURCE]]
+
+    # Approvals: pending OR high/urgent OR mine (approver is me), deduped, by id.
+    all_approvals = approvals.load_approvals()
+    selected_approvals = [
+        a
+        for a in all_approvals
+        if a.get("status") == "pending"
+        or a.get("priority") in _HIGH_TICKET_PRIORITIES
+        or a.get("approver") == approvals.ASSIGNEE_ME
+    ]
+    selected_approvals = _dedup_by_id(selected_approvals)
+    selected_approvals.sort(key=lambda a: str(a.get("id", "")))
+    facts += [_fact("approval", a, "title") for a in selected_approvals[:_MAX_FACTS_PER_SOURCE]]
+
+    return facts
+
+
+def _maybe_apply_llm_narrative(content: str, facts: list[dict[str, str]]) -> ToolResult:
+    """Optionally prepend an LLM-assisted narrative above the deterministic briefing.
+
+    Default **off**: when `OFFICE_LLM_ENABLED` is not truthy this returns exactly
+    the deterministic `ToolResult` and never constructs an LLM client. Empty facts
+    (defensive) also skip the call. When enabled with facts, it runs a single
+    structured-output call; any failure (timeout, API error, structured-output
+    parse failure, Pydantic validation error, or grounding failure from
+    `validate_narrative`) logs a type-only banner and falls back to the
+    deterministic briefing plus a caveat and `stop_reason="llm_assist_error"`. It
+    never re-raises — the assist can never crash the Office Agent.
+
+    On success the narrative block + validated reference list are prepended above a
+    `"Deterministic briefing (facts):"`-labeled copy of the unchanged `content`.
+    """
+
+    if not llm_config.office_llm_enabled():
+        return ToolResult(tool=BRIEFING_TOOL_NAME, content=content)
+
+    if not facts:
+        return ToolResult(tool=BRIEFING_TOOL_NAME, content=content)
+
+    try:
+        narrative = briefing_narrative.narrate_briefing(facts)
+        briefing_narrative.validate_narrative(narrative, facts)
+    except Exception as exc:
+        # Deliberate catch-all: the optional assist must degrade, never crash.
+        # Log only the exception type (repo convention), never the message.
+        print(f"---BRIEFING NARRATIVE ASSIST FAILED ({type(exc).__name__})---")
+        return ToolResult(
+            tool=BRIEFING_TOOL_NAME,
+            content=f"{content}\n\n{briefing_narrative.BRIEFING_ASSIST_ERROR_NOTE}",
+            stop_reason=llm_config.STOP_REASON_LLM_ASSIST_ERROR,
+        )
+
+    narrative_block = briefing_narrative.render_narrative(narrative, facts)
+    return ToolResult(
+        tool=BRIEFING_TOOL_NAME,
+        content=f"{narrative_block}\n\nDeterministic briefing (facts):\n{content}",
+    )
+
+
 def generate_daily_briefing(query: str) -> ToolResult:
     """Aggregate email/calendar/ticket mock data into one deterministic briefing.
 
     `query` is accepted for interface consistency but not needed: the briefing is
-    holistic. The result is identical on every run (no system clock, no LLM).
+    holistic. The deterministic result is identical on every run (no system clock,
+    no LLM); the optional, default-off LLM narrative (`_maybe_apply_llm_narrative`)
+    only ever prepends above it and never alters the deterministic lines.
     """
 
     sections: list[list[str]] = [
@@ -169,4 +322,4 @@ def generate_daily_briefing(query: str) -> ToolResult:
     ]
 
     content = "\n\n".join("\n".join(section) for section in sections)
-    return ToolResult(tool=BRIEFING_TOOL_NAME, content=content)
+    return _maybe_apply_llm_narrative(content, collect_briefing_facts())
