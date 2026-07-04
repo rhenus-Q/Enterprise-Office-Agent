@@ -105,10 +105,30 @@ def _run_full(output: str | None) -> int:
     `--validate-only` path never imports the LLM stack. The collected facts are
     constant (query does not change them), so the chain is called once and every
     row is evaluated against that single grounded narrative.
+
+    Environment / error handling (see `evals/office_assist/_env.py`):
+      - CONFIG_ERROR — a missing/blank `OPENAI_API_KEY` is detected up front, before
+        any client is built or the LLM stack is imported. Fails fast, writes no
+        report, exits non-zero.
+      - INFRA_ERROR — an OpenAI/transport failure (auth, connection, timeout, rate
+        limit, provider error) is reported as an invalid run (no model-quality
+        pass rate), writes no report, exits non-zero. It never counts as FAIL.
+      - EVAL_FAIL — a grounding assertion failed on obtained structured output.
+        Reported as FAIL in the written report (existing behavior).
     """
 
     # Make the repository root importable when run as a script.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from evals.office_assist import _env
+
+    # Full-mode precondition: require OPENAI_API_KEY before importing the LLM
+    # stack, constructing any client, or making any model call.
+    try:
+        _env.ensure_openai_api_key()
+    except _env.ConfigError as exc:
+        _env.print_config_error(exc)
+        return _env.EXIT_INVALID_RUN
+
     from office_agent.llm_assist import briefing_narrative
     from office_agent.tools import briefing
 
@@ -125,11 +145,23 @@ def _run_full(output: str | None) -> int:
         narrative = briefing_narrative.narrate_briefing(facts)
         briefing_narrative.validate_narrative(narrative, facts)
     except Exception as exc:
-        report_lines.append(f"FAIL: narrative chain/grounding error: {type(exc).__name__}")
+        if _env.is_infra_error(exc):
+            # Infrastructure failure: invalid run, no model-quality summary, and
+            # no report written so a prior valid report is never overwritten.
+            _env.print_infra_error(exc)
+            return _env.EXIT_INVALID_RUN
+        if not isinstance(exc, ValueError):
+            # Unexpected local error: surface it instead of mislabeling it as a
+            # model-quality failure; write no report and exit non-zero.
+            _env.print_unexpected_error(exc)
+            return _env.EXIT_INVALID_RUN
+        # Structured output was obtained but failed the grounding assertion: an
+        # ordinary EVAL_FAIL, reported as FAIL (existing behavior).
+        report_lines.append(f"FAIL: narrative grounding error: {type(exc).__name__}")
         print("\n".join(report_lines))
         if output:
             Path(output).write_text("\n".join(report_lines) + "\n", encoding="utf-8")
-        return 1
+        return _env.EXIT_EVAL_FAIL
 
     produced_ids = {reference.id for reference in narrative.references}
     produced_types = {reference.source_type for reference in narrative.references}
