@@ -97,3 +97,82 @@ def test_briefing_does_not_mutate_mock_data():
     assert calendar.load_events() == before_events
     assert tickets.load_tickets() == before_tickets
     assert tickets.load_tasks() == before_tasks
+
+
+# --- collect_briefing_facts: critical-fact preservation + enrichment ----------
+
+
+def _meeting_ids(facts):
+    return [f["id"] for f in facts if f["source_type"] == "meeting"]
+
+
+def test_collect_facts_keeps_first_five_meetings_plus_conflict_counterpart():
+    """The base cap keeps the first five meetings; cal-006 is additionally
+    preserved because it overlaps the selected cal-005."""
+
+    facts = briefing.collect_briefing_facts()
+    meeting_ids = _meeting_ids(facts)
+
+    assert meeting_ids[:5] == ["cal-001", "cal-002", "cal-003", "cal-004", "cal-005"]
+    assert "cal-006" in meeting_ids  # soft-cap overflow for the conflict counterpart
+    assert meeting_ids == ["cal-001", "cal-002", "cal-003", "cal-004", "cal-005", "cal-006"]
+
+
+def test_collect_facts_excludes_ordinary_sixth_meeting(monkeypatch):
+    """Without a conflict, a sixth meeting past the cap stays excluded."""
+
+    day = "2026-07-01"
+    events = [
+        {
+            "id": f"m{i}",
+            "title": f"Meeting {i}",
+            "importance": "normal",
+            "start_at": f"{day}T{8 + i:02d}:00:00",
+            "end_at": f"{day}T{8 + i:02d}:30:00",  # non-overlapping 30-min slots
+        }
+        for i in range(6)
+    ] + [
+        {
+            "id": "tmw",
+            "title": "Tomorrow",
+            "importance": "normal",
+            "start_at": "2026-07-02T09:00:00",
+            "end_at": "2026-07-02T09:30:00",
+        }
+    ]
+    monkeypatch.setattr(calendar, "load_events", lambda: [dict(e) for e in events])
+
+    meeting_ids = _meeting_ids(briefing.collect_briefing_facts())
+    assert meeting_ids == ["m0", "m1", "m2", "m3", "m4"]  # sixth (m5) excluded
+
+
+def test_collect_facts_has_no_duplicate_pairs():
+    facts = briefing.collect_briefing_facts()
+    pairs = [(f["source_type"], f["id"]) for f in facts]
+    assert len(pairs) == len(set(pairs))
+
+
+def test_collect_facts_is_deterministic():
+    assert briefing.collect_briefing_facts() == briefing.collect_briefing_facts()
+
+
+def test_conflict_counterparts_reference_each_other():
+    facts = briefing.collect_briefing_facts()
+    by_id = {f["id"]: f for f in facts if f["source_type"] == "meeting"}
+
+    assert "cal-006" in by_id["cal-005"]["conflicts_with"]
+    assert "cal-005" in by_id["cal-006"]["conflicts_with"]
+    assert "schedule_conflict" in by_id["cal-005"]["critical_reasons"]
+    assert "schedule_conflict" in by_id["cal-006"]["critical_reasons"]
+    # cal-005 is a high-importance meeting, so it also flags high_importance.
+    assert "high_importance" in by_id["cal-005"]["critical_reasons"]
+
+
+def test_ticket_fact_exposes_priority_status_and_reasons():
+    facts = briefing.collect_briefing_facts()
+    tick = next(f for f in facts if f["source_type"] == "ticket" and f["id"] == "TICK-004")
+
+    assert tick["priority"] == "high"
+    assert tick["status"] == "blocked"
+    assert "high_priority" in tick["critical_reasons"]
+    assert "blocked" in tick["critical_reasons"]

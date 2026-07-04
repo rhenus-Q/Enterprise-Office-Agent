@@ -181,6 +181,17 @@ def _run_full(output: str | None) -> int:
             f"- {row['id']}: {'PASS' if ok else 'FAIL'} "
             f"(reference_recall={recall:.2f}, source_types_ok={types_ok})"
         )
+        # Reference-recall diagnostics: on any recall shortfall, record the exact
+        # expected/actual/missing/unexpected id sets (deterministically sorted) so a
+        # failing case is diagnosable from the report alone. This is purely
+        # additive output; it never changes recall, thresholds, or expected ids.
+        if recall < 1.0:
+            missing = sorted(expected_ids - produced_ids)
+            unexpected = sorted(produced_ids - expected_ids)
+            report_lines.append(f"  - expected_references: {sorted(expected_ids)}")
+            report_lines.append(f"  - actual_references: {sorted(produced_ids)}")
+            report_lines.append(f"  - missing_references: {missing}")
+            report_lines.append(f"  - unexpected_references: {unexpected}")
 
     summary = f"{passed}/{total} case(s) passed."
     report_lines += ["", summary]

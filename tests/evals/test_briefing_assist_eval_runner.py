@@ -167,6 +167,46 @@ def test_full_mode_recall_failure_is_eval_fail(monkeypatch, capsys, tmp_path):
     assert output.exists()
 
 
+def test_full_mode_recall_failure_reports_reference_diagnostics(monkeypatch, capsys, tmp_path):
+    """A recall shortfall records sorted expected/actual/missing/unexpected ids and
+    still classifies as an ordinary EVAL_FAIL."""
+
+    monkeypatch.setattr(env, "ensure_openai_api_key", lambda: None)
+
+    import office_agent.llm_assist.briefing_narrative as briefing_narrative
+
+    monkeypatch.setattr(
+        runner,
+        "load_cases",
+        lambda: [
+            {
+                "id": "b1",
+                "query": "q",
+                # Expect two ids; the model will produce only one of them.
+                "expected_reference_ids": ["TICK-004", "email-001"],
+                "must_reference_source_types": [],
+            }
+        ],
+    )
+    # Grounded narrative (email-001 is in the real collected facts) that covers only
+    # one expected id → recall 0.5, so the diagnostics block is emitted.
+    monkeypatch.setattr(
+        briefing_narrative,
+        "narrate_briefing",
+        lambda _facts: _Narrative(references=[_Ref("email", "email-001")]),
+    )
+
+    output = tmp_path / "briefing_results.md"
+    exit_code = runner._run_full(str(output))
+
+    out = capsys.readouterr().out
+    assert exit_code == env.EXIT_EVAL_FAIL
+    assert "expected_references: ['TICK-004', 'email-001']" in out
+    assert "actual_references: ['email-001']" in out
+    assert "missing_references: ['TICK-004']" in out
+    assert "unexpected_references: []" in out
+
+
 # ---------------------------------------------------------------------------
 # Dataset --validate-only behavior is unchanged
 # ---------------------------------------------------------------------------
