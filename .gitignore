@@ -60,3 +60,7 @@ evals/history/*.json
 /docs/roadmap
 #Internally modified documents
 /Doc
+
+# Generated Office-assist eval reports
+/evals/office_assist/results.md
+/evals/office_assist/briefing_results.md
