@@ -96,10 +96,31 @@ def _run_full(output: str | None) -> int:
     Approval-gated: only run this mode with explicit user approval and a real
     `OPENAI_API_KEY`. Imports `office_agent` lazily so the keys-free
     `--validate-only` path never imports the LLM stack.
+
+    Environment / error handling (see `evals/office_assist/_env.py`):
+      - CONFIG_ERROR — a missing/blank `OPENAI_API_KEY` is detected up front, before
+        any case runs, any client is built, or the LLM stack is imported. Fails
+        fast, writes no report, exits non-zero.
+      - INFRA_ERROR — an OpenAI/transport failure (auth, connection, timeout, rate
+        limit, provider error) stops the run at the first occurrence, is reported
+        as an invalid run (no model-quality pass rate), writes no report, exits
+        non-zero. It never counts as an ordinary FAIL.
+      - EVAL_FAIL — the model returned structured output that failed a behavioral
+        assertion (grounding / recall / deadline). Counts toward the pass rate.
     """
 
     # Make the repository root importable when run as a script.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from evals.office_assist import _env
+
+    # Full-mode precondition: require OPENAI_API_KEY before importing the LLM
+    # stack, constructing any client, or running any case.
+    try:
+        _env.ensure_openai_api_key()
+    except _env.ConfigError as exc:
+        _env.print_config_error(exc)
+        return _env.EXIT_INVALID_RUN
+
     from office_agent.llm_assist import email_digest
     from office_agent.tools import email
 
@@ -120,11 +141,21 @@ def _run_full(output: str | None) -> int:
             digest = email_digest.digest_emails(matched)
             email_digest.validate_digest(digest, matched)
         except Exception as exc:
-            # Report failures per row, do not abort the whole run.
-            report_lines.append(
-                f"- {row['id']}: FAIL (chain/grounding error: {type(exc).__name__})"
-            )
-            continue
+            if _env.is_infra_error(exc):
+                # Infrastructure failure: stop immediately (do not keep calling the
+                # provider), report an invalid run, and write no report so a prior
+                # valid report is never overwritten with a model-quality summary.
+                _env.print_infra_error(exc)
+                return _env.EXIT_INVALID_RUN
+            if isinstance(exc, ValueError):
+                # Structured output was obtained but failed a behavioral / grounding
+                # assertion: an ordinary EVAL_FAIL that counts toward the pass rate.
+                report_lines.append(f"- {row['id']}: FAIL (eval assertion: {type(exc).__name__})")
+                continue
+            # Unexpected local error: surface it instead of mislabeling it as a
+            # model-quality failure; write no report and exit non-zero.
+            _env.print_unexpected_error(exc)
+            return _env.EXIT_INVALID_RUN
 
         produced_ids = {item.email_id for item in digest.action_items}
         expected_ids = set(row["expected_action_item_email_ids"])
