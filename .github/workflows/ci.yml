@@ -10,10 +10,11 @@
 # full eval run (evals/run_eval.py) costs real API money; both are deliberately
 # excluded from CI.
 #
-# lint: runs ruff (lint + format check) and mypy (scoped to
-# enterprise_rag/graph/engine.py, enterprise_rag/graph/config.py,
-# enterprise_rag/graph/formatting.py, enterprise_rag/graph/state.py,
-# enterprise_rag/graph/consts.py).
+# lint: runs ruff (lint + format check) and mypy. The mypy scope is the
+# [tool.mypy] `files` list in pyproject.toml (the single source of truth): the
+# enterprise_rag graph engine surface (engine/config/formatting/state/consts
+# plus nodes/ and chains/) and the office_agent package, including
+# office_agent/llm_assist/. A type regression in any of those fails this job.
 # No API keys required. Runs in parallel with mocked-tests so test feedback
 # is never delayed by lint failures.
 

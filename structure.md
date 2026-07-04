@@ -622,7 +622,7 @@ Future improvements (rough priority): structured logging and metrics-friendly ob
 GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every push and pull request — both keys-free:
 
 * **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
-* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface: `enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`, `enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`).
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scope defined by the `[tool.mypy]` `files` list in `pyproject.toml`: the engine-API surface — `enterprise_rag/graph/engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py` — plus `enterprise_rag/graph/nodes/`, `enterprise_rag/graph/chains/`, and the `office_agent/` package, including the optional LLM-assist boundary `office_agent/llm_assist/`).
 
 ## The Office Agent module
 
