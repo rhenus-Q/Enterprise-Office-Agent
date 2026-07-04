@@ -52,7 +52,21 @@ _MAX_EMAIL_BULLETS = 2
 # (deterministic first-N after each source's documented sort). Bounds tokens and
 # keeps the grounding whitelist small; does NOT affect the rendered deterministic
 # sections above, which are unchanged.
+#
+# The cap is a *soft* base limit: a meeting that is the schedule-conflict
+# counterpart of a selected meeting is additionally preserved past the limit
+# (see `collect_briefing_facts`) so the narrative can describe both sides of a
+# conflict. Ordinary, non-critical facts beyond the limit stay excluded.
 _MAX_FACTS_PER_SOURCE = 5
+
+# Deterministic critical-reason labels attached to the enriched meeting/ticket
+# facts handed to the optional LLM narrative. They make urgency, blocking, and
+# schedule conflicts explicit in the LLM input rather than something the model
+# must infer from a title. Emitted in the fixed order below.
+_REASON_SCHEDULE_CONFLICT = "schedule_conflict"
+_REASON_HIGH_IMPORTANCE = "high_importance"
+_REASON_HIGH_PRIORITY = "high_priority"
+_REASON_BLOCKED = "blocked"
 
 
 def _email_section() -> list[str]:
@@ -184,7 +198,7 @@ def _dedup_by_id(items: list[dict]) -> list[dict]:
     return unique
 
 
-def _fact(source_type: str, item: dict, title_field: str) -> dict[str, str]:
+def _fact(source_type: str, item: dict, title_field: str) -> dict[str, object]:
     """Build one `{source_type, id, title}` fact from a raw mock item (pure)."""
 
     return {
@@ -194,7 +208,63 @@ def _fact(source_type: str, item: dict, title_field: str) -> dict[str, str]:
     }
 
 
-def collect_briefing_facts() -> list[dict[str, str]]:
+def _meeting_fact(event: dict, conflicts_with: list[str]) -> dict[str, object]:
+    """Build one enriched meeting fact with deterministic critical metadata (pure).
+
+    Beyond the base `{source_type, id, title}` this exposes `start_at`/`end_at`,
+    `importance`, the ids the meeting overlaps (`conflicts_with`), and the derived
+    `critical_reasons` (`schedule_conflict` when it overlaps another meeting,
+    `high_importance` when flagged high). None of this is invented — every value
+    comes straight from the deterministic mock event.
+    """
+
+    importance = str(event.get("importance", ""))
+    reasons: list[str] = []
+    if conflicts_with:
+        reasons.append(_REASON_SCHEDULE_CONFLICT)
+    if importance == "high":
+        reasons.append(_REASON_HIGH_IMPORTANCE)
+
+    return {
+        "source_type": "meeting",
+        "id": str(event.get("id", "")),
+        "title": str(event.get("title", "(untitled)")),
+        "start_at": str(event.get("start_at", "")),
+        "end_at": str(event.get("end_at", "")),
+        "importance": importance,
+        "conflicts_with": conflicts_with,
+        "critical_reasons": reasons,
+    }
+
+
+def _ticket_fact(ticket: dict) -> dict[str, object]:
+    """Build one enriched ticket fact with deterministic critical metadata (pure).
+
+    Exposes `priority`/`status` and the derived `critical_reasons`
+    (`high_priority` for a high/urgent ticket, `blocked` for a blocked one) so the
+    narrative can see urgency and blocking explicitly instead of guessing from the
+    title. Values come straight from the deterministic mock ticket.
+    """
+
+    priority = str(ticket.get("priority", ""))
+    status = str(ticket.get("status", ""))
+    reasons: list[str] = []
+    if priority in _HIGH_TICKET_PRIORITIES:
+        reasons.append(_REASON_HIGH_PRIORITY)
+    if status == "blocked":
+        reasons.append(_REASON_BLOCKED)
+
+    return {
+        "source_type": "ticket",
+        "id": str(ticket.get("id", "")),
+        "title": str(ticket.get("title", "(untitled)")),
+        "priority": priority,
+        "status": status,
+        "critical_reasons": reasons,
+    }
+
+
+def collect_briefing_facts() -> list[dict[str, object]]:
     """Collect the bounded, item-level fact set for the optional LLM narrative (pure).
 
     This is the single source of truth for BOTH the LLM input and the grounding
@@ -204,9 +274,15 @@ def collect_briefing_facts() -> list[dict[str, str]]:
     source's sort). Selection intentionally mirrors the rendered sections so the
     facts stay consistent with them; approvals are added because the narrative
     synthesizes them even though the rendered briefing does not list them.
+
+    Meetings and tickets carry deterministic *critical metadata* (schedule
+    conflicts, importance, priority, blocking) so those signals are explicit in
+    the LLM input. The per-source cap is a soft base limit for meetings: any
+    meeting that is the conflict counterpart of a selected meeting is preserved
+    past the limit so both sides of a schedule conflict are always available.
     """
 
-    facts: list[dict[str, str]] = []
+    facts: list[dict[str, object]] = []
 
     # Emails: high-importance OR response-needed, deduped, newest first.
     emails = email.load_emails()
@@ -217,14 +293,45 @@ def collect_briefing_facts() -> list[dict[str, str]]:
     selected_emails.sort(key=lambda e: e.get("received_at", ""), reverse=True)
     facts += [_fact("email", e, "subject") for e in selected_emails[:_MAX_FACTS_PER_SOURCE]]
 
-    # Meetings: today's events, sorted by start time.
+    # Meetings: today's events, sorted by start time. The base cap keeps the first
+    # N, then any omitted meeting that overlaps a selected one is additionally
+    # preserved (soft-cap overflow for the conflict counterpart only).
     events = calendar.load_events()
     day = briefing_day()
     todays = sorted(
         (ev for ev in events if ev.get("start_at", "")[:10] == day),
         key=lambda ev: ev.get("start_at", ""),
     )
-    facts += [_fact("meeting", ev, "title") for ev in todays[:_MAX_FACTS_PER_SOURCE]]
+    selected_meetings = todays[:_MAX_FACTS_PER_SOURCE]
+    selected_ids = {str(ev.get("id", "")) for ev in selected_meetings}
+
+    # Deterministic conflict partners across the whole day (reuses the existing
+    # calendar overlap rule; symmetric so each side lists the other).
+    conflict_partners: dict[str, set[str]] = {}
+    for first, second in calendar.find_conflicts(todays):
+        a, b = str(first.get("id", "")), str(second.get("id", ""))
+        conflict_partners.setdefault(a, set()).add(b)
+        conflict_partners.setdefault(b, set()).add(a)
+
+    # Keep the selected meetings (order preserved), then append counterparts that
+    # conflict with a selected meeting, in the day's start-time order.
+    kept_meetings = list(selected_meetings)
+    kept_ids = set(selected_ids)
+    for ev in todays:
+        ev_id = str(ev.get("id", ""))
+        if ev_id in kept_ids:
+            continue
+        if conflict_partners.get(ev_id, set()) & selected_ids:
+            kept_meetings.append(ev)
+            kept_ids.add(ev_id)
+
+    facts += [
+        _meeting_fact(
+            ev,
+            sorted(conflict_partners.get(str(ev.get("id", "")), set()) & kept_ids),
+        )
+        for ev in kept_meetings
+    ]
 
     # Tickets: open OR high/urgent OR blocked OR assigned to me, deduped, by id.
     all_tickets = tickets.load_tickets()
@@ -238,7 +345,7 @@ def collect_briefing_facts() -> list[dict[str, str]]:
     ]
     selected_tickets = _dedup_by_id(selected_tickets)
     selected_tickets.sort(key=lambda t: str(t.get("id", "")))
-    facts += [_fact("ticket", t, "title") for t in selected_tickets[:_MAX_FACTS_PER_SOURCE]]
+    facts += [_ticket_fact(t) for t in selected_tickets[:_MAX_FACTS_PER_SOURCE]]
 
     # Tasks: open tasks, deduped, by id.
     all_tasks = tickets.load_tasks()
@@ -262,7 +369,7 @@ def collect_briefing_facts() -> list[dict[str, str]]:
     return facts
 
 
-def _maybe_apply_llm_narrative(content: str, facts: list[dict[str, str]]) -> ToolResult:
+def _maybe_apply_llm_narrative(content: str, facts: list[dict[str, object]]) -> ToolResult:
     """Optionally prepend an LLM-assisted narrative above the deterministic briefing.
 
     Default **off**: when `OFFICE_LLM_ENABLED` is not truthy this returns exactly

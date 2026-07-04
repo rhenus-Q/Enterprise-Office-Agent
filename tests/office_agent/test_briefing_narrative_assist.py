@@ -271,6 +271,62 @@ def test_no_references_renders_none(monkeypatch):
     assert "References:\n- None." in result.content
 
 
+# --- Serialized narrative input exposes critical metadata ---------------------
+
+
+def test_build_input_serializes_meeting_and_ticket_critical_metadata():
+    facts = briefing.collect_briefing_facts()
+    text = briefing_narrative.build_briefing_input(facts)
+
+    # Both sides of the schedule conflict appear, with times and the conflict link.
+    assert "[meeting] cal-005" in text
+    assert "[meeting] cal-006" in text
+    assert "conflicts_with: cal-006" in text  # on cal-005's line
+    assert "conflicts_with: cal-005" in text  # on cal-006's line
+    assert "start: 2026-07-01T14:00:00" in text
+    assert "end: 2026-07-01T15:00:00" in text
+    assert "critical_reasons: schedule_conflict, high_importance" in text  # cal-005
+
+    # Ticket urgency/blocking is explicit, not left to be inferred from the title.
+    assert "[ticket] TICK-004" in text
+    assert "priority: high" in text
+    assert "status: blocked" in text
+    assert "critical_reasons: high_priority, blocked" in text
+
+
+def test_build_input_is_deterministic():
+    facts = briefing.collect_briefing_facts()
+    assert briefing_narrative.build_briefing_input(
+        facts
+    ) == briefing_narrative.build_briefing_input(facts)
+
+
+def test_build_input_preserves_ids_and_source_types():
+    facts = briefing.collect_briefing_facts()
+    text = briefing_narrative.build_briefing_input(facts)
+    for fact in facts:
+        assert f"[{fact['source_type']}] {fact['id']}" in text
+
+
+# --- Prompt requires complete critical coverage -------------------------------
+
+
+def test_prompt_requires_all_critical_facts_referenced():
+    prompt = briefing_narrative._SYSTEM_PROMPT
+    assert "critical_reasons" in prompt
+    assert "must be covered in the narrative and included in references" in prompt
+
+
+def test_prompt_requires_both_sides_of_conflicts():
+    prompt = briefing_narrative._SYSTEM_PROMPT.lower()
+    assert "both meetings involved in the conflict" in prompt
+
+
+def test_prompt_keeps_untrusted_data_instruction():
+    prompt = briefing_narrative._SYSTEM_PROMPT
+    assert "untrusted data" in prompt
+
+
 # --- Pure validate_narrative rules --------------------------------------------
 
 
