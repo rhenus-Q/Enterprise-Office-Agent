@@ -1,8 +1,8 @@
-# Office Agent v1.6 — demo & usage
+# Office Agent — Demo & Usage
 
 The Office Agent is a small, deterministic assistant that routes a free-text
 request to one of its capabilities and returns a structured response. It lives
-in [`office_agent/`](../office_agent/) and is the office-automation companion to
+in [`office_agent/`](.) and is the office-automation companion to
 the completed [`enterprise_rag`](../enterprise_rag/README.md) engine.
 
 ## Version map
@@ -32,7 +32,7 @@ most of it demos with no API keys and no external services.
 
 ## Capabilities and intents
 
-A deterministic keyword [router](../office_agent/router.py) classifies each
+A deterministic keyword [router](router.py) classifies each
 request into one **intent**, and the engine dispatches to exactly one tool:
 
 | Intent | Capability | Data source |
@@ -115,7 +115,7 @@ Enterprise RAG pipeline.
   [`enterprise_rag/README.md`](../enterprise_rag/README.md).
 - **Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing,
   Meeting Agent / Meeting Prep, and Workflow / Approval Agent** read static
-  fictional JSON in [`office_agent/mock_data/`](../office_agent/mock_data/). No
+  fictional JSON in [`office_agent/mock_data/`](mock_data/). No
   network, no keys, no LLM.
 
 ## Local-only mock-data design
@@ -178,8 +178,8 @@ review board"`, `"meeting prep for the budget workshop"`.
 
 Workflow / Approval Agent (`workflow_approval`, added in v1.6 / Phase 7) is a
 deterministic mock approval assistant over a local approval queue
-([`mock_data/approvals.json`](../office_agent/mock_data/approvals.json)) and audit
-log ([`mock_data/audit_log.json`](../office_agent/mock_data/audit_log.json)). It
+([`mock_data/approvals.json`](mock_data/approvals.json)) and audit
+log ([`mock_data/audit_log.json`](mock_data/audit_log.json)). It
 is **local-only, LLM-free, and never calls the Enterprise RAG pipeline or any
 external service** (no Jira / Linear / Asana / Trello / Slack / Gmail / Outlook /
 Google Calendar).
@@ -259,11 +259,11 @@ offline dataset checks are
 `uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --validate-only` and
 `uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --validate-only`.
 
-See [ADR 015](adr/office_agent/015-office-agent-v1-architecture.md) for the architecture
+See [ADR 015](../docs/adr/office_agent/015-office-agent-v1-architecture.md) for the architecture
 decision behind the original five-capability Office Agent v1,
-[ADR 016](adr/office_agent/016-office-agent-capability-extensions.md) for the later Meeting and
+[ADR 016](../docs/adr/office_agent/016-office-agent-capability-extensions.md) for the later Meeting and
 Workflow / Approval extensions (the current seven-capability architecture),
-[ADR 017](adr/office_agent/017-office-agent-llm-assist-email-digest.md) for the optional
+[ADR 017](../docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md) for the optional
 LLM-assisted email digest, and
-[ADR 018](adr/office_agent/018-office-agent-llm-assist-daily-briefing.md) for the optional
+[ADR 018](../docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md) for the optional
 LLM-assisted Daily Briefing narrative.

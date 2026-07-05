@@ -81,6 +81,7 @@ or execute any office operation. See [`office_agent/llm_assist/`](office_agent/l
 │   ├── data/acmecorp_internal_docs/  #   Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 │   └── graph/                   #   StateGraph, nodes, chains, engine, config, state, consts, formatting
 ├── office_agent/                # ✅ Enterprise Office Agent (router + Knowledge Q&A adapter + six local mock tools)
+│   ├── README.md                #   Module guide: all seven capabilities, usage, optional LLM assists
 │   ├── router.py                #   Deterministic keyword intent router (no LLM)
 │   ├── engine.py                #   answer_office_request() entry point + tool dispatch
 │   ├── schemas.py               #   Intent constants + typed ToolResult / response dataclasses
@@ -90,7 +91,6 @@ or execute any office operation. See [`office_agent/llm_assist/`](office_agent/l
 ├── scripts/demo_office_agent_v1.py  # Local-only Office Agent demo
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
-│   ├── office-agent-v1-demo.md  #   Dedicated Office Agent demo & usage doc (all seven capabilities)
 │   ├── engineering/             #   Onboarding, testing strategy, release checklist
 │   ├── releases/                #   Release notes (office-agent-v1.6.md)
 │   └── adr/                     #   Architecture Decision Records 001–018 (repo-level; index in docs/adr/README.md)
@@ -137,7 +137,7 @@ uv run python scripts/demo_office_agent_v1.py --include-knowledge
 ```
 
 Or call it programmatically via `office_agent.engine.answer_office_request(...)`.
-See [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md) for the full
+See [`office_agent/README.md`](office_agent/README.md) for the full
 capability list, routing precedence, and example requests.
 
 ## Tests
@@ -211,7 +211,7 @@ deliberately excluded.
   engine: full setup, usage, configuration, and API reference.
 - **[`structure.md`](structure.md)** — architecture deep-dive: the full workflow,
   state machine, routing, and the `enterprise_rag` / `office_agent` module boundary.
-- **[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md)** — the
+- **[`office_agent/README.md`](office_agent/README.md)** — the
   dedicated Office Agent demo & usage doc: all seven capabilities, routing
   precedence, the programmatic API, and example requests.
 - **[`docs/engineering/onboarding.md`](docs/engineering/onboarding.md)** — new-engineer

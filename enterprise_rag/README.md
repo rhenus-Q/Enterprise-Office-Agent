@@ -13,7 +13,7 @@
 > `enterprise_rag` engine, and its **Email Digest** and **Daily Briefing narrative**
 > are optional, default-off LLM assists. See the
 > [repo-level README](../README.md) for the big picture, the
-> [Office Agent demo doc](../docs/office-agent-v1-demo.md) for that module's
+> [Office Agent demo doc](../office_agent/README.md) for that module's
 > behavior, and [structure.md](../structure.md) for the architecture deep-dive.
 
 ## Overview
@@ -468,7 +468,7 @@ uv run pytest -v
 The Office Agent has its own suites at the repo root — the fully mocked
 `tests/office_agent/` (CI-safe) and the key-gated `tests/office_chains/` (real
 `gpt-5-mini` for the two LLM assists) — documented in the
-[Office Agent demo doc](../docs/office-agent-v1-demo.md), not here.
+[Office Agent demo doc](../office_agent/README.md), not here.
 
 CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs two parallel
 jobs on every push and pull request — both keys-free:
