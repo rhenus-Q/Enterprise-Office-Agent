@@ -259,11 +259,11 @@ offline dataset checks are
 `uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --validate-only` and
 `uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --validate-only`.
 
-See [ADR 015](adr/015-office-agent-v1-architecture.md) for the architecture
+See [ADR 015](adr/office_agent/015-office-agent-v1-architecture.md) for the architecture
 decision behind the original five-capability Office Agent v1,
-[ADR 016](adr/016-office-agent-capability-extensions.md) for the later Meeting and
+[ADR 016](adr/office_agent/016-office-agent-capability-extensions.md) for the later Meeting and
 Workflow / Approval extensions (the current seven-capability architecture),
-[ADR 017](adr/017-office-agent-llm-assist-email-digest.md) for the optional
+[ADR 017](adr/office_agent/017-office-agent-llm-assist-email-digest.md) for the optional
 LLM-assisted email digest, and
-[ADR 018](adr/018-office-agent-llm-assist-daily-briefing.md) for the optional
+[ADR 018](adr/office_agent/018-office-agent-llm-assist-daily-briefing.md) for the optional
 LLM-assisted Daily Briefing narrative.

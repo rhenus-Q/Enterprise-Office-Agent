@@ -2,8 +2,8 @@
 
 Behavioral evals for the **two optional, default-off Office Agent LLM assists**:
 
-- the **Email Digest** ([ADR 017](../../../docs/adr/017-office-agent-llm-assist-email-digest.md)), and
-- the **Daily Briefing Narrative** ([ADR 018](../../../docs/adr/018-office-agent-llm-assist-daily-briefing.md)).
+- the **Email Digest** ([ADR 017](../../../docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md)), and
+- the **Daily Briefing Narrative** ([ADR 018](../../../docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)).
 
 > **Scope:** this is *not* an eval of all seven deterministic Office Agent
 > capabilities. The router and every deterministic tool are covered by the mocked

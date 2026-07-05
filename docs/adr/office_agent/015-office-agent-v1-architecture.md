@@ -4,7 +4,7 @@ Status: Accepted
 
 Date: 2026-07-01
 
-Builds on: [ADR 014](014-enterprise-rag-package-and-office-agent-placeholder.md)
+Builds on: [ADR 014](../enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md)
 (the `enterprise_rag` package + reserved `office_agent` placeholder). ADR 014
 reserved the module path; this ADR records the architecture of the Office Agent
 v1 that now fills it.

@@ -30,9 +30,9 @@ checks, history/delta reporting, and report-privacy rules.
 ## `office_agent/llm_assist/` — Office Agent LLM-assist evals
 
 Evaluates **only** the two optional, default-off Office Agent LLM assists — the
-Email Digest ([ADR 017](../docs/adr/017-office-agent-llm-assist-email-digest.md))
+Email Digest ([ADR 017](../docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md))
 and the Daily Briefing Narrative
-([ADR 018](../docs/adr/018-office-agent-llm-assist-daily-briefing.md)). It is
+([ADR 018](../docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)). It is
 **not** an eval of all seven deterministic Office Agent capabilities — those are
 covered by the mocked suites in `tests/office_agent/`. A full run calls the real
 `gpt-5-mini` model (OpenAI) and is approval-gated; `--validate-only` is keys-free.

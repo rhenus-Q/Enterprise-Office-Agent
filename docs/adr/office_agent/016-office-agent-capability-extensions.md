@@ -166,6 +166,6 @@ it — the growth from five to seven capabilities did not change the trade-off:
 - This ADR **extends** [ADR 015](015-office-agent-v1-architecture.md); it does not
   supersede or rewrite ADR 015's historical decision.
 - It also inherits the cross-cutting rules from
-  [ADR 014](014-enterprise-rag-package-and-office-agent-placeholder.md) and
+  [ADR 014](../enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md) and
   CLAUDE.md (side-effect-free imports, lazy data/client access, no regression to
   `enterprise_rag`).
