@@ -113,7 +113,7 @@ offline-validatable eval lives at `evals/office_assist/briefing_cases.jsonl` +
 - **Status: Accepted**, per the repository convention.
 - This ADR **extends** [ADR 017](017-office-agent-llm-assist-email-digest.md) for the
   Daily Briefing tool only, and inherits the cross-cutting rules from
-  [ADR 014](014-enterprise-rag-package-and-office-agent-placeholder.md) and CLAUDE.md
+  [ADR 014](../enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md) and CLAUDE.md
   (side-effect-free imports, lazy `@lru_cache` clients, no regression to
   `enterprise_rag`). The deterministic Office Agent architecture in
   [ADR 015](015-office-agent-v1-architecture.md) / [ADR 016](016-office-agent-capability-extensions.md)

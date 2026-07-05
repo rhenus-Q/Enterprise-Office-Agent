@@ -61,8 +61,8 @@ future production work and is **not** part of this repository.
 
 The default path is therefore deterministic, but it is **not** true that no Office
 capability other than Knowledge Q&A can call an LLM. Two presentation/synthesis
-paths — the **Email Summary** digest ([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md))
-and the **Daily Briefing** narrative ([ADR 018](docs/adr/018-office-agent-llm-assist-daily-briefing.md))
+paths — the **Email Summary** digest ([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md))
+and the **Daily Briefing** narrative ([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md))
 — may optionally call the external `gpt-5-mini` model. Both assists are **disabled
 by default**; setting `OFFICE_LLM_ENABLED` enables both at once, and if an assist is
 disabled or fails the tool returns its deterministic result (with an honest caveat
@@ -226,15 +226,15 @@ deliberately excluded.
   Office Agent v1.6 release notes.
 - **[`docs/adr/`](docs/adr/README.md)** — Architecture Decision Records: *why* the
   code is the way it is. The package refactor that introduced this module layout is
-  [ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md);
+  [ADR 014](docs/adr/enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md);
   the original five-capability Office Agent v1 architecture is
-  [ADR 015](docs/adr/015-office-agent-v1-architecture.md), and the later Meeting
+  [ADR 015](docs/adr/office_agent/015-office-agent-v1-architecture.md), and the later Meeting
   and Workflow / Approval capability extensions (the current seven-capability
   inventory and router precedence) are
-  [ADR 016](docs/adr/016-office-agent-capability-extensions.md). The two optional,
+  [ADR 016](docs/adr/office_agent/016-office-agent-capability-extensions.md). The two optional,
   default-off Office LLM assists are the Email Summary digest
-  ([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)) and the Daily
-  Briefing narrative ([ADR 018](docs/adr/018-office-agent-llm-assist-daily-briefing.md)).
+  ([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md)) and the Daily
+  Briefing narrative ([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)).
 
 ## Working in this repository
 

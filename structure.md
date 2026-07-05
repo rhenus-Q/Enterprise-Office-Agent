@@ -16,7 +16,7 @@ the Architecture Decision Records under [docs/adr/](docs/adr/README.md).
 ## Repository context and module boundaries
 
 The repository is organized as named capability modules (see
-[ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md)):
+[ADR 014](docs/adr/enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md)):
 
 - **`enterprise_rag/`** — the completed Enterprise Document Q&A / RAG engine that
   the rest of this document describes. All engine code lives here
@@ -308,7 +308,7 @@ page can still carry prompt-injection text ("ignore previous instructions",
 "reveal secrets", …) and pass the gate correctly. The generation prompt
 therefore explicitly treats all retrieved context as untrusted evidence,
 never as instructions — a first-line, prompt-level defense documented in
-[ADR 010](docs/adr/010-prompt-injection-defense.md).
+[ADR 010](docs/adr/enterprise_rag/010-prompt-injection-defense.md).
 
 ## 8. Meaningful retries
 
@@ -727,9 +727,9 @@ other mock tools it uses no LLM and contacts no external service.
 
 `office_agent/llm_assist/` is the **isolated boundary** for optional, structured,
 grounded Office LLM assistance. It hosts **two** assists — the **Email Digest**
-([ADR 017](docs/adr/017-office-agent-llm-assist-email-digest.md)) layered on the
+([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md)) layered on the
 Email Summary tool, and the **Daily Briefing Narrative**
-([ADR 018](docs/adr/018-office-agent-llm-assist-daily-briefing.md)) layered on the
+([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)) layered on the
 Daily Briefing tool. Both:
 
 - share the single `OFFICE_LLM_ENABLED` switch (in `llm_assist/config.py`), which
@@ -793,7 +793,7 @@ exercises the real RAG pipeline, which needs the `enterprise_rag` setup and API
 keys). Full usage and the capability list are in
 [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md); the architecture
 decisions behind the module are
-[ADR 015](docs/adr/015-office-agent-v1-architecture.md) (the original
+[ADR 015](docs/adr/office_agent/015-office-agent-v1-architecture.md) (the original
 five-capability v1) and
-[ADR 016](docs/adr/016-office-agent-capability-extensions.md) (the later Meeting
+[ADR 016](docs/adr/office_agent/016-office-agent-capability-extensions.md) (the later Meeting
 and Workflow / Approval extensions — the current seven-capability architecture).

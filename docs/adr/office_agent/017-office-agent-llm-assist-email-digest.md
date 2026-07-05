@@ -109,6 +109,6 @@ approval-gated like the RAG eval.
   [ADR 015](015-office-agent-v1-architecture.md) and reaffirmed in
   [ADR 016](016-office-agent-capability-extensions.md) — for the Email Summary tool
   only. It inherits the cross-cutting rules from
-  [ADR 014](014-enterprise-rag-package-and-office-agent-placeholder.md) and
+  [ADR 014](../enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md) and
   CLAUDE.md (side-effect-free imports, lazy `@lru_cache` clients, no regression to
   `enterprise_rag`).
