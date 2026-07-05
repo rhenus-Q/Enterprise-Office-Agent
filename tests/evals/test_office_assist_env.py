@@ -1,5 +1,5 @@
 """
-Unit tests for evals/office_assist/_env.py — the shared env-loading and
+Unit tests for evals/office_agent/llm_assist/_env.py — the shared env-loading and
 error-classification helper for the two Office-assist eval runners.
 
 Fully keys-free and offline: no OpenAI client is constructed and no network call
@@ -9,7 +9,7 @@ is made. `.env` loading is exercised only through a fake `load_dotenv`.
 import openai
 import pytest
 
-import evals.office_assist._env as env
+import evals.office_agent.llm_assist._env as env
 
 
 def test_ensure_openai_api_key_missing_raises_config_error(monkeypatch):

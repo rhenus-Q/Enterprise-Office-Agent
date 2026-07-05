@@ -7,8 +7,8 @@
 # knowledge adapter so no real enterprise_rag graph call is made), so the job
 # needs NO API keys (OpenAI / Tavily / LangSmith). The integration suite
 # (tests/chains/) calls the real model and the
-# full eval run (evals/run_eval.py) costs real API money; both are deliberately
-# excluded from CI.
+# full eval run (evals/enterprise_rag/run_eval.py) costs real API money; both are
+# deliberately excluded from CI.
 #
 # lint: runs ruff (lint + format check) and mypy. The mypy scope is the
 # [tool.mypy] `files` list in pyproject.toml (the single source of truth): the

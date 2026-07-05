@@ -110,7 +110,7 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv run pytest tests/evals/ -q
-uv run python evals/run_eval.py --validate-only
+uv run python evals/enterprise_rag/run_eval.py --validate-only
 ```
 
 For graph/node/eval-behavior changes, recommend:
@@ -122,7 +122,7 @@ uv run pytest tests/node/ tests/graph/ tests/evals/ -q
 Only recommend full eval when the diff changes eval rows, eval expectations, retrieval behavior, fallback behavior, or generated eval results:
 
 ```powershell
-uv run python evals/run_eval.py --output evals/results.md
+uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/results.md
 ```
 
 Never run full eval unless the user explicitly asks.
@@ -162,7 +162,7 @@ Then suggest a concise commit message.
 Example:
 
 ```powershell
-git add evals/questions.jsonl evals/results.md
+git add evals/enterprise_rag/questions.jsonl evals/enterprise_rag/results.md
 git commit -m "Refresh eval results after Phase 3 calibration"
 ```
 

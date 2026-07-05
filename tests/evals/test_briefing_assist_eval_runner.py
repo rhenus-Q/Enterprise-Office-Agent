@@ -1,6 +1,6 @@
 """
-Keys-free tests for evals/office_assist/run_briefing_assist_eval.py — the
-standalone briefing-narrative eval runner's environment loading and
+Keys-free tests for evals/office_agent/llm_assist/run_briefing_narrative_eval.py —
+the standalone briefing-narrative eval runner's environment loading and
 CONFIG/INFRA/EVAL_FAIL classification.
 
 Fully offline: OpenAI is never called and no API key is required. The narrative
@@ -10,8 +10,8 @@ validation and grounding checks run for real.
 
 import openai
 
-import evals.office_assist._env as env
-import evals.office_assist.run_briefing_assist_eval as runner
+import evals.office_agent.llm_assist._env as env
+import evals.office_agent.llm_assist.run_briefing_narrative_eval as runner
 
 
 class _SimulatedInfra(openai.OpenAIError):
@@ -31,7 +31,7 @@ class _Narrative:
 
 
 def _run_main(monkeypatch, argv):
-    monkeypatch.setattr("sys.argv", ["run_briefing_assist_eval.py", *argv])
+    monkeypatch.setattr("sys.argv", ["run_briefing_narrative_eval.py", *argv])
     return runner.main()
 
 
@@ -69,7 +69,7 @@ def test_full_mode_missing_key_is_config_error(monkeypatch, capsys, tmp_path):
 
     monkeypatch.setattr(briefing_narrative, "narrate_briefing", _boom)
 
-    output = tmp_path / "briefing_results.md"
+    output = tmp_path / "briefing_narrative_results.md"
     exit_code = runner._run_full(str(output))
 
     out = capsys.readouterr().out
@@ -95,7 +95,7 @@ def test_full_mode_infra_error_is_not_eval_fail(monkeypatch, capsys, tmp_path):
 
     monkeypatch.setattr(briefing_narrative, "narrate_briefing", _raise_infra)
 
-    output = tmp_path / "briefing_results.md"
+    output = tmp_path / "briefing_narrative_results.md"
     exit_code = runner._run_full(str(output))
 
     out = capsys.readouterr().out
@@ -124,7 +124,7 @@ def test_full_mode_grounding_failure_is_eval_fail(monkeypatch, capsys, tmp_path)
         lambda _facts: _Narrative(references=[_Ref("email", "nonexistent-id")]),
     )
 
-    output = tmp_path / "briefing_results.md"
+    output = tmp_path / "briefing_narrative_results.md"
     exit_code = runner._run_full(str(output))
 
     out = capsys.readouterr().out
@@ -156,7 +156,7 @@ def test_full_mode_recall_failure_is_eval_fail(monkeypatch, capsys, tmp_path):
         briefing_narrative, "narrate_briefing", lambda _facts: _Narrative(references=[])
     )
 
-    output = tmp_path / "briefing_results.md"
+    output = tmp_path / "briefing_narrative_results.md"
     exit_code = runner._run_full(str(output))
 
     out = capsys.readouterr().out
@@ -196,7 +196,7 @@ def test_full_mode_recall_failure_reports_reference_diagnostics(monkeypatch, cap
         lambda _facts: _Narrative(references=[_Ref("email", "email-001")]),
     )
 
-    output = tmp_path / "briefing_results.md"
+    output = tmp_path / "briefing_narrative_results.md"
     exit_code = runner._run_full(str(output))
 
     out = capsys.readouterr().out

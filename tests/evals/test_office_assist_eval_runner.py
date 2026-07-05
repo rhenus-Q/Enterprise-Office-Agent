@@ -1,6 +1,6 @@
 """
-Keys-free tests for evals/office_assist/run_office_assist_eval.py — the standalone
-email-digest eval runner's environment loading and CONFIG/INFRA/EVAL_FAIL
+Keys-free tests for evals/office_agent/llm_assist/run_email_digest_eval.py — the
+standalone email-digest eval runner's environment loading and CONFIG/INFRA/EVAL_FAIL
 classification.
 
 Fully offline: OpenAI is never called and no API key is required. The digest chain
@@ -10,8 +10,8 @@ validation and grounding checks run for real.
 
 import openai
 
-import evals.office_assist._env as env
-import evals.office_assist.run_office_assist_eval as runner
+import evals.office_agent.llm_assist._env as env
+import evals.office_agent.llm_assist.run_email_digest_eval as runner
 
 
 class _SimulatedInfra(openai.OpenAIError):
@@ -31,7 +31,7 @@ class _Digest:
 
 
 def _run_main(monkeypatch, argv):
-    monkeypatch.setattr("sys.argv", ["run_office_assist_eval.py", *argv])
+    monkeypatch.setattr("sys.argv", ["run_email_digest_eval.py", *argv])
     return runner.main()
 
 

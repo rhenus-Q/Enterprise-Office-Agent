@@ -1,13 +1,15 @@
 """
-evals/office_assist/run_briefing_assist_eval.py — offline validator + optional
-real-model runner for the Office Agent LLM Daily Briefing narrative assist.
+evals/office_agent/llm_assist/run_briefing_narrative_eval.py — offline validator +
+optional real-model runner for the Office Agent LLM Daily Briefing narrative assist.
 
-Separate from both the RAG eval harness (`evals/run_eval.py`, `evals/questions.jsonl`)
-and the Phase 1 email-digest eval (`cases.jsonl`, `run_office_assist_eval.py`) —
-all of those are untouched. Two modes:
+Separate from both the RAG eval harness (`evals/enterprise_rag/run_eval.py`,
+`evals/enterprise_rag/questions.jsonl`) and the email-digest eval
+(`email_digest_cases.jsonl`, `run_email_digest_eval.py`) — all of those are
+untouched. Two modes:
 
   --validate-only : offline and keys-free. Load and schema-check
-                    `briefing_cases.jsonl` only; make no LLM call. Safe anywhere.
+                    `briefing_narrative_cases.jsonl` only; make no LLM call. Safe
+                    anywhere.
   (default / full): build the collected briefing facts once (they are constant),
                     call the real gpt-5-mini narrative chain, check grounding via
                     `validate_narrative`, and check per-row reference recall and
@@ -19,8 +21,8 @@ all of those are untouched. Two modes:
 import-light and keys-free.
 
 Usage:
-    uv run python evals/office_assist/run_briefing_assist_eval.py --validate-only
-    uv run python evals/office_assist/run_briefing_assist_eval.py --output evals/office_assist/briefing_results.md
+    uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --validate-only
+    uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --output evals/office_agent/llm_assist/briefing_narrative_results.md
 """
 
 import argparse
@@ -28,7 +30,7 @@ import json
 import sys
 from pathlib import Path
 
-CASES_PATH = Path(__file__).resolve().parent / "briefing_cases.jsonl"
+CASES_PATH = Path(__file__).resolve().parent / "briefing_narrative_cases.jsonl"
 
 # Required keys and their expected JSON types for each dataset row.
 _REQUIRED_FIELDS: dict[str, type | tuple[type, ...]] = {
@@ -106,7 +108,7 @@ def _run_full(output: str | None) -> int:
     constant (query does not change them), so the chain is called once and every
     row is evaluated against that single grounded narrative.
 
-    Environment / error handling (see `evals/office_assist/_env.py`):
+    Environment / error handling (see `evals/office_agent/llm_assist/_env.py`):
       - CONFIG_ERROR — a missing/blank `OPENAI_API_KEY` is detected up front, before
         any client is built or the LLM stack is imported. Fails fast, writes no
         report, exits non-zero.
@@ -118,8 +120,8 @@ def _run_full(output: str | None) -> int:
     """
 
     # Make the repository root importable when run as a script.
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from evals.office_assist import _env
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from evals.office_agent.llm_assist import _env
 
     # Full-mode precondition: require OPENAI_API_KEY before importing the LLM
     # stack, constructing any client, or making any model call.

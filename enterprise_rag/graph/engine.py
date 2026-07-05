@@ -4,7 +4,7 @@ engine.py
 Canonical programmatic entry point for the Agentic RAG system.
 
 `answer_question()` is the one function every caller — the CLI (main.py),
-the eval harness (evals/run_eval.py), tests, and future workflow automation —
+the eval harness (evals/enterprise_rag/run_eval.py), tests, and future workflow automation —
 uses to run a question through the compiled graph. It owns the two pieces of
 logic that used to be duplicated per caller:
 
@@ -129,7 +129,7 @@ def seed_state(
     Build the full initial GraphState for one run.
 
     The single source of truth for state seeding (formerly duplicated in
-    main.py, evals/run_eval.py, and test helpers). None means "resolve from
+    main.py, evals/enterprise_rag/run_eval.py, and test helpers). None means "resolve from
     the environment"; explicit values are used as-is (the policy is
     normalized, with invalid values falling back to conservative).
 

@@ -104,11 +104,11 @@ State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with thirteen 
 
 The `enterprise_rag` package holds the whole RAG engine. The CLI entry point
 (`main.py`), the RAG test suites (`tests/node/`, `tests/graph/`, `tests/evals/`,
-`tests/chains/`), the Enterprise RAG behavioral eval harness (`evals/run_eval.py`
-+ `evals/questions.jsonl`), and the Architecture Decision Records (`docs/adr/`)
+`tests/chains/`), the Enterprise RAG behavioral eval harness (`evals/enterprise_rag/run_eval.py`
++ `evals/enterprise_rag/questions.jsonl`), and the Architecture Decision Records (`docs/adr/`)
 live at the **repo root** and target this module. The repo root also holds the
 Office Agent's own tests (`tests/office_agent/`, `tests/office_chains/`) and
-assist evals (`evals/office_assist/`), which target `office_agent/` instead — see
+assist evals (`evals/office_agent/llm_assist/`), which target `office_agent/` instead — see
 the [repo-level README](../README.md) for the full repository layout.
 
 ```
@@ -518,32 +518,33 @@ LangChain-typed code); run it directly or via CI instead.
 ## Behavioral evals
 
 Beyond code-path tests, the repo-root [`evals/`](../evals/) directory holds the
-**Enterprise RAG behavioral eval** — `evals/run_eval.py` over
-`evals/questions.jsonl`, writing `evals/results.md` — which exercises *this*
-`enterprise_rag` graph. (A separate `evals/office_assist/` subdirectory evaluates
+**Enterprise RAG behavioral eval** — `evals/enterprise_rag/run_eval.py` over
+`evals/enterprise_rag/questions.jsonl`, writing `evals/enterprise_rag/results.md` — which exercises *this*
+`enterprise_rag` graph. (A separate `evals/office_agent/llm_assist/` subdirectory evaluates
 the Office Agent's optional Email Digest and Daily Briefing LLM assists; it is
 not part of this engine's eval and is documented with the Office Agent.) The
 Enterprise RAG eval is a lightweight behavioral harness: 24 realistic questions
-([`evals/questions.jsonl`](../evals/questions.jsonl)) across six categories —
+([`evals/enterprise_rag/questions.jsonl`](../evals/enterprise_rag/questions.jsonl)) across six categories —
 answerable from the AcmeCorp corpus (5), requiring web fallback (5),
 unanswerable without fabricating (3), privacy-mode guarantees (2), multi-document provenance (4), and fallback-policy behavior (5). The
 runner drives the real graph and applies **deterministic** checks (stop
 reasons, source provenance including required local titles, run counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes — no
 LLM-as-judge), then writes a Markdown report to
-[`evals/results.md`](../evals/results.md):
+[`evals/enterprise_rag/results.md`](../evals/enterprise_rag/results.md):
 
 ```powershell
 # Validate the dataset format only — no API calls
-uv run python evals/run_eval.py --validate-only
+uv run python evals/enterprise_rag/run_eval.py --validate-only
 
 # Full eval — real OpenAI/Tavily calls, requires keys (not part of CI)
-uv run python evals/run_eval.py
-uv run python evals/run_eval.py --limit 3
+uv run python evals/enterprise_rag/run_eval.py
+uv run python evals/enterprise_rag/run_eval.py --limit 3
 ```
 
 The harness's pure helpers (loading, validation, checks, metrics, rendering)
 are unit-tested without API calls in `tests/evals/`. See
-[`evals/README.md`](../evals/README.md) for the dataset schema and check rules.
+[`evals/enterprise_rag/README.md`](../evals/enterprise_rag/README.md) for the
+dataset schema and check rules.
 
 ## Architecture decision records
 

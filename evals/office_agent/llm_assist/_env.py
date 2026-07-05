@@ -1,7 +1,7 @@
 """
-evals/office_assist/_env.py — shared environment loading + error classification
-for the two standalone Office-assist eval runners (email digest + briefing
-narrative).
+evals/office_agent/llm_assist/_env.py — shared environment loading + error
+classification for the two standalone Office-assist eval runners (email digest +
+briefing narrative).
 
 A deliberately small private helper so the two runners stay consistent without a
 broad eval framework. It provides exactly what both need and nothing more:
@@ -25,8 +25,8 @@ path import-light and offline.
 
 from pathlib import Path
 
-# evals/office_assist/_env.py -> repository root is two parents up.
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# evals/office_agent/llm_assist/_env.py -> repository root is three parents up.
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _ENV_PATH = _PROJECT_ROOT / ".env"
 
 # Error categories surfaced by the runners. CONFIG_ERROR and INFRA_ERROR both

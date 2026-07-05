@@ -1,5 +1,5 @@
 """
-Unit tests for the eval harness's pure helpers (evals/run_eval.py).
+Unit tests for the eval harness's pure helpers (evals/enterprise_rag/run_eval.py).
 
 These tests never invoke the graph or any API: they cover dataset loading and
 validation, result summarization, the deterministic per-row checks, metric
@@ -11,9 +11,9 @@ import json
 
 from langchain_core.documents import Document
 
-import evals.run_eval as run_eval_module
+import evals.enterprise_rag.run_eval as run_eval_module
 from enterprise_rag.graph.consts import WEB_SEARCH_SOURCE
-from evals.run_eval import (
+from evals.enterprise_rag.run_eval import (
     CATEGORIES,
     DEFAULT_DATASET,
     build_history_record,
@@ -678,7 +678,7 @@ def test_render_markdown_includes_metrics_and_every_row():
     evaluated = _evaluated_fixture()
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+    report = render_markdown(evaluated, metrics, "evals/enterprise_rag/questions.jsonl")
 
     assert "# Eval results" in report
     assert "Overall passed | 6 / 6" in report
@@ -694,7 +694,7 @@ def test_render_markdown_labels_llm_calls_as_tracked():
     evaluated = _evaluated_fixture()
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+    report = render_markdown(evaluated, metrics, "evals/enterprise_rag/questions.jsonl")
 
     assert "Average tracked LLM calls" in report
     assert "| Average LLM calls |" not in report
@@ -705,7 +705,7 @@ def test_render_markdown_includes_partial_counter_note():
     evaluated = _evaluated_fixture()
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+    report = render_markdown(evaluated, metrics, "evals/enterprise_rag/questions.jsonl")
 
     assert "Router and grader calls are not individually tracked" in report
     assert "not billing-accurate" in report
@@ -721,7 +721,7 @@ def test_render_markdown_includes_answer_text_by_default():
     evaluated = _evaluated_fixture()
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+    report = render_markdown(evaluated, metrics, "evals/enterprise_rag/questions.jsonl")
 
     assert "## Answers (truncated)" in report
     assert "**Q:**" in report
@@ -733,7 +733,9 @@ def test_render_markdown_omits_answer_text_when_disabled():
     evaluated = _evaluated_fixture()
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl", include_answer_text=False)
+    report = render_markdown(
+        evaluated, metrics, "evals/enterprise_rag/questions.jsonl", include_answer_text=False
+    )
 
     assert "## Answers (truncated)" not in report
     assert "**Q:**" not in report
@@ -751,7 +753,9 @@ def test_render_markdown_privacy_mode_excludes_question_and_answer_markers():
     evaluated = [{"row": row, "summary": summary, **evaluate_row(row, summary)}]
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl", include_answer_text=False)
+    report = render_markdown(
+        evaluated, metrics, "evals/enterprise_rag/questions.jsonl", include_answer_text=False
+    )
 
     assert "SECRET-Q-MARKER-123" not in report
     assert "SECRET-A-MARKER-456" not in report
@@ -765,7 +769,9 @@ def test_render_markdown_privacy_mode_retains_metadata():
     evaluated = _evaluated_fixture()
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl", include_answer_text=False)
+    report = render_markdown(
+        evaluated, metrics, "evals/enterprise_rag/questions.jsonl", include_answer_text=False
+    )
 
     assert "## Metrics" in report
     assert "Overall passed | 6 / 6" in report
@@ -788,7 +794,7 @@ def test_history_record_is_metadata_only_regardless_of_answer_text():
     record = build_history_record(
         evaluated,
         metrics,
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         {"row_count": 1, "ids": ["h1"], "dataset_sha256": ""},
         timestamp="2026-07-02T00:00:00Z",
         run_id="run-1",
@@ -844,6 +850,6 @@ def test_render_markdown_includes_expected_not_contains_row():
     evaluated = _evaluated_fixture_with_not_contains()
     metrics = compute_metrics(evaluated)
 
-    report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
+    report = render_markdown(evaluated, metrics, "evals/enterprise_rag/questions.jsonl")
 
     assert "expected_not_contains matches" in report

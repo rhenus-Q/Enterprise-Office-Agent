@@ -276,13 +276,13 @@ uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
 uv run pytest tests/evals/ -q
 uv run pytest tests/office_agent/ -q
-uv run python evals/run_eval.py --validate-only
+uv run python evals/enterprise_rag/run_eval.py --validate-only
 ```
 
 Mark full eval as requiring separate approval and only when the feature needs it:
 
 ```powershell
-uv run python evals/run_eval.py --output evals/results.md
+uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/results.md
 ```
 
 ### Recommended implementation invocation
