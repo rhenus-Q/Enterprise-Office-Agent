@@ -591,12 +591,14 @@ in privacy mode still never calls the router, Tavily, or the rewriter).
 | `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
 | `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
 
-Separate from the test suites, `evals/` holds a **behavioral eval harness**:
+Separate from the test suites, `evals/enterprise_rag/` holds a **behavioral eval
+harness** for the RAG graph (the optional Office Agent LLM-assist evals live
+separately under `evals/office_agent/llm_assist/`):
 a 24-question JSONL dataset (local-corpus / web-fallback /
 insufficient-context / privacy-mode / multi-document / policy-fallback categories) run through the real compiled
-graph by `evals/run_eval.py`, scored with deterministic checks (stop reasons,
+graph by `evals/enterprise_rag/run_eval.py`, scored with deterministic checks (stop reasons,
 source provenance including local title checks, counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes) and reported to
-`evals/results.md`. The harness runs each row through
+`evals/enterprise_rag/results.md`. The harness runs each row through
 `enterprise_rag.graph.engine.answer_question()` — the same entry point `main.py` uses — so
 state seeding is never duplicated; privacy-mode rows pass
 `web_search_enabled=False` per run (no env mutation) and hard-assert

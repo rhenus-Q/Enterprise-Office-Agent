@@ -181,9 +181,10 @@ Inspect these areas as needed.
 
 ### Eval and tests
 
-* `evals/run_eval.py`
-* `evals/questions.jsonl`
-* `evals/README.md`
+* `evals/enterprise_rag/run_eval.py`
+* `evals/enterprise_rag/questions.jsonl`
+* `evals/enterprise_rag/README.md`
+* `evals/office_agent/llm_assist/`
 * `tests/node/`
 * `tests/graph/`
 * `tests/evals/`

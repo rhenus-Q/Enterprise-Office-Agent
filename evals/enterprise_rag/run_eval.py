@@ -1,9 +1,9 @@
 """
 run_eval.py — lightweight behavioral evaluation harness.
 
-Runs the eval dataset (evals/questions.jsonl) through the compiled graph and
-checks *behavior*, not just code paths: did local questions answer from the
-corpus, did out-of-corpus questions fall back to the web, did unanswerable
+Runs the eval dataset (evals/enterprise_rag/questions.jsonl) through the compiled
+graph and checks *behavior*, not just code paths: did local questions answer from
+the corpus, did out-of-corpus questions fall back to the web, did unanswerable
 questions decline instead of fabricating, and did privacy-mode rows trigger
 zero web searches.
 
@@ -11,12 +11,12 @@ All checks are deterministic (stop_reason, source metadata, counters,
 expected substrings) — no LLM-as-judge.
 
 Usage:
-    uv run python evals/run_eval.py                  # full eval (REAL API calls)
-    uv run python evals/run_eval.py --limit 3        # first N rows only
-    uv run python evals/run_eval.py --output path.md # custom report path
-    uv run python evals/run_eval.py --validate-only  # dataset checks, no API calls
-    uv run python evals/run_eval.py --no-history      # skip writing history record
-    uv run python evals/run_eval.py --baseline evals/history/<file>.json
+    uv run python evals/enterprise_rag/run_eval.py                  # full eval (REAL API calls)
+    uv run python evals/enterprise_rag/run_eval.py --limit 3        # first N rows only
+    uv run python evals/enterprise_rag/run_eval.py --output path.md # custom report path
+    uv run python evals/enterprise_rag/run_eval.py --validate-only  # dataset checks, no API calls
+    uv run python evals/enterprise_rag/run_eval.py --no-history     # skip writing history record
+    uv run python evals/enterprise_rag/run_eval.py --baseline evals/enterprise_rag/history/<file>.json
 
 NOT part of CI: the full run drives the real router/graders/generation
 (OpenAI) and possibly Tavily, so it needs API keys, costs money, and is
@@ -33,8 +33,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 # Make project-root imports (enterprise_rag.*, main) work when invoked as
-# `python evals/run_eval.py` from anywhere.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# `python evals/enterprise_rag/run_eval.py` from anywhere.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from enterprise_rag.graph.config import (
@@ -975,7 +975,7 @@ def main(argv=None):
         "--history-dir",
         default=str(DEFAULT_HISTORY_DIR),
         metavar="PATH",
-        help="Directory for history records (default: evals/history/).",
+        help="Directory for history records (default: evals/enterprise_rag/history/).",
     )
     parser.add_argument(
         "--no-answer-text",

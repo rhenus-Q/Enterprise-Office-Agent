@@ -168,7 +168,7 @@ If an update is needed:
 
 Examples of acceptable durable guidance:
 
-* "`evals/history/*.json` is generated at runtime and should stay gitignored; only `.gitkeep` is tracked by default."
+* "`evals/enterprise_rag/history/*.json` is generated at runtime and should stay gitignored; only `.gitkeep` is tracked by default."
 * "`graph/engine.py::answer_question()` is the canonical runtime entry point."
 * "`GraphState` channels are expected to remain last-value channels unless `_run_graph_with_trace` is redesigned."
 * "Claude command files under `.claude/commands/` must keep narrow `allowed-tools` and avoid broad `Bash(uv run:*)` grants."

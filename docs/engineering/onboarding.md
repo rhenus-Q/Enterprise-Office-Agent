@@ -152,7 +152,7 @@ without regressing anything:
 - **`.env` files, model names, and dependencies** — do not add dependencies or
   swap models as a side effect.
 - **`docs/roadmap/`** and generated/ignored artifacts (e.g.
-  `docs/roadmap/architecture-review/`, `evals/history/*.json`).
+  `docs/roadmap/architecture-review/`, `evals/enterprise_rag/history/*.json`).
 
 ## Common pre-PR validation checklist
 

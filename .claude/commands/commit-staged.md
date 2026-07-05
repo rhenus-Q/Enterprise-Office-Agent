@@ -43,7 +43,7 @@ Do not commit if staged changes include:
 * `__pycache__/`
 * `.mypy_cache/`
 * `.pytest_cache/`
-* generated history JSON files under `evals/history/*.json`
+* generated history JSON files under `evals/enterprise_rag/history/*.json`
 * unrelated files that do not match the user's commit intent
 
 If unsafe or unrelated files are staged, stop and tell the user exactly what to unstage.

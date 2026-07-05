@@ -1,5 +1,5 @@
 """
-Unit tests for the eval history and delta helpers (evals/run_eval.py).
+Unit tests for the eval history and delta helpers (evals/enterprise_rag/run_eval.py).
 
 All tests are mocked/pure — no API keys, no graph calls needed.
 Covers: dataset_fingerprint, build_history_record, compute_delta,
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from evals.run_eval import (
+from evals.enterprise_rag.run_eval import (
     HistoryBaselineError,
     build_history_record,
     compute_delta,
@@ -86,7 +86,7 @@ def _record(
         "schema_version": 1,
         "run_id": run_id,
         "generated": generated,
-        "dataset": "evals/questions.jsonl",
+        "dataset": "evals/enterprise_rag/questions.jsonl",
         "dataset_fingerprint": {
             "row_count": len(rows),
             "ids": ids,
@@ -194,7 +194,7 @@ def test_build_history_record_shape():
     record = build_history_record(
         evaluated,
         m,
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         fp,
         timestamp="2026-06-13T10:00:00Z",
         run_id="test-run-001",
@@ -203,7 +203,7 @@ def test_build_history_record_shape():
     assert record["schema_version"] == 1
     assert record["run_id"] == "test-run-001"
     assert record["generated"] == "2026-06-13T10:00:00Z"
-    assert record["dataset"] == "evals/questions.jsonl"
+    assert record["dataset"] == "evals/enterprise_rag/questions.jsonl"
     assert record["dataset_fingerprint"] == fp
     assert record["metrics"] is m
     assert len(record["rows"]) == 1
@@ -218,7 +218,7 @@ def test_build_history_record_is_metadata_only():
     record = build_history_record(
         evaluated,
         _metrics(1, 1),
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         fp,
         timestamp="2026-06-13T10:00:00Z",
         run_id="test-run-001",
@@ -264,7 +264,7 @@ def test_build_history_record_failed_row_has_run_completed_in_failed_checks():
     record = build_history_record(
         evaluated,
         _metrics(0, 1),
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         fp,
         timestamp="2026-06-13T10:00:00Z",
         run_id="r002",
@@ -282,7 +282,7 @@ def test_build_history_record_fingerprint_embedded():
     record = build_history_record(
         evaluated,
         _metrics(),
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         fp,
         timestamp="2026-06-13T10:00:00Z",
         run_id="fp-test",
@@ -593,8 +593,10 @@ def test_render_markdown_without_delta_lines_is_stable():
     """render_markdown(delta_lines=None) must produce the same output as before."""
     evaluated, m = _minimal_render_inputs()
 
-    report_without = render_markdown(evaluated, m, "evals/questions.jsonl")
-    report_with_none = render_markdown(evaluated, m, "evals/questions.jsonl", delta_lines=None)
+    report_without = render_markdown(evaluated, m, "evals/enterprise_rag/questions.jsonl")
+    report_with_none = render_markdown(
+        evaluated, m, "evals/enterprise_rag/questions.jsonl", delta_lines=None
+    )
 
     assert report_without == report_with_none
 
@@ -603,7 +605,9 @@ def test_render_markdown_delta_section_inserted_before_per_question():
     evaluated, m = _minimal_render_inputs()
     delta_lines = ["## Delta vs. previous run", "", "No previous run found.", ""]
 
-    report = render_markdown(evaluated, m, "evals/questions.jsonl", delta_lines=delta_lines)
+    report = render_markdown(
+        evaluated, m, "evals/enterprise_rag/questions.jsonl", delta_lines=delta_lines
+    )
 
     delta_pos = report.index("## Delta vs. previous run")
     per_q_pos = report.index("## Per-question results")
@@ -613,7 +617,7 @@ def test_render_markdown_delta_section_inserted_before_per_question():
 def test_render_markdown_no_delta_section_when_none():
     evaluated, m = _minimal_render_inputs()
 
-    report = render_markdown(evaluated, m, "evals/questions.jsonl")
+    report = render_markdown(evaluated, m, "evals/enterprise_rag/questions.jsonl")
 
     assert "## Delta vs. previous run" not in report
 
@@ -806,7 +810,7 @@ def test_no_history_skips_write_but_renders_delta(tmp_path, monkeypatch):
     run_eval(
         _minimal_rows(),
         str(output_path),
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         history_dir=str(tmp_path / "history"),
         no_history=True,
     )
@@ -830,7 +834,7 @@ def test_no_history_no_baseline_renders_no_previous_run(tmp_path, monkeypatch):
     run_eval(
         _minimal_rows(),
         str(output_path),
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         history_dir=str(empty_history),
         no_history=True,
     )
@@ -847,12 +851,12 @@ def test_history_write_failure_still_produces_valid_report(tmp_path, monkeypatch
     def _fail_write(record, history_dir):
         raise OSError("disk full")
 
-    monkeypatch.setattr("evals.run_eval.write_history_record", _fail_write)
+    monkeypatch.setattr("evals.enterprise_rag.run_eval.write_history_record", _fail_write)
 
     run_eval(
         _minimal_rows(),
         str(output_path),
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         history_dir=str(tmp_path / "history"),
     )
 
@@ -873,7 +877,7 @@ def test_history_written_on_normal_run(tmp_path, monkeypatch):
     run_eval(
         _minimal_rows(),
         str(output_path),
-        "evals/questions.jsonl",
+        "evals/enterprise_rag/questions.jsonl",
         history_dir=str(history_dir),
     )
 
@@ -893,7 +897,7 @@ def test_explicit_baseline_missing_raises_history_baseline_error(tmp_path, monke
         run_eval(
             _minimal_rows(),
             str(output_path),
-            "evals/questions.jsonl",
+            "evals/enterprise_rag/questions.jsonl",
             history_dir=str(tmp_path / "history"),
             baseline=str(tmp_path / "nonexistent.json"),
         )
@@ -909,7 +913,7 @@ def test_explicit_baseline_invalid_json_raises_history_baseline_error(tmp_path, 
         run_eval(
             _minimal_rows(),
             str(output_path),
-            "evals/questions.jsonl",
+            "evals/enterprise_rag/questions.jsonl",
             history_dir=str(tmp_path / "history"),
             baseline=str(bad),
         )
@@ -925,7 +929,7 @@ def test_explicit_baseline_incompatible_schema_raises_history_baseline_error(tmp
         run_eval(
             _minimal_rows(),
             str(output_path),
-            "evals/questions.jsonl",
+            "evals/enterprise_rag/questions.jsonl",
             history_dir=str(tmp_path / "history"),
             baseline=str(bad),
         )

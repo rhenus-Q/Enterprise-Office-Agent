@@ -172,10 +172,11 @@ Inspect these areas as needed.
 
 ### Eval system
 
-* `evals/run_eval.py`
-* `evals/questions.jsonl`
-* `evals/README.md`
-* `evals/history/`
+* `evals/enterprise_rag/run_eval.py`
+* `evals/enterprise_rag/questions.jsonl`
+* `evals/enterprise_rag/README.md`
+* `evals/enterprise_rag/history/`
+* `evals/office_agent/llm_assist/`
 
 ### Tests
 

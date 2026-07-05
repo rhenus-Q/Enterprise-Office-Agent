@@ -52,9 +52,10 @@ Thumbs.db
 
 # ---- Eval history records ----
 # Generated at runtime — gitignored by default so history files do not bloat
-# the repo. The directory itself is tracked via evals/history/.gitkeep.
-# To share a specific baseline, force-add it: git add -f evals/history/<file>.json
-evals/history/*.json
+# the repo. The directory itself is tracked via evals/enterprise_rag/history/.gitkeep.
+# To share a specific baseline, force-add it:
+#   git add -f evals/enterprise_rag/history/<file>.json
+evals/enterprise_rag/history/*.json
 
 # ---- Local planning / roadmap drafts ----
 /docs/roadmap
@@ -62,5 +63,5 @@ evals/history/*.json
 /Doc
 
 # Generated Office-assist eval reports
-/evals/office_assist/results.md
-/evals/office_assist/briefing_results.md
+/evals/office_agent/llm_assist/email_digest_results.md
+/evals/office_agent/llm_assist/briefing_narrative_results.md

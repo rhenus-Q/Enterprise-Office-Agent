@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/enterprise_rag/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -234,7 +234,7 @@ uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
 uv run pytest tests/evals/ -q
 uv run pytest tests/office_agent/ -q
-uv run python evals/run_eval.py --validate-only
+uv run python evals/enterprise_rag/run_eval.py --validate-only
 ```
 
 Do not run full eval unless the plan or spec explicitly says it is needed and the user has separately approved it.
@@ -242,7 +242,7 @@ Do not run full eval unless the plan or spec explicitly says it is needed and th
 Full eval command:
 
 ```powershell
-uv run python evals/run_eval.py --output evals/results.md
+uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/results.md
 ```
 
 ## Step 9. Create implementation report

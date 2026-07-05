@@ -94,7 +94,7 @@ or execute any office operation. See [`office_agent/llm_assist/`](office_agent/l
 │   ├── engineering/             #   Onboarding, testing strategy, release checklist
 │   ├── releases/                #   Release notes (office-agent-v1.6.md)
 │   └── adr/                     #   Architecture Decision Records 001–018 (repo-level; index in docs/adr/README.md)
-├── evals/                       # Behavioral eval harness for enterprise_rag (dataset, runner, report) — not in CI
+├── evals/                       # Eval harnesses by module (not in CI): enterprise_rag/ (RAG behavioral eval) + office_agent/llm_assist/ (assist evals)
 ├── tests/                       # node/ + graph/ + evals/ + office_agent/ (fully mocked) and chains/ (integration, key-gated)
 ├── .github/workflows/ci.yml     # CI: fully mocked suites + lint — no API keys
 ├── pyproject.toml               # uv project config (deps, ruff, mypy, pytest)

@@ -1,24 +1,25 @@
 """
-evals/office_assist/run_office_assist_eval.py — offline validator + optional
-real-model runner for the Office Agent LLM email-digest assist.
+evals/office_agent/llm_assist/run_email_digest_eval.py — offline validator +
+optional real-model runner for the Office Agent LLM email-digest assist.
 
-Separate from the RAG eval harness: `evals/run_eval.py` and `evals/questions.jsonl`
-are untouched. Two modes:
+Separate from the RAG eval harness: `evals/enterprise_rag/run_eval.py` and
+`evals/enterprise_rag/questions.jsonl` are untouched. Two modes:
 
-  --validate-only : offline and keys-free. Load and schema-check `cases.jsonl`
-                    only; make no LLM call. Safe to run anywhere.
+  --validate-only : offline and keys-free. Load and schema-check
+                    `email_digest_cases.jsonl` only; make no LLM call. Safe to run
+                    anywhere.
   (default / full): call the real gpt-5-mini digest chain per row and check
                     grounding, action-item id recall against the hand labels, and
                     the "no invented deadline" rule. Requires `OPENAI_API_KEY` and
                     is APPROVAL-GATED — same rule as the RAG eval: never run a
                     full / real-model eval without explicit user approval.
 
-No history / delta machinery in Phase 1. `office_agent` is imported lazily inside
-the full runner so `--validate-only` stays import-light and keys-free.
+No history / delta machinery. `office_agent` is imported lazily inside the full
+runner so `--validate-only` stays import-light and keys-free.
 
 Usage:
-    uv run python evals/office_assist/run_office_assist_eval.py --validate-only
-    uv run python evals/office_assist/run_office_assist_eval.py --output evals/office_assist/results.md
+    uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --validate-only
+    uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --output evals/office_agent/llm_assist/email_digest_results.md
 """
 
 import argparse
@@ -26,7 +27,7 @@ import json
 import sys
 from pathlib import Path
 
-CASES_PATH = Path(__file__).resolve().parent / "cases.jsonl"
+CASES_PATH = Path(__file__).resolve().parent / "email_digest_cases.jsonl"
 
 # Required keys and their expected JSON types for each dataset row.
 _REQUIRED_FIELDS: dict[str, type | tuple[type, ...]] = {
@@ -97,7 +98,7 @@ def _run_full(output: str | None) -> int:
     `OPENAI_API_KEY`. Imports `office_agent` lazily so the keys-free
     `--validate-only` path never imports the LLM stack.
 
-    Environment / error handling (see `evals/office_assist/_env.py`):
+    Environment / error handling (see `evals/office_agent/llm_assist/_env.py`):
       - CONFIG_ERROR — a missing/blank `OPENAI_API_KEY` is detected up front, before
         any case runs, any client is built, or the LLM stack is imported. Fails
         fast, writes no report, exits non-zero.
@@ -110,8 +111,8 @@ def _run_full(output: str | None) -> int:
     """
 
     # Make the repository root importable when run as a script.
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from evals.office_assist import _env
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from evals.office_agent.llm_assist import _env
 
     # Full-mode precondition: require OPENAI_API_KEY before importing the LLM
     # stack, constructing any client, or running any case.

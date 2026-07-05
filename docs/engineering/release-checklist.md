@@ -84,7 +84,8 @@ Version map to enforce everywhere:
 ## 7. Safety / scope checks
 
 - [ ] **No secrets** — no API keys, tokens, or `.env` contents committed.
-- [ ] **No generated artifacts** — nothing under `evals/history/*.json` or other
+- [ ] **No generated artifacts** — nothing under `evals/enterprise_rag/history/*.json`
+  (or the gitignored `evals/office_agent/llm_assist/*_results.md`) or other
   ignored/generated paths force-added by accident.
 - [ ] **No accidental `enterprise_rag` changes** — graph logic, prompts, model
   names, state schema, corpus, and eval semantics unchanged unless the release is

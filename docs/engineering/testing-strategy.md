@@ -101,7 +101,7 @@ substrings, fallback-policy echoes).
 - **Not relevant** for Office Agent work or docs/docstring changes — those do not
   touch the RAG graph. The Office Agent is validated by `tests/office_agent/`.
 - The full eval run needs real API keys and is **excluded from CI**. **Never run
-  the full eval without explicit approval**; `evals/run_eval.py --validate-only`
+  the full eval without explicit approval**; `evals/enterprise_rag/run_eval.py --validate-only`
   checks the dataset with no API calls and is safe.
 
 ## Recommended pre-PR commands
