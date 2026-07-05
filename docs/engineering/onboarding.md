@@ -73,7 +73,7 @@ uv run python scripts/demo_office_agent_v1.py --include-knowledge   # also hits 
 ```
 
 For the full capability list, routing precedence, and example requests, see the
-dedicated demo / usage doc: [`docs/office-agent-v1-demo.md`](../office-agent-v1-demo.md).
+dedicated demo / usage doc: [`office_agent/README.md`](../../office_agent/README.md).
 
 ## Run the tests
 
@@ -136,7 +136,7 @@ without regressing anything:
 5. **Add fully mocked tests** in `tests/office_agent/` (patch the Knowledge
    adapter; never call external services). Include a no-mutation assertion if the
    tool simulates an action.
-6. **Update the docs** — [`docs/office-agent-v1-demo.md`](../office-agent-v1-demo.md),
+6. **Update the docs** — [`office_agent/README.md`](../../office_agent/README.md),
    `README.md`, and `structure.md` — and add release notes if it ships as a new
    version.
 

@@ -47,14 +47,14 @@ uv run mypy
 
 ## 5. Docs consistency checks
 
-- [ ] `README.md`, `structure.md`, `docs/office-agent-v1-demo.md`, and the release
+- [ ] `README.md`, `structure.md`, `office_agent/README.md`, and the release
   notes agree on the capability count (**seven**) and the version map.
-- [ ] `docs/office-agent-v1-demo.md` still exists and is referenced from the docs
+- [ ] `office_agent/README.md` still exists and is referenced from the docs
   that should link it.
 
 ```powershell
-Test-Path docs/office-agent-v1-demo.md
-git grep -n "office-agent-v1-demo"
+Test-Path office_agent/README.md
+git grep -n "office_agent/README.md"
 ```
 
 ## 6. Stale version-wording checks
@@ -105,7 +105,7 @@ git diff --name-only origin/main            # review every path in the diff
 - [ ] Validation results pasted (tests, ruff, format check, mypy, demo).
 - [ ] Confirmation that `enterprise_rag`, tests, and mock data are unchanged (when
   applicable).
-- [ ] Links to the relevant docs (`docs/office-agent-v1-demo.md`, release notes).
+- [ ] Links to the relevant docs (`office_agent/README.md`, release notes).
 
 ## 9. Tag checklist (for a versioned release)
 

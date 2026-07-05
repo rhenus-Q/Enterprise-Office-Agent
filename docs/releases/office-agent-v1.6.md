@@ -125,5 +125,5 @@ next steps if the Office Agent were taken toward production:
 
 ## Detailed usage
 
-See [`docs/office-agent-v1-demo.md`](../office-agent-v1-demo.md) for the full
+See [`office_agent/README.md`](../../office_agent/README.md) for the full
 capability list, routing precedence, the programmatic API, and example requests.

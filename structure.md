@@ -56,12 +56,12 @@ The repository is organized as named capability modules (see
   fully mocked/deterministic (the Knowledge adapter is patched), and the
   `enterprise_rag` mocked suites patch every lazy client seam.
 - The dedicated Office Agent demo / usage doc is
-  [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md).
+  [`office_agent/README.md`](office_agent/README.md).
 - **Repo root** — `main.py` (thin CLI over the engine), `tests/`, `evals/`, and
   `docs/adr/` are repository-level. Root docs
   (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) stay repo-level;
   module-specific usage lives in `enterprise_rag/README.md` and
-  `docs/office-agent-v1-demo.md`.
+  `office_agent/README.md`.
 
 The numbered sections below (§1–§15) describe the `enterprise_rag` engine itself;
 the Office Agent module is documented in its own section at the end.
@@ -791,7 +791,7 @@ ordering.
 is local-only and deterministic by default (`--include-knowledge` additionally
 exercises the real RAG pipeline, which needs the `enterprise_rag` setup and API
 keys). Full usage and the capability list are in
-[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md); the architecture
+[`office_agent/README.md`](office_agent/README.md); the architecture
 decisions behind the module are
 [ADR 015](docs/adr/office_agent/015-office-agent-v1-architecture.md) (the original
 five-capability v1) and
