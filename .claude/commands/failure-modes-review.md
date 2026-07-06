@@ -40,7 +40,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -186,13 +186,13 @@ Inspect these areas as needed.
 * `evals/enterprise_rag/questions.jsonl`
 * `evals/enterprise_rag/README.md`
 * `evals/office_agent/llm_assist/`
-* `tests/node/`
-* `tests/graph/`
-* `tests/evals/`
+* `tests/enterprise_rag/nodes/`
+* `tests/enterprise_rag/graph/`
+* `tests/enterprise_rag/evals/`
 
-Inspect `tests/chains/` only if needed to assess failure-related test coverage.
+Inspect `tests/enterprise_rag/chains/` only if needed to assess failure-related test coverage.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 ### Tooling and CI
 

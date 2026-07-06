@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/enterprise_rag/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/enterprise_rag/nodes:*), Bash(uv run python -m pytest tests/enterprise_rag/nodes:*), Bash(uv run pytest tests/enterprise_rag/graph:*), Bash(uv run python -m pytest tests/enterprise_rag/graph:*), Bash(uv run pytest tests/enterprise_rag/evals:*), Bash(uv run python -m pytest tests/enterprise_rag/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/enterprise_rag/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -206,7 +206,7 @@ Unless the plan or spec explicitly approves an exception:
 * Do not modify `.env` or `.env.example`.
 * Do not run full eval.
 * Do not run `ingestion.py`.
-* Do not run `tests/chains/`.
+* Do not run `tests/enterprise_rag/chains/`.
 * Do not run API-key-requiring commands.
 * Do not commit automatically.
 * Do not create or switch branches.
@@ -230,10 +230,10 @@ invocation — the permission match then depends on which directory appears firs
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
-uv run pytest tests/node/ -q
-uv run pytest tests/graph/ -q
-uv run pytest tests/evals/ -q
-uv run pytest tests/office_agent/ -q
+uv run pytest tests/enterprise_rag/nodes/ -q
+uv run pytest tests/enterprise_rag/graph/ -q
+uv run pytest tests/enterprise_rag/evals/ -q
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -q
 uv run python evals/enterprise_rag/run_eval.py --validate-only
 ```
 

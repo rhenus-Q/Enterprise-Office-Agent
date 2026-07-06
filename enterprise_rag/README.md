@@ -103,11 +103,13 @@ State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with thirteen 
 ## Module Structure
 
 The `enterprise_rag` package holds the whole RAG engine. The CLI entry point
-(`main.py`), the RAG test suites (`tests/node/`, `tests/graph/`, `tests/evals/`,
-`tests/chains/`), the Enterprise RAG behavioral eval harness (`evals/enterprise_rag/run_eval.py`
+(`main.py`), the RAG test suites (`tests/enterprise_rag/nodes/`, `tests/enterprise_rag/graph/`,
+`tests/enterprise_rag/evals/`, `tests/enterprise_rag/chains/`), the Enterprise RAG behavioral eval
+harness (`evals/enterprise_rag/run_eval.py`
 + `evals/enterprise_rag/questions.jsonl`), and the Architecture Decision Records (`docs/adr/`)
 live at the **repo root** and target this module. The repo root also holds the
-Office Agent's own tests (`tests/office_agent/`, `tests/office_chains/`) and
+Office Agent's own tests (`tests/office_agent/`, including the gated
+`tests/office_agent/integration/`) and
 assist evals (`evals/office_agent/llm_assist/`), which target `office_agent/` instead — see
 the [repo-level README](../README.md) for the full repository layout.
 
@@ -450,38 +452,40 @@ sources, so a sources list never implies a failed answer was verified.
 
 ```powershell
 # Unit tests — fully mocked, NO API keys required
-uv run pytest tests/node/ -v
+uv run pytest tests/enterprise_rag/nodes/ -v
 
 # Graph routing / privacy-toggle tests — fully mocked, NO API keys required
-uv run pytest tests/graph/ -v
+uv run pytest tests/enterprise_rag/graph/ -v
 
 # Eval-harness helper tests — fully mocked, NO API keys required
-uv run pytest tests/evals/ -v
+uv run pytest tests/enterprise_rag/evals/ -v
 
 # RAG chain integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
-uv run pytest tests/chains/ -v
+uv run pytest tests/enterprise_rag/chains/ -v
 
 # Whole suite
 uv run pytest -v
 ```
 
 The Office Agent has its own suites at the repo root — the fully mocked
-`tests/office_agent/` (CI-safe) and the key-gated `tests/office_chains/` (real
+`tests/office_agent/` (CI-safe) and the key-gated `tests/office_agent/integration/` (real
 `gpt-5-mini` for the two LLM assists) — documented in the
 [Office Agent demo doc](../office_agent/README.md), not here.
 
 CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs two parallel
 jobs on every push and pull request — both keys-free:
 
-* **`mocked-tests`**: the fully mocked suites (`tests/node/`, `tests/graph/`,
-  `tests/evals/`, and the Office Agent's `tests/office_agent/`), which also
+* **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/`,
+  `tests/enterprise_rag/graph/`, `tests/enterprise_rag/evals/`, and the Office
+  Agent's `tests/office_agent/` excluding its gated `integration/`), which also
   doubles as a regression test that imports stay side-effect-free.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy`. The mypy scope is
   the `[tool.mypy]` `files` list in `pyproject.toml`: the engine-API surface
   (`engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py`) plus the
   graph `nodes/` and `chains/` packages, plus the whole `office_agent/` package.
 
-The key-gated integration suites (`tests/chains/`, `tests/office_chains/`) and
+The key-gated integration suites (`tests/enterprise_rag/chains/`,
+`tests/office_agent/integration/`) and
 the full eval runs are deliberately excluded from CI.
 
 ## Dev hygiene
@@ -542,7 +546,7 @@ uv run python evals/enterprise_rag/run_eval.py --limit 3
 ```
 
 The harness's pure helpers (loading, validation, checks, metrics, rendering)
-are unit-tested without API calls in `tests/evals/`. See
+are unit-tested without API calls in `tests/enterprise_rag/evals/`. See
 [`evals/enterprise_rag/README.md`](../evals/enterprise_rag/README.md) for the
 dataset schema and check rules.
 
@@ -559,7 +563,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 
 ### Mocked unit tests vs. API-based chain tests
 
-|                | `tests/node/` + `tests/graph/` + `tests/evals/` (unit)                                                                       | `tests/chains/` (integration)                                                                 |
+|                | `tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` (unit)                                                                       | `tests/enterprise_rag/chains/` (integration)                                                                 |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model                      |
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories           | Real OpenAI API calls                                                                         |

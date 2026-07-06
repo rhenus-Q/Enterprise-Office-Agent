@@ -38,7 +38,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -180,11 +180,11 @@ Inspect these areas as needed.
 
 ### Tests
 
-* `tests/node/`
-* `tests/graph/`
-* `tests/evals/`
+* `tests/enterprise_rag/nodes/`
+* `tests/enterprise_rag/graph/`
+* `tests/enterprise_rag/evals/`
 
-Do not inspect `tests/chains/` unless the user explicitly asks.
+Do not inspect `tests/enterprise_rag/chains/` unless the user explicitly asks.
 
 ### Claude command workflow
 
@@ -395,7 +395,7 @@ Explicitly assess whether these are protected:
 * fallback policy semantics
 * full eval
 * `ingestion.py`
-* `tests/chains/`
+* `tests/enterprise_rag/chains/`
 
 ## 7. Observability architecture review
 

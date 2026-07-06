@@ -42,7 +42,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -294,7 +294,7 @@ Every generated command must protect these project-critical areas unless the com
 * privacy mode
 * full eval
 * `ingestion.py`
-* `tests/chains/`
+* `tests/enterprise_rag/chains/`
 * API-key-requiring commands
 * commits
 * branch creation or switching

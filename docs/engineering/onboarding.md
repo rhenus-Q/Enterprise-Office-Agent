@@ -26,7 +26,7 @@ office_agent/           # Office-workflow agent: deterministic router + base too
   llm_assist/           #   Optional, default-off LLM assists (email digest + briefing narrative)
   mock_data/            #   Fictional AcmeCorp JSON (read-only, deterministic)
 scripts/                # Local demos (demo_office_agent_v1.py)
-tests/                  # node/ graph/ evals/ office_agent/ (mocked) + chains/ office_chains/ (key-gated real-model)
+tests/                  # enterprise_rag/{nodes,graph,evals} + office_agent/ (mocked) + enterprise_rag/chains/ & office_agent/integration/ (key-gated real-model)
 evals/                  # Behavioral evals (not in CI): enterprise_rag/ + office_agent/llm_assist/
 docs/                   # ADRs (adr/), engineering docs, release notes
 ```
@@ -97,12 +97,12 @@ dedicated demo / usage doc: [`office_agent/README.md`](../../office_agent/README
 
 ```powershell
 # Fully mocked suites — NO API keys required
-uv run pytest tests/node/ tests/graph/ tests/evals/ tests/office_agent/ -v
+uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -v
 
 # Office Agent suite only
-uv run pytest tests/office_agent/ -v
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v
 
-# Whole suite (chains/ integration tests are skipped without OPENAI_API_KEY)
+# Whole suite (integration tests are skipped without OPENAI_API_KEY)
 uv run pytest -v
 ```
 
@@ -128,7 +128,7 @@ uv run mypy                    # type-check the scoped engine-API surface
 | enterprise_rag logic | [`enterprise_rag/graph/`](../../enterprise_rag/graph/) (engine, nodes, chains, graph) |
 | RAG corpus + ingestion | [`enterprise_rag/data/`](../../enterprise_rag/data/) + [`enterprise_rag/ingestion.py`](../../enterprise_rag/ingestion.py) |
 | Office LLM assists (optional, default-off) | [`office_agent/llm_assist/`](../../office_agent/llm_assist/) — email digest + briefing narrative; `config.py` reads `OFFICE_LLM_ENABLED` / `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS` |
-| Office Agent tests | [`tests/office_agent/`](../../tests/office_agent/) (mocked/offline) and [`tests/office_chains/`](../../tests/office_chains/) (gated real-model assist chains) |
+| Office Agent tests | [`tests/office_agent/`](../../tests/office_agent/) (mocked/offline) and [`tests/office_agent/integration/`](../../tests/office_agent/integration/) (gated real-model assist chains) |
 | Office assist behavioral evals | [`evals/office_agent/llm_assist/`](../../evals/office_agent/llm_assist/) — runners + `*_cases.jsonl` datasets |
 | Why the assists are shaped this way | [ADR 017](../adr/office_agent/017-office-agent-llm-assist-email-digest.md) (email digest), [ADR 018](../adr/office_agent/018-office-agent-llm-assist-daily-briefing.md) (briefing narrative) |
 
@@ -186,7 +186,7 @@ the two existing assists use ([`office_agent/llm_assist/`](../../office_agent/ll
    `llm_assist_error` stop reason.
 6. **Test it three ways** — mocked/offline tests in `tests/office_agent/`
    (including the flag-off guarantee, patched at the LLM seam), a gated
-   real-model chain test in `tests/office_chains/`, and a behavioral eval under
+   real-model chain test in `tests/office_agent/integration/`, and a behavioral eval under
    `evals/office_agent/llm_assist/`.
 
 ## What not to touch casually
@@ -211,7 +211,7 @@ Run these from the repo root before opening a PR (see
 ```powershell
 git status --short
 git diff --check
-uv run pytest tests/office_agent/ -v          # or the full suite: uv run pytest -v
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v   # or the full suite: uv run pytest -v
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy

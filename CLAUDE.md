@@ -84,12 +84,14 @@ type, never the message.
 | `enterprise_rag/graph/consts.py` | Node-name string constants (`RETRIEVE`, `GRADE_DOCUMENTS`, `GENERATE`, `WEBSEARCH`, `WEB_SEARCH_DISABLED_NOTICE`) and `stop_reason` values. |
 | `enterprise_rag/graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `web_fallback_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`, `budget_exhausted_notice`, `tool_error_notice`) that record `stop_reason`, and `clear_transient_tool_error` (success-path pass-through: clears a stale transient `tool_error` once both gates pass). |
 | `enterprise_rag/graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. |
-| `tests/node/` | Unit tests for node functions. Fully mocked — no API keys needed. |
-| `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
-| `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
-| `tests/evals/` | Mocked unit tests for the eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
-| `tests/office_agent/` | Unit tests for the Office Agent (router, engine dispatch, each mock tool, and the LLM email-digest assist mocked at its seam). Fully mocked / deterministic — no OpenAI, Tavily, Chroma, or external services; no `enterprise_rag` graph call (the knowledge adapter is patched) and no real digest call. No API keys needed. |
-| `tests/office_chains/` | Gated real-model test for the Office Agent LLM email digest (calls the real `gpt-5-mini` — needs `OPENAI_API_KEY`, marked `requires_openai`). Kept out of `tests/office_agent/` so that suite stays keys-free; gated like `tests/chains/`. |
+| `tests/` | Test tree mirrors the two source modules: `tests/enterprise_rag/` and `tests/office_agent/`, with `tests/conftest.py` shared at the root. |
+| `tests/enterprise_rag/nodes/` | Unit tests for `enterprise_rag` node functions. Fully mocked — no API keys needed. |
+| `tests/enterprise_rag/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
+| `tests/enterprise_rag/chains/` | Integration tests for the `enterprise_rag` chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
+| `tests/enterprise_rag/evals/` | Mocked unit tests for the Enterprise RAG eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
+| `tests/office_agent/` | Unit tests for the Office Agent (router, engine dispatch, each mock tool, and the LLM email-digest / briefing assists mocked at their seams). Fully mocked / deterministic — no OpenAI, Tavily, Chroma, or external services; no `enterprise_rag` graph call (the knowledge adapter is patched) and no real assist call. No API keys needed. |
+| `tests/office_agent/evals/` | Mocked unit tests for the two Office Agent LLM-assist eval runners (email digest + briefing narrative env loading and CONFIG/INFRA/EVAL_FAIL classification). No API keys needed. |
+| `tests/office_agent/integration/` | Gated real-model tests for the Office Agent LLM assists (email digest + briefing narrative; call the real `gpt-5-mini` — need `OPENAI_API_KEY`, marked `requires_openai`). Kept out of the mocked `tests/office_agent/` unit suite so it stays keys-free; gated like `tests/enterprise_rag/chains/`. |
 | `evals/` | Evaluation harnesses, organized by owning module (root `evals/README.md` is a short navigation page). `evals/enterprise_rag/` is the **Enterprise RAG behavioral eval**; `evals/office_agent/llm_assist/` evaluates only the two optional Office Agent LLM assists (email digest + briefing narrative). Not part of CI. |
 | `evals/enterprise_rag/` | Behavioral eval harness for the RAG graph: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `enterprise_rag.graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report), and `history/`. Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. |
 | `evals/enterprise_rag/history/` | Append-only, metadata-only eval history records (one JSON per full run; never answer text, `page_content`, prompts, or raw state). The harness only writes new records — never edits/deletes. `evals/enterprise_rag/history/*.json` is gitignored by default (the dir is tracked via `.gitkeep`); force-add (`git add -f`) to share a known-good baseline. |
@@ -149,17 +151,17 @@ type, never the message.
   - **`office_agent` tests stay fully mocked / CI-safe** — no OpenAI, Tavily, Chroma, or external
     services, and no real `enterprise_rag` graph call (patch the knowledge adapter) and no real
     LLM-assist call (patch the email digest / briefing narrative at their seams). The real-model
-    assist tests (one per assist) live in `tests/office_chains/` (gated by `requires_openai`,
-    like `tests/chains/`), never in `tests/office_agent/`.
+    assist tests (one per assist) live in `tests/office_agent/integration/` (gated by `requires_openai`,
+    like `tests/enterprise_rag/chains/`), never in the mocked `tests/office_agent/` unit suite.
 
 ## 4. Testing Rules
 
 - **Unit tests mock all external dependencies** via `monkeypatch`, targeting the lazy seam
   (e.g. patch `get_node_retriever`, `get_web_search_tool`, `get_retrieval_grader`,
   `generate_answer`).
-- **Node tests (`tests/node/`) must never call real OpenAI, Tavily, Chroma, or embeddings.**
+- **Node tests (`tests/enterprise_rag/nodes/`) must never call real OpenAI, Tavily, Chroma, or embeddings.**
   They must pass with no API keys.
-- **Integration tests (`tests/chains/`) call real services** and require `OPENAI_API_KEY`.
+- **Integration tests (`tests/enterprise_rag/chains/`) call real services** and require `OPENAI_API_KEY`.
   Label such tests clearly and gate them with the `requires_openai` marker from `conftest.py`.
 - **Do not run tests unless explicitly asked.** Writing tests ≠ running them.
 
@@ -195,10 +197,10 @@ uv run python -m enterprise_rag.ingestion
 uv run python main.py
 
 # Node unit tests — fully mocked, NO API keys required
-uv run pytest tests/node/ -v
+uv run pytest tests/enterprise_rag/nodes/ -v
 
 # Chain integration tests — real gpt-5-mini, needs OPENAI_API_KEY
-uv run pytest tests/chains/ -v
+uv run pytest tests/enterprise_rag/chains/ -v
 
 # Whole suite
 uv run pytest -v

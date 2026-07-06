@@ -67,6 +67,6 @@ explicit approval. The generated `*_results.md` reports are gitignored.
 
 Full runs need real API keys, cost money, and are nondeterministic. CI runs only
 the fully mocked suites. Each runner's env loading and error classification are
-covered keys-free in `tests/evals/` (`test_office_assist_env.py`,
+covered keys-free in `tests/office_agent/evals/` (`test_office_assist_env.py`,
 `test_office_assist_eval_runner.py`, `test_briefing_assist_eval_runner.py`); the
-gated real-model assist tests live in `tests/office_chains/`.
+gated real-model assist tests live in `tests/office_agent/integration/`.

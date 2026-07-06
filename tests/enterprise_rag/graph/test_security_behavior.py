@@ -18,7 +18,7 @@ Scope and honest limits (see docs/roadmap/spec/security-behavior-tests-injection
   ungraded / relevance-failed content is dropped, and that routing / counters /
   stop_reason behavior stays correct.
 - Sanitizing a malicious *rewriter output* is the query_rewriter prompt/chain's
-  job, pinned separately in tests/node/test_chain_security_prompts.py. The
+  job, pinned separately in tests/enterprise_rag/nodes/test_chain_security_prompts.py. The
   rewriter test here pins the *outbound surface* only — what content leaves the
   system — not graph-level sanitization.
 """

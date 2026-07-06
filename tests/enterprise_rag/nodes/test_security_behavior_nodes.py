@@ -1,7 +1,7 @@
 """
 Node-level security behavior tests (graph-level containment, mocked seams).
 
-Complements tests/graph/test_security_behavior.py with the two cases that are
+Complements tests/enterprise_rag/graph/test_security_behavior.py with the two cases that are
 clearest as single-node units:
 
 - web_search drops a payload-bearing result the (mocked) grader marks irrelevant

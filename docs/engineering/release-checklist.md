@@ -29,12 +29,12 @@ uv run python scripts/demo_office_agent_v1.py
 ## 3. Tests
 
 ```powershell
-uv run pytest tests/office_agent/ -v      # Office Agent suite
-uv run pytest -v                          # full suite (chains/ skips without keys)
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v   # Office Agent suite
+uv run pytest -v                          # full suite (integration tests skip without keys)
 ```
 
-- [ ] `tests/office_agent/` passes (fully mocked, no keys).
-- [ ] Full suite passes (`tests/chains/` and `tests/office_chains/` skip without
+- [ ] `tests/office_agent/` (excl. `integration/`) passes (fully mocked, no keys).
+- [ ] Full suite passes (`tests/enterprise_rag/chains/` and `tests/office_agent/integration/` skip without
   `OPENAI_API_KEY`).
 
 ## 3a. Office LLM-assist validation (optional, mostly key-gated)
@@ -56,14 +56,14 @@ uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --val
 ```
 
 - [ ] **Only with explicit approval and a real `OPENAI_API_KEY`:** the gated
-  real-model chain tests (`uv run pytest tests/office_chains/ -v`) and the full
+  real-model chain tests (`uv run pytest tests/office_agent/integration/ -v`) and the full
   assist behavioral evals (the same runners **without** `--validate-only`).
 
 ## 3b. Enterprise RAG real-model validation (key-gated)
 
 - [ ] `uv run python evals/enterprise_rag/run_eval.py --validate-only` passes
   (keys-free).
-- [ ] **Only with explicit approval and real keys:** `tests/chains/` and the full
+- [ ] **Only with explicit approval and real keys:** `tests/enterprise_rag/chains/` and the full
   RAG behavioral eval.
 
 ## 4. Lint, format check, mypy

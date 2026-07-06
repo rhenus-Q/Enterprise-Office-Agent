@@ -49,5 +49,6 @@ the case schemas and check rules.
 
 No full eval runs in CI: they need real API keys, cost money, and are
 nondeterministic. CI runs only the fully mocked suites. Each harness's pure
-helpers are unit-tested without API calls in `tests/evals/`, and every
+helpers are unit-tested without API calls under each module's `tests/.../evals/`
+(`tests/enterprise_rag/evals/` and `tests/office_agent/evals/`), and every
 `--validate-only` path is safe everywhere.

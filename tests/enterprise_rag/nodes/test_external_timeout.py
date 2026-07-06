@@ -6,7 +6,7 @@ into enterprise_rag/ingestion.py's OpenAIEmbeddings construction).
 Fully mocked and keys-free: OpenAIEmbeddings and Chroma are patched at the
 ingestion module seam, so no real embeddings/vector-store client is built and no
 network call is made. Mirrors the LLM-timeout config tests in
-tests/graph/test_budget.py.
+tests/enterprise_rag/graph/test_budget.py.
 """
 
 import importlib

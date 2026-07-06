@@ -6,7 +6,7 @@ format_documents wraps each retrieved document's page_content in explicit
 [BEGIN/END UNTRUSTED DOCUMENT n] markers so the model can tell sources apart
 and treat the enclosed text as untrusted data, not instructions. These are
 pure-function tests: importing format_documents constructs no LLM client, so
-they need no API key and run in the standard tests/node validation set.
+they need no API key and run in the standard tests/enterprise_rag/nodes validation set.
 """
 
 from langchain_core.documents import Document

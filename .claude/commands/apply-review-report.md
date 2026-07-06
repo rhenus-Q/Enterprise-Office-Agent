@@ -1,7 +1,7 @@
 ---
 description: Apply scoped fixes from a project-level review report
 argument-hint: Review report path, or review topic/focus such as "failure-modes overall"
-allowed-tools: Read, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(git diff --stat:*), Bash(uv run python -m py_compile:*), Bash(uv run pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run pytest tests/evals:*)
+allowed-tools: Read, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(git diff --stat:*), Bash(uv run python -m py_compile:*), Bash(uv run pytest tests/enterprise_rag/nodes:*), Bash(uv run pytest tests/enterprise_rag/graph:*), Bash(uv run pytest tests/enterprise_rag/evals:*)
 ---
 You are applying scoped fixes from a completed project-level review report.
 
@@ -33,7 +33,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -203,10 +203,10 @@ If applying a timeout, budget, or failure-handling fix:
 If applying a test-coverage fix:
 
 * add the smallest behavioral test that locks the reviewed risk
-* add the test to the most appropriate existing test file via `Edit` (under `tests/node/`, `tests/graph/`, or `tests/evals/`)
+* add the test to the most appropriate existing test file via `Edit` (under `tests/enterprise_rag/nodes/`, `tests/enterprise_rag/graph/`, or `tests/enterprise_rag/evals/`)
 * if the fix would genuinely require a new test module, stop and ask the user — this command edits existing files via `Edit` and does not create new files
 * do not add API-key-requiring tests by default
-* do not modify `tests/chains/`
+* do not modify `tests/enterprise_rag/chains/`
 * do not make brittle tests that depend on implementation details unnecessarily
 
 If applying a documentation fix:
@@ -231,14 +231,14 @@ Allowed validation examples:
 
 ```powershell
 uv run python -m py_compile graph/engine.py graph/config.py
-uv run pytest tests/graph -q
-uv run pytest tests/node -q
-uv run pytest tests/evals -q
+uv run pytest tests/enterprise_rag/graph -q
+uv run pytest tests/enterprise_rag/nodes -q
+uv run pytest tests/enterprise_rag/evals -q
 ```
 
 Do not run full eval.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
