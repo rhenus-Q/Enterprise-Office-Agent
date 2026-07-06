@@ -12,8 +12,9 @@ network**, so anyone (and CI) can validate the repository offline.
 | [`tests/node/`](../../tests/node/) | Each `enterprise_rag` node's in/out behavior, the web-result relevance gate, defensive parsing, and graceful degradation | None — every dependency mocked at its lazy `get_*()` seam |
 | [`tests/graph/`](../../tests/graph/) | The routing functions, privacy toggle, stop reasons, budgets/counters, caveat formatting, and compiled-graph end-to-end runs | None — fully mocked |
 | [`tests/evals/`](../../tests/evals/) | The eval harness's pure helpers (dataset validation, per-row checks, metrics, rendering) | None — pure functions |
-| [`tests/office_agent/`](../../tests/office_agent/) | The Office Agent: router, engine dispatch, and each mock tool | None — fully mocked/deterministic; Knowledge adapter patched |
-| [`tests/chains/`](../../tests/chains/) | The six LCEL chains against the real `gpt-5-mini` | **Real OpenAI API** — gated by the `requires_openai` marker |
+| [`tests/office_agent/`](../../tests/office_agent/) | The Office Agent: router, engine dispatch, each mock tool, **and the two LLM assists** — flag-off byte-for-byte guarantee, grounding validation, and deterministic fallback | None — fully mocked/deterministic; Knowledge adapter and the LLM assists patched at their seams |
+| [`tests/chains/`](../../tests/chains/) | The six **Enterprise RAG** LCEL chains against the real `gpt-5-mini` | **Real OpenAI API** — `requires_openai`-gated; excluded from keys-free CI |
+| [`tests/office_chains/`](../../tests/office_chains/) | The two **Office Agent LLM-assist** chains (email digest + briefing narrative) against the real `gpt-5-mini` | **Real OpenAI API** — `requires_openai`-gated; excluded from keys-free CI |
 
 ## Unit tests
 
@@ -71,9 +72,10 @@ repo's `mock_data/` files.
   embeddings.** They pass with no API keys.
 - **Do not** introduce a real network call into these suites. If a new capability
   needs an external dependency, put it behind a lazy factory and patch that seam.
-- The only suite that calls real services is `tests/chains/`, which is gated by
-  the `requires_openai` marker and excluded from CI. **Do not run it without
-  explicit approval.**
+- The suites that call real services are `tests/chains/` (Enterprise RAG chains)
+  and `tests/office_chains/` (the two Office Agent LLM-assist chains). Both are
+  gated by the `requires_openai` marker, need `OPENAI_API_KEY`, and are excluded
+  from keys-free CI. **Do not run either without explicit approval.**
 
 ## Full-suite validation
 
@@ -85,24 +87,66 @@ uv run pytest tests/node/ tests/graph/ tests/evals/ tests/office_agent/ -v
 uv run pytest -v
 ```
 
-The v1.6 baseline: **137 passed** in `tests/office_agent/` and **592 passed**
-across the full suite (chains/ skipped without keys).
+The fully mocked suites pass with no API keys; the key-gated `tests/chains/` and
+`tests/office_chains/` suites are skipped unless `OPENAI_API_KEY` is set.
 
-## When evals are relevant — and when they are not
+## Behavioral evals
 
-The behavioral eval harness in [`evals/`](../../evals/) is **separate from the
-test suites**. It runs a 24-row dataset through the **real** `enterprise_rag`
-compiled graph (`enterprise_rag.graph.engine.answer_question()`) and scores
-deterministic checks (stop reasons, source provenance, counters, expected
-substrings, fallback-policy echoes).
+Behavioral evals live under [`evals/`](../../evals/), are **separate from the test
+suites**, and are **excluded from CI**. There are two, one per module; each has a
+keys-free `--validate-only` mode and an approval-gated full run.
 
-- **Relevant** when you change `enterprise_rag` behavior (routing, prompts,
-  grading, fallback policy) and want to measure the effect on answer quality.
-- **Not relevant** for Office Agent work or docs/docstring changes — those do not
-  touch the RAG graph. The Office Agent is validated by `tests/office_agent/`.
-- The full eval run needs real API keys and is **excluded from CI**. **Never run
-  the full eval without explicit approval**; `evals/enterprise_rag/run_eval.py --validate-only`
-  checks the dataset with no API calls and is safe.
+### Enterprise RAG behavioral eval
+
+[`evals/enterprise_rag/`](../../evals/enterprise_rag/) runs a 24-row dataset
+through the **real** `enterprise_rag` compiled graph
+(`enterprise_rag.graph.engine.answer_question()`) and scores deterministic checks
+(stop reasons, source provenance, counters, expected substrings, fallback-policy
+echoes). Relevant when you change `enterprise_rag` behavior (routing, prompts,
+grading, fallback policy).
+
+```powershell
+uv run python evals/enterprise_rag/run_eval.py --validate-only   # keys-free
+```
+
+### Office Agent LLM-assist behavioral evals
+
+[`evals/office_agent/llm_assist/`](../../evals/office_agent/llm_assist/) evaluates
+**only** the two optional LLM assists (the deterministic tools are covered by
+`tests/office_agent/`). Relevant when you change an assist's prompt, grounding, or
+output shape.
+
+- **Email Digest** — action-item recall, deadline correctness, no invented
+  deadlines, email-id grounding, and priority-order validity.
+- **Daily Briefing Narrative** — critical-fact coverage, valid references,
+  cross-source coverage, conflict-counterpart references, and grounded output.
+
+```powershell
+uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --validate-only
+uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --validate-only
+```
+
+A full run of either eval calls the real `gpt-5-mini`, needs `OPENAI_API_KEY`, and
+must **never** run without explicit approval; `--validate-only` is keys-free and
+safe.
+
+## Validation by change type
+
+Always run `ruff check .`, `ruff format --check .`, and `mypy`. Then, by what you
+touched:
+
+- **Docs only** — `git diff --check` and confirm links/paths resolve; no test or
+  eval run required.
+- **Deterministic Office Agent change** (router, base tools, dispatch) —
+  `uv run pytest tests/office_agent/ -v` plus the local demo
+  (`uv run python scripts/demo_office_agent_v1.py`).
+- **Office LLM-assist change** — `uv run pytest tests/office_agent/ -v` (mocked,
+  incl. the flag-off guarantee) **plus** the two assist `--validate-only`
+  commands above. The gated `tests/office_chains/` real-model tests and full
+  assist evals run **only with explicit approval** and a real key.
+- **Enterprise RAG change** —
+  `uv run pytest tests/node/ tests/graph/ tests/evals/ -v`; `tests/chains/` and the
+  full RAG eval run **only with explicit approval**.
 
 ## Recommended pre-PR commands
 
