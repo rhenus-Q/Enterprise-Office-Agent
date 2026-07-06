@@ -1,5 +1,18 @@
 # Office Agent v1.6 — Release Notes
 
+> **Historical snapshot.** These notes describe the repository at the **v1.6
+> release point** (Phase 7 — the seven deterministic capabilities). The two
+> optional, default-off LLM assists — Email Digest and Daily Briefing Narrative
+> ([ADR 017](../adr/office_agent/017-office-agent-llm-assist-email-digest.md) /
+> [ADR 018](../adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)) —
+> were added **after** v1.6 and are **not** part of it. Statements below that the
+> Office Agent is "LLM-free" or that Knowledge Q&A is the only LLM path were true
+> as of v1.6 and **no longer describe the current repository**. For the current
+> state (including the assists) see
+> [`office_agent/README.md`](../../office_agent/README.md); the assists should be
+> owned by a later release note. The validation figures below are the v1.6
+> numbers, preserved as-is.
+
 ## Summary
 
 Office Agent v1.6 completes Phase 7 by adding the **Workflow / Approval Agent**

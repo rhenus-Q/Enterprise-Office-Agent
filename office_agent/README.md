@@ -1,9 +1,22 @@
 # Office Agent — Demo & Usage
 
-The Office Agent is a small, deterministic assistant that routes a free-text
-request to one of its capabilities and returns a structured response. It lives
-in [`office_agent/`](.) and is the office-automation companion to
-the completed [`enterprise_rag`](../enterprise_rag/README.md) engine.
+The Office Agent routes a free-text request to one of its **seven capabilities**
+and returns a structured response. It lives in [`office_agent/`](.) and is the
+office-automation companion to the completed
+[`enterprise_rag`](../enterprise_rag/README.md) engine.
+
+Three things to know up front:
+
+- **Routing and the base tool workflows are deterministic and keyword-based —
+  there is no LLM router.** Six of the seven capabilities run entirely on local,
+  read-only mock data.
+- **Knowledge Q&A** is a thin adapter over the real `enterprise_rag` retrieval +
+  generation pipeline — the one capability that always reaches an LLM.
+- **Email Summary** and **Daily Briefing** can *optionally* layer a bounded,
+  **default-off** LLM assist on top of their deterministic output (see
+  [Optional: LLM assists](#optional-llm-assists-default-off)). These two assists
+  are presentation layers — **not** additional capabilities or intents, and not
+  autonomous agents — and they stay inert unless `OFFICE_LLM_ENABLED` is set.
 
 ## Version map
 
@@ -27,8 +40,10 @@ today:
 > follow-up tasks (mock data is never mutated). See
 > [Workflow / Approval Agent](#workflow--approval-agent) below.
 
-Everything except Knowledge Q&A is **local, mock-data-backed, and LLM-free**, so
-most of it demos with no API keys and no external services.
+By default — while `OFFICE_LLM_ENABLED` is unset/false — everything except
+Knowledge Q&A is **local, mock-data-backed, and LLM-free**, so the default demo
+runs with no API keys and no external services. Setting the flag additionally
+enables the two optional Email Summary / Daily Briefing assists described below.
 
 ## Capabilities and intents
 
@@ -115,8 +130,11 @@ Enterprise RAG pipeline.
   [`enterprise_rag/README.md`](../enterprise_rag/README.md).
 - **Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing,
   Meeting Agent / Meeting Prep, and Workflow / Approval Agent** read static
-  fictional JSON in [`office_agent/mock_data/`](mock_data/). No
-  network, no keys, no LLM.
+  fictional JSON in [`office_agent/mock_data/`](mock_data/) — no network, no
+  keys, no LLM **by default**. When `OFFICE_LLM_ENABLED` is set, Email Summary
+  and Daily Briefing additionally call `gpt-5-mini` for their optional assist and
+  so need `OPENAI_API_KEY` — but **no** Chroma index (that is only for Knowledge
+  Q&A). The other four tools stay local and key-free regardless of the flag.
 
 ## Local-only mock-data design
 
