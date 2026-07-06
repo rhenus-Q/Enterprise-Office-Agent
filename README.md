@@ -144,13 +144,13 @@ capability list, routing precedence, and example requests.
 
 ```powershell
 # Fully mocked suites — NO API keys required
-uv run python -m pytest tests/node/ tests/graph/ tests/evals/ tests/office_agent/ -v
+uv run python -m pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -v
 
 # Office Agent suite only (fully mocked / deterministic)
-uv run python -m pytest tests/office_agent/ -v
+uv run python -m pytest tests/office_agent/ --ignore=tests/office_agent/integration -v
 
 # Integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
-uv run python -m pytest tests/chains/ -v
+uv run python -m pytest tests/enterprise_rag/chains/ tests/office_agent/integration/ -v
 
 # Whole suite
 uv run python -m pytest -v
@@ -169,10 +169,10 @@ uv run python -m mypy          # type-check the scoped engine-API surface
 | Surface | API keys? |
 |---|---|
 | Office Agent local mock tools (Email, Calendar, Tickets/Tasks, Daily Briefing, Meeting Prep, Workflow/Approval) | **No** — local mock data, deterministic, offline |
-| `tests/node/`, `tests/graph/`, `tests/evals/`, `tests/office_agent/`, CI | **No** — fully mocked |
+| `tests/enterprise_rag/` (`nodes/`, `graph/`, `evals/`), `tests/office_agent/` (excl. `integration/`), CI | **No** — fully mocked |
 | `ruff` / `mypy` | **No** |
 | Knowledge Q&A + `enterprise_rag` engine (`main.py`, `--include-knowledge`) | **Yes** — `OPENAI_API_KEY` (and `TAVILY_API_KEY` when web search is enabled) |
-| `tests/chains/` integration tests, the full eval run | **Yes** — real `gpt-5-mini`; skipped/excluded without keys |
+| `tests/enterprise_rag/chains/` + `tests/office_agent/integration/` integration tests, the full eval run | **Yes** — real `gpt-5-mini`; skipped/excluded without keys |
 
 ## Current validation status
 
@@ -188,7 +188,8 @@ The most recent local validation of the v1.6 baseline:
 GitHub Actions CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs
 two parallel keys-free jobs on every push and pull request: **`mocked-tests`**
 (the fully mocked suites) and **`lint`** (`ruff check`, `ruff format --check`, and
-scoped `mypy`). The key-gated `tests/chains/` suite and the full eval run are
+scoped `mypy`). The key-gated `tests/enterprise_rag/chains/` and
+`tests/office_agent/integration/` suites and the full eval run are
 deliberately excluded.
 
 ## Limitations and non-goals

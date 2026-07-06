@@ -152,8 +152,8 @@ def _resolve_web_fallback_policy(state: GraphState) -> str:
     back to config.web_fallback_policy() (the env-driven default), preserving
     the pre-engine behavior. This path is intentional and does not affect
     engine-driven runs — it exists purely for direct-graph / legacy callers.
-    See tests/graph/test_engine.py::test_missing_state_policy_falls_back_to_environment
-    and tests/graph/test_web_fallback_policy.py for the coverage.
+    See tests/enterprise_rag/graph/test_engine.py::test_missing_state_policy_falls_back_to_environment
+    and tests/enterprise_rag/graph/test_web_fallback_policy.py for the coverage.
     """
 
     raw = state.get("web_fallback_policy")

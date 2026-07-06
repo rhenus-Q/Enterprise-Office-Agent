@@ -1,12 +1,13 @@
 """
 Gated real-model test for the Office Agent LLM email-digest chain.
 
-Kept OUT of tests/office_agent/ (which is strictly keys-free) and marked
+Lives under tests/office_agent/integration/, kept OUT of the mocked
+tests/office_agent/ unit suite (which is strictly keys-free) and marked
 `requires_openai`, so it is skipped unless `OPENAI_API_KEY` is set. It calls the
 real gpt-5-mini digest chain over the mock inbox and asserts the parsed result is
 a well-formed, grounded `EmailDigest`. Run only with explicit approval:
 
-    uv run pytest tests/office_chains/ -v
+    uv run pytest tests/office_agent/integration/ -v
 """
 
 from office_agent.llm_assist import email_digest

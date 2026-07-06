@@ -40,7 +40,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -222,9 +222,9 @@ Do not run full eval.
 
 First use `Glob` to discover relevant test files under:
 
-* `tests/node/**/*.py`
-* `tests/graph/**/*.py`
-* `tests/evals/**/*.py`
+* `tests/enterprise_rag/nodes/**/*.py`
+* `tests/enterprise_rag/graph/**/*.py`
+* `tests/enterprise_rag/evals/**/*.py`
 
 Then inspect only the test files relevant to the requested focus and to coverage-gap analysis.
 
@@ -243,9 +243,9 @@ Prioritize tests that cover:
 * failure paths
 * recent security or redaction changes
 
-Inspect `tests/chains/` only if the user explicitly asks.
+Inspect `tests/enterprise_rag/chains/` only if the user explicitly asks.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run tests.
 
@@ -326,7 +326,7 @@ Evaluate the following areas.
 * Are structured-output chain expectations tested safely where possible?
 * Are prompt-level risks covered by review or eval rows when direct tests would require API keys?
 * Are chain imports side-effect free and testable without secrets?
-* Are tests/chains isolated from default CI if they require API keys?
+* Are tests/enterprise_rag/chains isolated from default CI if they require API keys?
 
 ### Engine and state coverage
 

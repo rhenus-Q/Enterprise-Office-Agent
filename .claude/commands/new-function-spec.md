@@ -259,7 +259,7 @@ Include these (each holds unless the feature explicitly approves an exception):
   local mock capabilities remaining LLM-free and free of external services; mock
   data read-only; simulated actions not mutating `office_agent/mock_data/` files;
   and the Knowledge Q&A adapter boundary with `enterprise_rag` intact.
-* Do not run full eval, `ingestion.py`, `tests/chains/`, or API-key-requiring
+* Do not run full eval, `ingestion.py`, `tests/enterprise_rag/chains/`, or API-key-requiring
   commands without separate user approval.
 * Do not commit automatically; do not create or switch branches.
 
@@ -272,10 +272,10 @@ own command (do not combine test directories into one `pytest` invocation):
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
-uv run pytest tests/node/ -q
-uv run pytest tests/graph/ -q
-uv run pytest tests/evals/ -q
-uv run pytest tests/office_agent/ -q
+uv run pytest tests/enterprise_rag/nodes/ -q
+uv run pytest tests/enterprise_rag/graph/ -q
+uv run pytest tests/enterprise_rag/evals/ -q
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -q
 uv run python evals/enterprise_rag/run_eval.py --validate-only
 ```
 

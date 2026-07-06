@@ -246,5 +246,5 @@ will render "No previous run found" and write a new record. It is not a bug.
 The full run needs real API keys, costs money, and is nondeterministic
 (routing/grading are model judgments; web results change daily). CI runs only
 the fully mocked suites. The harness's pure helpers (loading, validation,
-checks, metrics, rendering) are unit-tested in `tests/evals/` without any API
+checks, metrics, rendering) are unit-tested in `tests/enterprise_rag/evals/` without any API
 calls, and `--validate-only` is safe everywhere.

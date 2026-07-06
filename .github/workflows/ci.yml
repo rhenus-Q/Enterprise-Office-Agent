@@ -1,14 +1,16 @@
 # CI: two parallel jobs, both keys-free.
 #
-# mocked-tests: runs the fully mocked test suites (tests/node/ + tests/graph/ +
-# tests/evals/ + tests/office_agent/) on every push and pull request. These
-# suites mock every external dependency at its lazy factory seam (tests/evals/
-# covers only the eval harness's pure helpers; tests/office_agent/ patches the
-# knowledge adapter so no real enterprise_rag graph call is made), so the job
-# needs NO API keys (OpenAI / Tavily / LangSmith). The integration suite
-# (tests/chains/) calls the real model and the
-# full eval run (evals/enterprise_rag/run_eval.py) costs real API money; both are
-# deliberately excluded from CI.
+# mocked-tests: runs the fully mocked test suites (tests/enterprise_rag/nodes/ +
+# tests/enterprise_rag/graph/ + tests/enterprise_rag/evals/ + tests/office_agent/,
+# excluding the gated real-model tests/office_agent/integration/) on every push
+# and pull request. These suites mock every external dependency at its lazy
+# factory seam (the evals/ helper tests cover only the eval harness's pure
+# helpers; tests/office_agent/ patches the knowledge adapter so no real
+# enterprise_rag graph call is made), so the job needs NO API keys (OpenAI /
+# Tavily / LangSmith). The real-model suites (tests/enterprise_rag/chains/ and
+# tests/office_agent/integration/) call the real model and the full eval run
+# (evals/enterprise_rag/run_eval.py) costs real API money; all are deliberately
+# excluded from CI.
 #
 # lint: runs ruff (lint + format check) and mypy. The mypy scope is the
 # [tool.mypy] `files` list in pyproject.toml (the single source of truth): the
@@ -43,7 +45,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run mocked test suites (no API keys required)
-        run: uv run pytest tests/node/ tests/graph/ tests/evals/ tests/office_agent/ -q
+        run: uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -q
 
   lint:
     runs-on: ubuntu-latest

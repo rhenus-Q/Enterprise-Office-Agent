@@ -272,7 +272,7 @@ reference is validated against a separately collected fact set before rendering.
 Enable them for a demo with a real key by setting `OFFICE_LLM_ENABLED=true` in your
 environment (see `.env.example`), then asking an email question such as
 `"summarize my emails"` or a briefing question such as `"give me my daily
-briefing"`. The gated real-model tests live under `tests/office_chains/` and the
+briefing"`. The gated real-model tests live under `tests/office_agent/integration/` and the
 offline dataset checks are
 `uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --validate-only` and
 `uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --validate-only`.

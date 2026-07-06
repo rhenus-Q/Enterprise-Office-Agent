@@ -4,7 +4,7 @@ chains.
 
 These chains place untrusted input — user questions, retrieved documents, web
 results, previous answers — directly into their prompts. Like the generation
-chain (ADR 010, pinned by tests/node/test_generation_prompt.py), each must
+chain (ADR 010, pinned by tests/enterprise_rag/nodes/test_generation_prompt.py), each must
 explicitly demote that input from "instructions" to "data to classify, grade,
 or rewrite". These tests pin the key security concepts so a later prompt edit
 cannot silently drop the defense.

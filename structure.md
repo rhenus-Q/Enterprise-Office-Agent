@@ -586,10 +586,10 @@ in privacy mode still never calls the router, Tavily, or the rewriter).
 
 | Suite | What it covers | External calls |
 |---|---|---|
-| `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
-| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
-| `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
-| `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
+| `tests/enterprise_rag/nodes/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
+| `tests/enterprise_rag/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
+| `tests/enterprise_rag/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
+| `tests/enterprise_rag/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
 
 Separate from the test suites, `evals/enterprise_rag/` holds a **behavioral eval
 harness** for the RAG graph (the optional Office Agent LLM-assist evals live
@@ -606,7 +606,7 @@ state seeding is never duplicated; privacy-mode rows pass
 `web_fallback_policy`. The full run needs real API keys and is deliberately
 excluded from CI; `--validate-only` checks the dataset with no API calls.
 
-Run the mocked suites with `uv run pytest tests/node/ tests/graph/ tests/evals/ -v`
+Run the mocked suites with `uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ -v`
 (no API keys required).
 
 ## 15. Known limitations & future improvements
@@ -623,7 +623,7 @@ Future improvements (rough priority): structured logging and metrics-friendly ob
 
 GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every push and pull request — both keys-free:
 
-* **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
+* **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` + `tests/office_agent/`, excluding the gated `tests/office_agent/integration/`); the key-gated `tests/enterprise_rag/chains/` suite and the full eval run are excluded.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scope defined by the `[tool.mypy]` `files` list in `pyproject.toml`: the engine-API surface — `enterprise_rag/graph/engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py` — plus `enterprise_rag/graph/nodes/`, `enterprise_rag/graph/chains/`, and the `office_agent/` package, including the optional LLM-assist boundary `office_agent/llm_assist/`).
 
 ## The Office Agent module

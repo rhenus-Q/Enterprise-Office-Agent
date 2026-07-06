@@ -9,12 +9,13 @@ network**, so anyone (and CI) can validate the repository offline.
 
 | Suite | Scope | External calls |
 |---|---|---|
-| [`tests/node/`](../../tests/node/) | Each `enterprise_rag` node's in/out behavior, the web-result relevance gate, defensive parsing, and graceful degradation | None — every dependency mocked at its lazy `get_*()` seam |
-| [`tests/graph/`](../../tests/graph/) | The routing functions, privacy toggle, stop reasons, budgets/counters, caveat formatting, and compiled-graph end-to-end runs | None — fully mocked |
-| [`tests/evals/`](../../tests/evals/) | The eval harness's pure helpers (dataset validation, per-row checks, metrics, rendering) | None — pure functions |
+| [`tests/enterprise_rag/nodes/`](../../tests/enterprise_rag/nodes/) | Each `enterprise_rag` node's in/out behavior, the web-result relevance gate, defensive parsing, and graceful degradation | None — every dependency mocked at its lazy `get_*()` seam |
+| [`tests/enterprise_rag/graph/`](../../tests/enterprise_rag/graph/) | The routing functions, privacy toggle, stop reasons, budgets/counters, caveat formatting, and compiled-graph end-to-end runs | None — fully mocked |
+| [`tests/enterprise_rag/evals/`](../../tests/enterprise_rag/evals/) | The Enterprise RAG eval harness's pure helpers (dataset validation, per-row checks, metrics, rendering) | None — pure functions |
 | [`tests/office_agent/`](../../tests/office_agent/) | The Office Agent: router, engine dispatch, each mock tool, **and the two LLM assists** — flag-off byte-for-byte guarantee, grounding validation, and deterministic fallback | None — fully mocked/deterministic; Knowledge adapter and the LLM assists patched at their seams |
-| [`tests/chains/`](../../tests/chains/) | The six **Enterprise RAG** LCEL chains against the real `gpt-5-mini` | **Real OpenAI API** — `requires_openai`-gated; excluded from keys-free CI |
-| [`tests/office_chains/`](../../tests/office_chains/) | The two **Office Agent LLM-assist** chains (email digest + briefing narrative) against the real `gpt-5-mini` | **Real OpenAI API** — `requires_openai`-gated; excluded from keys-free CI |
+| [`tests/office_agent/evals/`](../../tests/office_agent/evals/) | The two Office Agent LLM-assist eval runners' pure helpers (env loading, dataset validation, CONFIG/INFRA/EVAL_FAIL classification) | None — offline; chain and env preconditions patched |
+| [`tests/enterprise_rag/chains/`](../../tests/enterprise_rag/chains/) | The six **Enterprise RAG** LCEL chains against the real `gpt-5-mini` | **Real OpenAI API** — `requires_openai`-gated; excluded from keys-free CI |
+| [`tests/office_agent/integration/`](../../tests/office_agent/integration/) | The two **Office Agent LLM-assist** chains (email digest + briefing narrative) against the real `gpt-5-mini` | **Real OpenAI API** — `requires_openai`-gated; excluded from keys-free CI |
 
 ## Unit tests
 
@@ -72,8 +73,8 @@ repo's `mock_data/` files.
   embeddings.** They pass with no API keys.
 - **Do not** introduce a real network call into these suites. If a new capability
   needs an external dependency, put it behind a lazy factory and patch that seam.
-- The suites that call real services are `tests/chains/` (Enterprise RAG chains)
-  and `tests/office_chains/` (the two Office Agent LLM-assist chains). Both are
+- The suites that call real services are `tests/enterprise_rag/chains/` (Enterprise RAG chains)
+  and `tests/office_agent/integration/` (the two Office Agent LLM-assist chains). Both are
   gated by the `requires_openai` marker, need `OPENAI_API_KEY`, and are excluded
   from keys-free CI. **Do not run either without explicit approval.**
 
@@ -81,14 +82,14 @@ repo's `mock_data/` files.
 
 ```powershell
 # Fully mocked suites — NO API keys required
-uv run pytest tests/node/ tests/graph/ tests/evals/ tests/office_agent/ -v
+uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -v
 
-# Whole suite (chains/ integration tests skip without OPENAI_API_KEY)
+# Whole suite (integration tests skip without OPENAI_API_KEY)
 uv run pytest -v
 ```
 
-The fully mocked suites pass with no API keys; the key-gated `tests/chains/` and
-`tests/office_chains/` suites are skipped unless `OPENAI_API_KEY` is set.
+The fully mocked suites pass with no API keys; the key-gated `tests/enterprise_rag/chains/` and
+`tests/office_agent/integration/` suites are skipped unless `OPENAI_API_KEY` is set.
 
 ## Behavioral evals
 
@@ -138,14 +139,14 @@ touched:
 - **Docs only** — `git diff --check` and confirm links/paths resolve; no test or
   eval run required.
 - **Deterministic Office Agent change** (router, base tools, dispatch) —
-  `uv run pytest tests/office_agent/ -v` plus the local demo
+  `uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v` plus the local demo
   (`uv run python scripts/demo_office_agent_v1.py`).
-- **Office LLM-assist change** — `uv run pytest tests/office_agent/ -v` (mocked,
+- **Office LLM-assist change** — `uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v` (mocked,
   incl. the flag-off guarantee) **plus** the two assist `--validate-only`
-  commands above. The gated `tests/office_chains/` real-model tests and full
+  commands above. The gated `tests/office_agent/integration/` real-model tests and full
   assist evals run **only with explicit approval** and a real key.
 - **Enterprise RAG change** —
-  `uv run pytest tests/node/ tests/graph/ tests/evals/ -v`; `tests/chains/` and the
+  `uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ -v`; `tests/enterprise_rag/chains/` and the
   full RAG eval run **only with explicit approval**.
 
 ## Recommended pre-PR commands
@@ -153,7 +154,7 @@ touched:
 ```powershell
 git status --short
 git diff --check
-uv run pytest tests/office_agent/ -v      # Office Agent work
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v   # Office Agent work
 uv run pytest -v                          # broader changes
 uv run ruff check .
 uv run ruff format --check .
