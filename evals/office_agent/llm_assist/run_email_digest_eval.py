@@ -49,7 +49,7 @@ def load_cases() -> list[dict]:
         try:
             rows.append(json.loads(line))
         except json.JSONDecodeError as exc:
-            raise ValueError(f"cases.jsonl line {line_number}: invalid JSON ({exc})") from exc
+            raise ValueError(f"{CASES_PATH.name} line {line_number}: invalid JSON ({exc})") from exc
     return rows
 
 
@@ -131,7 +131,7 @@ def _run_full(output: str | None) -> int:
         print("Refusing to run: dataset failed schema validation. Run --validate-only for details.")
         return 1
 
-    report_lines = ["# Office-assist eval results", ""]
+    report_lines = ["# Office email-digest eval results", ""]
     total = 0
     passed = 0
 
@@ -195,7 +195,7 @@ def main() -> int:
     parser.add_argument(
         "--validate-only",
         action="store_true",
-        help="Offline, keys-free schema validation of cases.jsonl (no LLM call).",
+        help=f"Offline, keys-free schema validation of {CASES_PATH.name} (no LLM call).",
     )
     parser.add_argument(
         "--output",
