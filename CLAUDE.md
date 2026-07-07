@@ -118,7 +118,7 @@ type, never the message.
   `TavilyClient` (`tavily-python`), `Chroma`, retrievers, and any API-backed tool must be constructed
   inside a lazy factory — use `@lru_cache(maxsize=1) def get_x(): ...` — never at module level.
 - **Imports must be side-effect-free.** Importing any module (`enterprise_rag.graph.graph`, `enterprise_rag.graph.nodes.*`,
-  `enterprise_rag.graph.chains.*`, `ingestion`) must NOT require API keys or network, and must NOT construct
+  `enterprise_rag.graph.chains.*`, `enterprise_rag.ingestion`) must NOT require API keys or network, and must NOT construct
   any external client.
 - **Backward-compatible chain names.** Chain modules expose `get_*()` factories; old
   module-level names (e.g. `generation_chain`, `question_router`) remain available via a lazy
@@ -234,5 +234,5 @@ $files = @(
 uv run python -m py_compile $files
 
 # Verify imports construct no clients and need no keys
-uv run python -c "import enterprise_rag.graph.graph, enterprise_rag.graph.nodes, enterprise_rag.graph.chains, ingestion; print('IMPORT OK')"
+uv run python -c "import enterprise_rag.graph.graph, enterprise_rag.graph.nodes, enterprise_rag.graph.chains, enterprise_rag.ingestion; print('IMPORT OK')"
 ```
