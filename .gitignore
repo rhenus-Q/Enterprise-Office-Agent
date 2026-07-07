@@ -68,3 +68,6 @@ evals/enterprise_rag/history/*.json
 
 # Generated Enterprise RAG eval report
 /evals/enterprise_rag/results.md
+
+#old_claude_command
+.claude/commands/old_command
