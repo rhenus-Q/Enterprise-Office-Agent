@@ -339,6 +339,29 @@ def test_app_survives_tavily_failure_and_answers_from_local_documents(monkeypatc
     assert result["web_search_count"] == 1  # the failed attempt is budgeted
 
 
+def test_app_compound_source_failure_keeps_retrieval_error_over_web_search_error(monkeypatch):
+    # Compound whole-source failure: local retrieval fails (retrieval_error) and
+    # the web fallback then also fails (Tavily raises). retrieval_error is the
+    # more upstream cause, so it must survive -- the run must NOT end with
+    # web_search_error, whose caveat ("answered only from the local knowledge
+    # base") would misdescribe a run in which the local knowledge base was
+    # itself unavailable.
+    _patch_router(monkeypatch, RETRIEVE)
+    _patch_graders(monkeypatch, grounded=True, useful=True)
+    web_calls = _patch_all_node_seams(monkeypatch, retriever_raises=True, web_tool_raises=True)
+
+    result = graph_module.app.invoke(_initial_state())  # must not raise
+
+    assert len(web_calls) == 1  # the web fallback was attempted and failed
+    assert result["web_search_count"] == 1  # the failed attempt is still budgeted
+    # The upstream whole-source reason wins over the later web failure.
+    assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
+    # And the rendered caveat reflects the retrieval degradation, not web search.
+    caveat = format_answer(result)
+    assert RETRIEVAL_ERROR_NOTE in caveat
+    assert WEB_SEARCH_ERROR_NOTE not in caveat
+
+
 def test_app_stops_safely_when_generation_fails(monkeypatch):
     _patch_router(monkeypatch, RETRIEVE)
     _patch_graders_to_fail_if_called(monkeypatch)  # a failed generation is never graded

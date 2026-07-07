@@ -822,6 +822,28 @@ def test_cli_no_answer_text_flag_wires_include_answer_text(monkeypatch):
     assert calls[-1]["include_answer_text"] is True
 
 
+def test_cli_validate_only_exits_clean_without_touching_graph_or_history(monkeypatch, tmp_path):
+    """`--validate-only` is the documented always-safe entry point.
+
+    It must validate the dataset and exit with code 0 without ever reaching
+    run_eval -- the only place that imports the graph (deferred import),
+    makes API calls, or writes history. Guard that promise by making run_eval
+    explode: if --validate-only ever reached it, the run would raise instead of
+    returning 0. Also assert no history record was written.
+    """
+
+    def _explode_run_eval(*args, **kwargs):
+        raise AssertionError("--validate-only must never call run_eval / touch the graph")
+
+    monkeypatch.setattr(run_eval_module, "run_eval", _explode_run_eval)
+
+    history_dir = tmp_path / "history"
+
+    assert main(["--validate-only", "--history-dir", str(history_dir)]) == 0
+    # No history I/O: the directory was never created or written to.
+    assert not history_dir.exists()
+
+
 # ---------------------------------------------------------------------------
 # Richer expected_contains groups and expected_not_contains — metrics/rendering
 # ---------------------------------------------------------------------------
