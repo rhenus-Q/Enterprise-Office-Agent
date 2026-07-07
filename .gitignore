@@ -65,3 +65,6 @@ evals/enterprise_rag/history/*.json
 # Generated Office-assist eval reports
 /evals/office_agent/llm_assist/email_digest_results.md
 /evals/office_agent/llm_assist/briefing_narrative_results.md
+
+# Generated Enterprise RAG eval report
+/evals/enterprise_rag/results.md
