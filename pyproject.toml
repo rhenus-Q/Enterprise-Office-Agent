@@ -1,7 +1,7 @@
 [project]
-name = "agentic-rag-assistant"
+name = "enterprise-office-agent"
 version = "0.1.0"
-description = "Enterprise internal-document Q&A assistant built with LangGraph (Agentic RAG / CRAG pattern)."
+description = "A production-oriented Enterprise RAG engine with a deterministic Office Agent, local mock workflows, and optional bounded LLM assists."
 requires-python = ">=3.11"
 dependencies = [
     "langgraph",
