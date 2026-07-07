@@ -175,6 +175,11 @@ type, never the message.
   behavior, model behavior, or the state schema.
 - **Tests-only tasks:** when the request is only to write tests, prefer asking before touching
   production code; make the smallest safe change if a seam is genuinely needed for testability.
+- **Authoritative date for dated artifacts:** Before creating or updating any dated report or artifact, first run:
+
+  `powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"`
+
+  Treat the returned timestamp as the only authoritative current local time. Use its `YYYY-MM-DD` portion consistently in the filename, title, `Date:` or metadata field, and any generated-date text in the body. Never guess the current date or reuse a date from conversation history, Git history, existing reports, or filenames. Retrieve the timestamp once before the first write and reuse that same value throughout the artifact. If the command fails, stop and report the failure instead of writing with a guessed date.
 
 ## 6. Common Commands
 

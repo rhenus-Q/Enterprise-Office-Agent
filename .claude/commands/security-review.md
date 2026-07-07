@@ -1,7 +1,7 @@
 ---
 description: Review security, prompt-injection, and privacy risks and write a timestamped security review report
 argument-hint: Optional review focus, for example "prompt injection" or "web search privacy"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe:*)
 ---
 
 You are reviewing the security, prompt-injection, and privacy posture of this Agentic RAG project.
@@ -71,6 +71,14 @@ Write a new security review report under:
 
 Do not overwrite previous security review reports.
 
+## Step 0. Determine the authoritative date and time
+
+Before the first report write, run this command exactly once:
+
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+
+Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
+
 ## Report filename rule
 
 Create a unique report filename using this format:
@@ -79,7 +87,7 @@ Create a unique report filename using this format:
 
 Where:
 
-* `<YYYY-MM-DD>` is today's date.
+* `<YYYY-MM-DD>` is the verified date from Step 0.
 
 * `<focus-slug>` is derived from `$ARGUMENTS`.
 
@@ -140,7 +148,7 @@ Run:
 git status --short
 ```
 
-If today's date is needed for the report filename, use a minimal date command.
+Use the authoritative date from Step 0 for the report filename and body; do not use any other date source.
 
 Then inspect only security-relevant files.
 

@@ -1,7 +1,7 @@
 ---
 description: Create an implementation-ready function spec from a short feature description
 argument-hint: Short feature description
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are creating a single implementation-ready **function spec** for this Agentic RAG project.
@@ -190,6 +190,18 @@ If that file already exists, do not overwrite it. Stop and ask the user whether 
 Do not silently overwrite an existing function spec.
 
 ## Step 6. Create the function spec
+
+Before writing the spec, determine the authoritative date and time by running
+this command exactly once:
+
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+
+Treat the returned timestamp as the only authoritative current local time, and
+use its `YYYY-MM-DD` portion for the `Date:` field in the document header below.
+Never infer or guess the date from model knowledge, conversation history, Git
+history, existing specs, or existing filenames, and never copy the date from an
+existing spec. If the command fails, stop and report the failure; do not write
+the spec with a guessed date.
 
 Only once the target path is confirmed unused (or the user explicitly chooses a
 path), create the directory if needed:
