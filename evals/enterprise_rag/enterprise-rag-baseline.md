@@ -1,7 +1,17 @@
+# Enterprise RAG Eval Baseline
+
+Snapshot date: 2026-07-06
+Source: `evals/enterprise_rag/results.md`
+- Dataset file at evaluation time: `evals/questions.jsonl`
+Dataset: synthetic AcmeCorp evaluation dataset
+
+This is an intentionally committed, reviewed snapshot for documentation and
+portfolio purposes. The runtime-generated report at
+`evals/enterprise_rag/results.md` is gitignored and may be overwritten by future
+eval runs.
+
 # Eval results
 
-- Generated: 2026-06-17 02:52 UTC
-- Dataset: `evals/questions.jsonl`
 - Rows evaluated: 24
 
 ## Metrics
