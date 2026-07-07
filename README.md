@@ -176,6 +176,8 @@ uv run python -m mypy          # type-check the scoped engine-API surface
 
 ## Current validation status
 
+Last verified: 2026-07-02
+
 The most recent local validation of the v1.6 baseline:
 
 - Office Agent demo: **passed** (local-only, no keys)

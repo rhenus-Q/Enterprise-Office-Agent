@@ -33,7 +33,7 @@ htmlcov/
 coverage.xml
 
 # ---- Project data: persisted vector store ----
-# Rebuilt locally via `uv run python ingestion.py`; do not commit.
+# Rebuilt locally via `uv run python -m enterprise_rag.ingestion`; do not commit.
 chroma_db/
 
 # ---- Build artifacts ----
