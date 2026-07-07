@@ -2,7 +2,7 @@
 
 Snapshot date: 2026-07-06
 Source: `evals/enterprise_rag/results.md`
-- Dataset file at evaluation time: `evals/questions.jsonl`
+- Dataset file at evaluation time: `evals/enterprise_rag/questions.jsonl`
 Dataset: synthetic AcmeCorp evaluation dataset
 
 This is an intentionally committed, reviewed snapshot for documentation and
