@@ -13,6 +13,7 @@ from enterprise_rag.graph.config import (
     max_web_searches_per_run,
 )
 from enterprise_rag.graph.consts import (
+    STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_ERROR,
     WEB_SEARCH_SOURCE,
@@ -251,14 +252,22 @@ def web_search(state: GraphState):
         print(
             f"---WEB SEARCH FAILED ({type(exc).__name__}): CONTINUING WITH LOCAL DOCUMENTS ONLY---"
         )
-        return {
+        failure = {
             "question": question,
             "documents": documents,
             # The failed attempt counts against the budget, so a persistently
             # failing search API cannot drive an unbounded retry loop.
             "web_search_count": web_search_count + 1,
-            "stop_reason": STOP_REASON_WEB_SEARCH_ERROR,
         }
+        # An earlier retrieval_error is a more upstream whole-source failure: on a
+        # compound outage (retriever failed, then the web fallback also failed)
+        # it must win, or the final caveat would claim we "answered only from the
+        # local knowledge base" when the local knowledge base was itself
+        # unavailable. Only record web_search_error when retrieval did not
+        # already fail.
+        if state.get("stop_reason") != STOP_REASON_RETRIEVAL_ERROR:
+            failure["stop_reason"] = STOP_REASON_WEB_SEARCH_ERROR
+        return failure
     web_search_count += 1
 
     results = _extract_results(search_results)
