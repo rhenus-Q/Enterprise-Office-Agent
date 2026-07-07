@@ -244,6 +244,6 @@ deliberately excluded.
 - **`enterprise_rag` is the behavior-stable module.** Preserve its graph routing,
   prompts, model names, state schema, and test expectations unless a change is
   explicitly requested (see [CLAUDE.md](CLAUDE.md) for the full rules).
-- **`office_agent` uses deterministic routing and local base workflows by default.Keep the router LLM-free (no LLM routing), keep the mock tools local-only and CI-safe, invoke Knowledge Q&A only through the adapter, keep the two optional LLM assists default-off with their byte-for-byte flag-off guarantee, and never regress `enterprise_rag`.
+- **`office_agent` uses deterministic routing and local base workflows by default.** Keep the router LLM-free (no LLM routing), keep the mock tools local-only and CI-safe, invoke Knowledge Q&A only through the adapter, keep the two optional LLM assists default-off with their byte-for-byte flag-off guarantee, and never regress `enterprise_rag`.
 - Both modules follow the same discipline: side-effect-free imports and lazy
   `@lru_cache` external clients.
