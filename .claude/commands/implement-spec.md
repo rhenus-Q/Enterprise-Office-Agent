@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/enterprise_rag/nodes:*), Bash(uv run python -m pytest tests/enterprise_rag/nodes:*), Bash(uv run pytest tests/enterprise_rag/graph:*), Bash(uv run python -m pytest tests/enterprise_rag/graph:*), Bash(uv run pytest tests/enterprise_rag/evals:*), Bash(uv run python -m pytest tests/enterprise_rag/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/enterprise_rag/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(powershell.exe:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/enterprise_rag/nodes:*), Bash(uv run python -m pytest tests/enterprise_rag/nodes:*), Bash(uv run pytest tests/enterprise_rag/graph:*), Bash(uv run python -m pytest tests/enterprise_rag/graph:*), Bash(uv run pytest tests/enterprise_rag/evals:*), Bash(uv run python -m pytest tests/enterprise_rag/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/enterprise_rag/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -246,6 +246,18 @@ uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/res
 ```
 
 ## Step 9. Create implementation report
+
+Before writing the report, determine the authoritative date and time by running
+this command exactly once:
+
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+
+Treat the returned timestamp as the only authoritative current local time, and
+use its `YYYY-MM-DD` portion for the template's `Date:` field and any other
+generated-date text in the report body. Never infer or guess the date from model
+knowledge, conversation history, Git history, existing reports, or existing
+filenames, and never copy the date from an existing report. If the command
+fails, stop and report the failure; do not write the report with a guessed date.
 
 If `docs/roadmap/implementation/implementation-template.md` exists, create the directory if needed:
 
