@@ -1,5 +1,5 @@
 ---
-description: Audit tracked Markdown documentation for drift against the current repository structure, code, configuration, CI, and active behavior. Write a detailed report file; do not repair documentation.
+description: Audit tracked Markdown and embedded documentation prose for drift against the current repository structure, code, configuration, CI, and active behavior. Write a detailed report file; do not repair documentation.
 argument-hint: [optional file, directory, module, or drift category]
 allowed-tools:
   - Read
@@ -16,10 +16,35 @@ allowed-tools:
 
 # Documentation Drift Review
 
-Audit the repository's tracked, active Markdown documentation for drift against
-current repository reality: code, directory structure, architecture,
-capabilities, configuration, commands, versions, test organization, and
-validation status that changed without the corresponding Markdown being updated.
+Audit two documentation surfaces for drift against current repository reality —
+code, directory structure, architecture, capabilities, configuration, commands,
+versions, test organization, and validation status that changed without the
+corresponding documentation being updated:
+
+- the repository's tracked, active **Markdown documentation**; and
+- **embedded documentation prose** inside tracked source/config files.
+
+**Embedded documentation prose** means the documentation-like text carried inside
+non-Markdown source and configuration files, including:
+
+- Python module / class / function docstrings;
+- long explanatory comments (comment blocks that describe behavior, architecture,
+  or rationale, not one-line implementation notes);
+- user-facing constants and unsupported-intent / help messages;
+- CLI help text;
+- prompt / template prose;
+- long string blocks that describe current architecture, capabilities, commands,
+  config, tests, model behavior, feature flags, or user-facing behavior.
+
+Keep this narrow and conservative:
+
+- **Short implementation comments should not be reported** unless they make a
+  materially misleading current-behavior claim.
+- **Historical or local rationale comments should not be modernized** merely
+  because the architecture later evolved.
+
+The source/config files are **not** audited for code correctness — only their
+embedded documentation prose is reviewed for drift.
 
 This is a **review-only command with one narrowly scoped output**: you may create
 exactly one detailed timestamped report under `docs/roadmap/docs-drift-review/`
@@ -63,16 +88,46 @@ This command remains review-only even when clear drift is found.
 
 ## Scope and exclusions
 
-Audit **only tracked Markdown**. The current working tree is the documentation
-reality being checked — including intentional uncommitted changes. Do not treat
-an uncommitted path as stale merely because it differs from `HEAD`.
+Audit **tracked active Markdown and embedded documentation prose in tracked
+source/config files**. The current working tree is the documentation reality being
+checked — including intentional uncommitted changes. Do not treat an uncommitted
+path as stale merely because it differs from `HEAD`.
 
-Build the inventory from files tracked by Git, excluding both `.claude/commands/**`
-and all of `docs/roadmap/**`:
+Build **two** inventories from files tracked by Git, both excluding
+`.claude/commands/**` and all of `docs/roadmap/**`.
+
+Markdown inventory:
 
     git ls-files "*.md" \
       ":(exclude).claude/commands/**" \
       ":(exclude)docs/roadmap/**"
+
+Embedded-prose source/config inventory:
+
+    git ls-files \
+      "enterprise_rag/**/*.py" \
+      "office_agent/**/*.py" \
+      "evals/**/*.py" \
+      "scripts/**/*.py" \
+      "tests/**/*.py" \
+      "pyproject.toml" \
+      ".github/workflows/*.yml" \
+      ".github/workflows/*.yaml" \
+      ":(exclude).claude/commands/**" \
+      ":(exclude)docs/roadmap/**"
+
+The source/config files in the second inventory are **not** audited for all code
+correctness — inspect only their embedded documentation prose (docstrings, long
+explanatory comments, user-facing constants / messages, CLI help text, prompt /
+template prose, and long descriptive string blocks) for drift.
+
+**Always `Read` (in full, not merely Grep) the package-level `__init__.py` of every
+audited source package** (e.g. `enterprise_rag/__init__.py`,
+`enterprise_rag/graph/__init__.py`, `office_agent/__init__.py`,
+`office_agent/tools/__init__.py`, `office_agent/llm_assist/__init__.py`). Their
+module/package docstrings are prime prose-drift surfaces — they often summarize the
+package's capabilities, version status, and architecture, and drift silently when the
+code around them evolves.
 
 **Excluded audit input (never scanned):**
 
@@ -90,9 +145,11 @@ and all of `docs/roadmap/**`:
 Do not recursively scan untracked dependency, virtual-environment, cache,
 generated, or build directories.
 
-Unless `$ARGUMENTS` narrows the scope, review all tracked Markdown outside the
-excluded directories. Record: number of tracked Markdown files discovered, number
-actually reviewed, files excluded by scope, and the exclusion rule used.
+Unless `$ARGUMENTS` narrows the scope, review all tracked Markdown and all
+embedded documentation prose in the tracked source/config inventory outside the
+excluded directories. Record: number of Markdown files discovered and number
+actually reviewed; number of embedded-prose source/config files discovered and
+number actually reviewed; files excluded by scope; and the exclusion rule used.
 
 ---
 
@@ -130,10 +187,11 @@ scope entirely (excluded above) and are **not** a review category.
 | **B. Historical decision records** | `docs/adr/**` | Preserve what was true when decided. Flag only: broken link; history presented as current; stale current-status/implementation-note section; wrong supersession reference; missing/incorrect supersession metadata; an objective typo or impossible path already wrong at the time. |
 | **C. Release notes / version snapshots** | `docs/releases/**`, dated validation reports | Old versions/paths/totals may be correct history. Flag only: claims to describe the *current* version; broken current navigation link; a command presented as currently runnable that no longer works; contradictory version relationship; stale current-status section; a pointer to an active doc via an obsolete path. |
 | **D. Generated results / eval reports** | tracked eval or benchmark output Markdown | Treat measured values as point-in-time unless they claim to be current. Check links, headings, scope descriptions, runner/dataset paths, and obvious contradictions. Do not rewrite measured values by inference. |
+| **E. Embedded documentation prose** | Python module/class/function docstrings, long explanatory comments, user-facing constants, CLI help text, prompt/template strings | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
 
-For B–D, do not modernize historical bodies (Decision/Context/Rationale/
-Consequences, dated benchmarks, archived facts) merely because the repository
-later evolved.
+For B–E, do not modernize historical bodies (Decision/Context/Rationale/
+Consequences, dated benchmarks, archived facts, or clearly historical rationale
+comments) merely because the repository later evolved.
 
 ---
 
@@ -203,6 +261,13 @@ distinguishing active claims from valid historical records.
     applied to an LLM-backed path, "current" for a historical snapshot,
     "complete/fully supported" contradicted by implementation, "all assists" for a
     single-assist report, "keys-free" for a command that can reach a provider.
+12. **Embedded documentation prose drift** — module docstrings, class/function
+    docstrings, long comments, user-facing constants, CLI help text, and
+    prompt/template prose that describe current behavior, capabilities, paths,
+    tests, feature flags, LLM usage, model names, version status, or user-facing
+    output. Verify against current implementation. Do not flag short local comments
+    unless they materially mislead maintainers, and do not modernize clearly
+    historical rationale merely because the architecture later evolved.
 
 **Avoid false positives.** Do not report drift merely because an ADR describes an
 older architecture, a release note holds an old version, a result file holds an
@@ -297,10 +362,14 @@ Write the detailed report using this structure:
     # Documentation Drift Review
 
     ## Report metadata
-    Timestamp; requested scope; report path; repository root; Markdown discovery
-    rule; exclusions (`.claude/commands/**`, `docs/roadmap/**`); files discovered;
-    files reviewed; relevant working-tree state; confirmation no existing file was
-    modified; note that this report is a point-in-time artifact.
+    Timestamp; requested scope; report path; repository root; Markdown and
+    embedded-prose discovery rules; exclusions (`.claude/commands/**`,
+    `docs/roadmap/**`); Markdown files discovered; Markdown files reviewed;
+    embedded-prose source/config files discovered; embedded-prose source/config
+    files reviewed, split into **read in depth** vs. **Grep-triaged** (located but
+    not read in full); files excluded by scope and exclusion rule; relevant
+    working-tree state; confirmation no existing file was modified; note that this
+    report is a point-in-time artifact.
 
     ## Executive summary
     Counts for: confirmed drift; possible drift; broken local links; stale
@@ -344,7 +413,10 @@ Write the detailed report using this structure:
     needed). Do not perform the repairs.
 
     ## Files reviewed with no material drift
-    Important active documents checked and found consistent.
+    Important active documents/prose surfaces that were **read in depth** and found
+    consistent. List a surface here only if it was actually read — never on the basis
+    of a Grep triage alone. Track Grep-only-triaged files separately (e.g. in report
+    metadata) so their status is not overstated as verified drift-free.
 
     ## Final verdict
     Overall drift risk; any blocking item; whether a repair pass is recommended;
@@ -365,6 +437,7 @@ excerpts unless the user asks. Use this structure:
 
     - **Scope:** ...
     - **Markdown files scanned:** N
+    - **Embedded-prose source/config files scanned:** N
     - **Confirmed drift:** N
     - **Possible drift:** N
     - **Broken links / stale commands:** N
@@ -388,14 +461,34 @@ excerpts unless the user asks. Use this structure:
 
 1. Read `CLAUDE.md`. Run `git status --short` and record the initial working-tree
    state.
-2. Build the tracked-Markdown inventory, excluding `.claude/commands/**` and
+2. Build both inventories — the tracked-Markdown inventory and the tracked
+   source/config embedded-prose inventory — excluding `.claude/commands/**` and
    `docs/roadmap/**`. Apply `$ARGUMENTS` scope when provided.
-3. Classify reviewed documents (active / historical ADR / release / generated).
+3. Classify reviewed documents and prose (active / historical ADR / release /
+   generated / embedded documentation prose).
 4. Inspect current repository structure, config, CI, tests, evals, entry points,
    and relevant implementation.
-5. Search Markdown for high-risk claims: paths, shell commands, capability counts,
-   model names, feature flags, env variables, version labels, test totals, and
-   words like "current", "latest", "complete", "only", "all", "fully supported".
+5. Search Markdown and embedded documentation prose for high-risk claims: paths,
+   shell commands, capability counts, model names, feature flags, env variables,
+   version labels, test totals, and words like "current", "latest", "complete",
+   "only", "all", "fully supported". Also Grep for high-risk **stale-version /
+   stale-status** terms that frequently outlive the code that justified them:
+   `Phase 1`, `Phase 2`, `future tools`, `will be added`, `ships a single tool`,
+   `LLM-free`, `deterministic`, `current`, `latest` (verify each hit against the
+   present implementation, and weigh document category — a term inside a valid
+   historical ADR or a labeled release snapshot is not automatically drift). For
+   source/config files, review only the embedded documentation prose (docstrings,
+   long comments, user-facing constants / messages, CLI help text, prompt/template
+   strings), not code correctness. To keep the large source/config inventory
+   affordable, triage with Grep first — locate prose-dense regions
+   (module/class/function docstrings, user-facing constants / messages, CLI help
+   text, prompt/template strings, and long descriptive string blocks) rather than
+   reading whole source files, and do not read assertion-heavy test files wholesale;
+   inspect only the prose-dense regions surfaced by search. Always `Read` each
+   audited source package's package-level `__init__.py` **in full**, not just Grep
+   it. **A Grep triage is a locator, not a verification:** do not report a prose
+   surface as accurate / drift-free on the basis of a Grep hit or a Grep miss alone
+   — a surface may only be called drift-free after it was actually read in depth.
 6. Validate each candidate against evidence; separate confirmed drift, possible
    drift, preserved historical references, and healthy documentation.
 7. Select the collision-safe report path with `Glob` and write exactly one new
