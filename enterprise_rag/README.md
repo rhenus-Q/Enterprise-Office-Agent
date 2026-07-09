@@ -85,7 +85,7 @@ flowchart TD
    * `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
    * `tool_error` → a grader call failed; the run ends through a terminal notice node with the answer explicitly flagged as unverified.
 
-State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with thirteen fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`, `insufficient_context`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](../structure.md) §3 for the full field-by-field table.
+State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with fourteen fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`, `web_fallback_policy`, `insufficient_context`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](../structure.md) §3 for the full field-by-field table.
 
 ## Tech Stack
 
@@ -165,7 +165,7 @@ See [`.env.example`](../.env.example) for the full template:
 | `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` to disable all external web search (privacy mode)                                                                                                               |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
-| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. |
+| `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`                    | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGCHAIN_TRACING_V2=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. |
 
 `.env` is gitignored; only `.env.example` is committed.
 
@@ -281,10 +281,9 @@ In addition to the engine's lightweight metadata-only trace JSON, LangSmith
 tracing can be enabled through environment variables:
 
 ```env
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=your_langsmith_api_key
-LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-LANGSMITH_PROJECT=enterprise-ai-automation-agent
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key
+LANGCHAIN_PROJECT=enterprise-ai-automation-agent
 ```
 
 The two tracing layers serve different purposes:

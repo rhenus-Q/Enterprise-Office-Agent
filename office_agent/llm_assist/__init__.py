@@ -2,12 +2,14 @@
 office_agent.llm_assist — the Office Agent's optional, default-off LLM assist.
 
 This package hosts two opt-in LLM assists, both gated by the single
-`OFFICE_LLM_ENABLED` switch (default false):
+`OFFICE_LLM_ENABLED` switch (default false). Each is an optional, bounded,
+single-pass presentation layer on top of an existing deterministic tool — **not** a
+new Office Agent capability and **not** a router intent:
 
-- Phase 1 — an LLM-assisted email digest layered on the deterministic Email Summary
-  tool (`email_digest.py` + `office_agent/tools/email.py`), validated `EmailDigest`
-  boundary in `models.py`.
-- Phase 2 — an LLM-assisted Daily Briefing narrative layered on the deterministic
+- Email Digest — an LLM-assisted email digest layered on the deterministic Email
+  Summary tool (`email_digest.py` + `office_agent/tools/email.py`), validated
+  `EmailDigest` boundary in `models.py`.
+- Daily Briefing Narrative — an LLM-assisted narrative layered on the deterministic
   Daily Briefing tool (`briefing_narrative.py` + `office_agent/tools/briefing.py`),
   validated `BriefingNarrative` boundary in `briefing_models.py`.
 
