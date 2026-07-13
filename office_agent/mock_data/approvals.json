@@ -85,7 +85,7 @@
     "amount": null,
     "currency": null,
     "linked_ticket_id": "TICK-005",
-    "linked_task_id": "TASK-002",
+    "linked_task_id": "TASK-003",
     "labels": ["compliance", "retention"],
     "policy_area": "data_retention"
   },
