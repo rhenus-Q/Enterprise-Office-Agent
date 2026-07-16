@@ -8,7 +8,7 @@ new Office Agent capability and **not** a router intent:
 
 - Email Digest — an LLM-assisted email digest layered on the deterministic Email
   Summary tool (`email_digest.py` + `office_agent/tools/email.py`), validated
-  `EmailDigest` boundary in `models.py`.
+  `EmailDigest` boundary in `email_models.py`.
 - Daily Briefing Narrative — an LLM-assisted narrative layered on the deterministic
   Daily Briefing tool (`briefing_narrative.py` + `office_agent/tools/briefing.py`),
   validated `BriefingNarrative` boundary in `briefing_models.py`.

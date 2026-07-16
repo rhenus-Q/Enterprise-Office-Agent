@@ -31,7 +31,7 @@ from typing import Any
 
 from office_agent.llm_assist import config as llm_config
 from office_agent.llm_assist import email_digest
-from office_agent.llm_assist.models import EmailDigest
+from office_agent.llm_assist.email_models import EmailDigest
 from office_agent.schemas import INTENT_EMAIL_SUMMARY, ToolResult
 
 Email = dict[str, Any]

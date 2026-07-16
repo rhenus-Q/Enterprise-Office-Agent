@@ -23,7 +23,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from office_agent.llm_assist.config import office_llm_request_timeout_seconds
-from office_agent.llm_assist.models import EmailDigest
+from office_agent.llm_assist.email_models import EmailDigest
 
 Email = dict[str, Any]
 

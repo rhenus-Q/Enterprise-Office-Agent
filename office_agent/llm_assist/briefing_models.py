@@ -9,7 +9,7 @@ deterministically. Field descriptions guide structured output; the length cap ke
 a runaway generation from flooding the briefing — over-long output fails validation
 and triggers the deterministic fallback rather than being shown.
 
-Deliberately separate from `office_agent/llm_assist/models.py` (the email digest's
+Deliberately separate from `office_agent/llm_assist/email_models.py` (the email digest's
 `EmailDigest`/`ActionItem`): the two assists share the flag/timeout/stop_reason
 config but keep independent schemas so neither can regress the other.
 """
