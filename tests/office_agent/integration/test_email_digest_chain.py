@@ -11,7 +11,7 @@ a well-formed, grounded `EmailDigest`. Run only with explicit approval:
 """
 
 from office_agent.llm_assist import email_digest
-from office_agent.llm_assist.models import EmailDigest
+from office_agent.llm_assist.email_models import EmailDigest
 from office_agent.tools import email
 from tests.conftest import requires_openai
 

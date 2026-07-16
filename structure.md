@@ -741,7 +741,7 @@ Daily Briefing tool. Both:
   built lazily behind an `@lru_cache` factory (side-effect-free imports) and
   importing nothing from `enterprise_rag`;
 - cross the boundary **only** as a validated Pydantic model (`EmailDigest` in
-  `models.py`, `BriefingNarrative` in `briefing_models.py`);
+  `email_models.py`, `BriefingNarrative` in `briefing_models.py`);
 - **ground every reference against deterministic source identifiers** — the email
   digest against the filtered email ids, the briefing against the collected
   `(source_type, id)` fact pairs — and render titles/subjects by looking them up

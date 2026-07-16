@@ -1,5 +1,5 @@
 """
-office_agent.llm_assist.models — Pydantic models for the LLM email digest.
+office_agent.llm_assist.email_models — Pydantic models for the LLM email digest.
 
 These models are the ONLY boundary through which LLM output crosses into the
 Office Agent: the digest chain returns a validated `EmailDigest`, and
