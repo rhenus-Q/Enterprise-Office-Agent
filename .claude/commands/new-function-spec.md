@@ -12,7 +12,7 @@ Create a function spec only. Do not implement the feature.
 
 This command combines the spec-authoring and implementation-planning workflows into
 one document. It produces exactly one file that can be passed directly to
-`/implement-spec` — it must **not** create a separate plan file.
+`/imple-spec` — it must **not** create a separate plan file.
 
 Use as few tools as possible.
 
@@ -25,7 +25,7 @@ Do not commit automatically.
 ```text
 /new-function-spec <short feature description>
 → review the generated function spec
-→ /implement-spec docs/roadmap/spec/<feature-slug>.md
+→ /imple-spec docs/roadmap/spec/<feature-slug>.md
 ```
 
 ## Required locations
@@ -302,10 +302,10 @@ uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/res
 The document's invocation section must point directly to:
 
 ```text
-/implement-spec docs/roadmap/spec/<feature_slug>.md
+/imple-spec docs/roadmap/spec/<feature_slug>.md
 ```
 
-The implementation steps must be specific enough that `/implement-spec` can execute
+The implementation steps must be specific enough that `/imple-spec` can execute
 them without first creating another plan.
 
 ## Safety rules for this command
@@ -329,7 +329,7 @@ Before finishing, confirm:
 * The document merges the useful spec and plan sections without duplication or
   contradiction.
 * The implementation steps are detailed enough to feed directly into
-  `/implement-spec` with no further planning.
+  `/imple-spec` with no further planning.
 * Filenames, APIs, schemas, and ADR references were verified against the repository.
 * Both templates and all other repository files remain unchanged.
 
@@ -342,7 +342,7 @@ Function spec file: `docs/roadmap/spec/<feature_slug>.md`
 
 Title: `<feature_title>`
 
-Ready for implementation: `/implement-spec docs/roadmap/spec/<feature_slug>.md`
+Ready for implementation: `/imple-spec docs/roadmap/spec/<feature_slug>.md`
 ```
 
 Do not repeat the generated document in chat unless the user explicitly asks to see it.

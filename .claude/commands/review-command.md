@@ -127,7 +127,7 @@ Then read relevant peer commands for consistency.
 Prefer reading only these peer commands if they exist:
 
 * `.claude/commands/review-diff.md`
-* `.claude/commands/implement-spec.md`
+* `.claude/commands/imple-spec.md`
 * `.claude/commands/arch-review.md`
 * `.claude/commands/update-claude-md.md`
 * `.claude/commands/new-spec.md`
@@ -288,7 +288,7 @@ Check consistency with:
 
 * `/new-spec`
 * `/plan-spec`
-* `/implement-spec`
+* `/imple-spec`
 * `/review-diff`
 * `/arch-review`
 * `/update-claude-md`

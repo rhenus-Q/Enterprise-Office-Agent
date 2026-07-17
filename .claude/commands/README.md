@@ -13,8 +13,8 @@ not a specification.
 
 | Command | Purpose | When to use | Input | Modifies files? | Main output |
 |---|---|---|---|---|---|
-| `/evaluate-implement` | Evaluate whether a proposed change is justified, then implement the smallest correct change — or none — and validate it. | You are unsure whether a proposed change is necessary. | Free-text change request | **Yes, or none** — code, only if justified ("no change" is a valid success) | In-chat report + implemented change (if any) |
-| `/implement-spec` | Implement an already-approved spec or implementation plan. | A reviewed spec/plan already exists and the decision to build is made. | Spec/plan file path | **Yes** — code | Implemented changes + implementation report under `docs/roadmap/implementation/` |
+| `/eval-imple` | Evaluate whether a proposed change is justified, then implement the smallest correct change — or none — and validate it. | You are unsure whether a proposed change is necessary. | Free-text change request | **Yes, or none** — code, only if justified ("no change" is a valid success) | In-chat report + implemented change (if any) |
+| `/imple-spec` | Implement an already-approved spec or implementation plan. | A reviewed spec/plan already exists and the decision to build is made. | Spec/plan file path | **Yes** — code | Implemented changes + implementation report under `docs/roadmap/implementation/` |
 | `/new-function-spec` | Create one implementation-ready function spec from a short feature description. Does not implement. | You want to turn an idea into a concrete spec before building. | Short feature description | **Yes** — new spec file under `docs/roadmap/spec/` | Spec file |
 | `/review-diff` | Review the current working-tree git diff for safety, scope, and commit readiness. | Code has already changed and you want a pre-commit check. | Optional review focus | **No** (review-only) | In-chat review + commit recommendation |
 | `/arch-review` | Review project architecture and write a timestamped report. | Broad architecture/design audit. | Optional focus | Report file only (no code) | Report under `docs/roadmap/architecture-review/` |
@@ -36,10 +36,10 @@ not a specification.
 The commands separate **deciding**, **building**, **reviewing**, and **applying
 findings** into distinct steps:
 
-- **`/evaluate-implement`** decides whether a proposed change is warranted *before*
+- **`/eval-imple`** decides whether a proposed change is warranted *before*
   touching the repository, treats "no change" as a successful outcome, and
   implements only the smallest justified change.
-- **`/implement-spec`** assumes that decision is already made and a spec/plan
+- **`/imple-spec`** assumes that decision is already made and a spec/plan
   exists; it builds the approved scope.
 - **`/review-diff`** reviews an *existing* working-tree diff *after* changes have
   been made.
@@ -58,7 +58,7 @@ Uncertain proposed change:
 
 ```text
 Uncertain proposed change
-→ /evaluate-implement
+→ /eval-imple
 → /review-diff
 → optional specialized *-review
 → apply findings with the matching apply command
@@ -69,15 +69,15 @@ Approved spec:
 
 ```text
 Approved spec
-→ /implement-spec <spec-path>
+→ /imple-spec <spec-path>
 → /review-diff
 ```
 
 ## Command selection guidance
 
-- Use **`/evaluate-implement`** when it is unclear whether a proposed change is
+- Use **`/eval-imple`** when it is unclear whether a proposed change is
   necessary.
-- Use **`/implement-spec`** when a reviewed spec or plan already exists.
+- Use **`/imple-spec`** when a reviewed spec or plan already exists.
 - Use **`/new-function-spec`** to turn a rough idea into a concrete spec first.
 - Use **`/review-diff`** when code has already changed and you want a pre-commit
   check.
