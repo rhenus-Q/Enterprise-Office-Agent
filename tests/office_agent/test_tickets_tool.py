@@ -160,6 +160,8 @@ def test_create_task_handles_unknown_ticket_id_safely():
 def test_persistence_seam_writes_only_to_given_path(tmp_path):
     target = tmp_path / "created_tasks.json"
 
+    baseline_task_count = len(tickets.load_tasks())
+
     task = tickets.create_task_from_ticket("TICK-001", persist_path=target)
 
     assert task is not None
@@ -168,5 +170,5 @@ def test_persistence_seam_writes_only_to_given_path(tmp_path):
     assert saved[0]["id"] == "TASK-SIM-TICK-001"
 
     # The repo mock_data tasks file is never touched by the seam.
-    assert len(tickets.load_tasks()) == len(tickets.load_tasks())
+    assert len(tickets.load_tasks()) == baseline_task_count
     assert not any(t["id"] == "TASK-SIM-TICK-001" for t in tickets.load_tasks())
