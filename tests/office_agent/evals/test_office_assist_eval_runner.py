@@ -189,6 +189,45 @@ def test_full_mode_grounding_failure_is_eval_fail(monkeypatch, capsys, tmp_path)
     assert output.exists()
 
 
+def test_full_mode_invented_deadline_is_eval_fail(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(env, "ensure_openai_api_key", lambda: None)
+
+    import office_agent.llm_assist.email_digest as email_digest
+    import office_agent.tools.email as email
+
+    monkeypatch.setattr(
+        runner,
+        "load_cases",
+        lambda: [
+            {
+                "id": "t1",
+                "query": "q",
+                "expected_action_item_email_ids": ["email-001"],
+                "must_not_invent_deadline_for": ["email-001"],
+            }
+        ],
+    )
+    monkeypatch.setattr(email, "filter_for_query", lambda q: ("label", [{"id": "email-001"}]))
+    # Grounded and full recall, but a deadline is invented for an id the case
+    # forbids one for → the no-invented-deadline rule fails as an ordinary EVAL_FAIL.
+    monkeypatch.setattr(
+        email_digest,
+        "digest_emails",
+        lambda _m: _Digest(action_items=[_Item("email-001", deadline="2026-08-01")]),
+    )
+
+    output = tmp_path / "results.md"
+    exit_code = runner._run_full(str(output))
+
+    out = capsys.readouterr().out
+    assert exit_code == env.EXIT_EVAL_FAIL
+    assert "0/1 case(s) passed." in out
+    assert "no_invented_deadline=False" in out
+    assert "INFRA ERROR" not in out
+    assert "CONFIG ERROR" not in out
+    assert output.exists()
+
+
 # ---------------------------------------------------------------------------
 # Dataset --validate-only behavior is unchanged
 # ---------------------------------------------------------------------------
