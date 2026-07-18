@@ -43,8 +43,10 @@ from typing import Any
 import enterprise_rag.graph.graph as graph_runtime
 from enterprise_rag.graph import config
 from enterprise_rag.graph.config import normalize_web_fallback_policy
+from enterprise_rag.graph.consts import STOP_REASON_OFFLINE_MODE
 from enterprise_rag.graph.formatting import source_lines
 from enterprise_rag.graph.state import GraphState
+from enterprise_rag.runtime_privacy import enforce_tracing_privacy
 
 
 @dataclass
@@ -142,6 +144,13 @@ def seed_state(
 
     if web_search_enabled is None:
         web_search_enabled = config.web_search_enabled()
+
+    # Runtime privacy modes are a hard floor: either PRIVACY_MODE or OFFLINE_MODE
+    # forces web search off for EVERY caller, overriding an explicit per-run
+    # web_search_enabled=True (e.g. an eval AnswerOptions). A mode can only
+    # restrict; it never re-enables an external service.
+    if config.privacy_restrictions_active():
+        web_search_enabled = False
 
     if web_fallback_policy is None:
         web_fallback_policy = config.web_fallback_policy()
@@ -387,6 +396,11 @@ def answer_question(
     elif isinstance(options, dict):
         options = AnswerOptions(**options)
 
+    # Per-run early initialization: neutralize tracing before any chain can run,
+    # for programmatic callers that never went through main.py. No-op unless a
+    # runtime privacy mode is active.
+    enforce_tracing_privacy()
+
     run_id = options.run_id if options.run_id else uuid.uuid4().hex
 
     # Redact the input up front: everything downstream (state, chains, web
@@ -404,9 +418,20 @@ def answer_question(
         web_fallback_policy=options.web_fallback_policy,
     )
 
-    # Resolved via the module attribute so tests can monkeypatch enterprise_rag.graph.graph.app.
     started = time.perf_counter()
-    result, node_path, node_timings = _run_graph_with_trace(graph_runtime.app, initial_state)
+    if config.offline_mode():
+        # OFFLINE_MODE fails closed BEFORE the graph: answering requires the
+        # OpenAI service, so the graph is never invoked, no client is built, and
+        # no external request is attempted. The seeded state already carries the
+        # empty generation, empty documents, and zeroed counters, so the shared
+        # AnswerResult construction below yields a deterministic offline result.
+        result: dict[str, Any] = {**initial_state, "stop_reason": STOP_REASON_OFFLINE_MODE}
+        node_path: list[str] = []
+        node_timings: list[dict[str, Any]] = []
+    else:
+        # Resolved via the module attribute so tests can monkeypatch
+        # enterprise_rag.graph.graph.app.
+        result, node_path, node_timings = _run_graph_with_trace(graph_runtime.app, initial_state)
     total_duration_ms = round((time.perf_counter() - started) * 1000.0, 2)
 
     answer_result = AnswerResult(

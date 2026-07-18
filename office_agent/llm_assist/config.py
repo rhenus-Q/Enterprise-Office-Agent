@@ -44,6 +44,27 @@ LLM_ASSIST_ERROR_NOTE = (
 )
 
 
+def privacy_mode() -> bool:
+    """Whether `PRIVACY_MODE` is active (default off).
+
+    Read here — not imported from `enterprise_rag` — to preserve this module's
+    documented independence. Parses identically to the `enterprise_rag` reader so
+    the single switch means the same thing in both packages.
+    """
+
+    return os.getenv("PRIVACY_MODE", "false").strip().lower() in _TRUTHY_VALUES
+
+
+def offline_mode() -> bool:
+    """Whether `OFFLINE_MODE` is active (default off).
+
+    Independent reader (no `enterprise_rag` import) that parses identically to the
+    `enterprise_rag` reader.
+    """
+
+    return os.getenv("OFFLINE_MODE", "false").strip().lower() in _TRUTHY_VALUES
+
+
 def office_llm_enabled() -> bool:
     """Whether the optional LLM assists are enabled (`OFFICE_LLM_ENABLED`).
 
@@ -53,7 +74,14 @@ def office_llm_enabled() -> bool:
     case-insensitive, whitespace-stripped) enables them. This is the deliberate
     inverse of `enterprise_rag`'s `WEB_SEARCH_ENABLED` default-on parsing — the
     office assists must never turn on by accident.
+
+    Either runtime privacy mode (`PRIVACY_MODE` / `OFFLINE_MODE`) forces this off
+    regardless of `OFFICE_LLM_ENABLED`: a mode can only *restrict*, so both assists
+    stay deterministic and byte-for-byte flag-off under a mode.
     """
+
+    if privacy_mode() or offline_mode():
+        return False
 
     return os.getenv("OFFICE_LLM_ENABLED", "false").strip().lower() in _TRUTHY_VALUES
 

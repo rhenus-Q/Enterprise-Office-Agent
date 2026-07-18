@@ -19,7 +19,7 @@ is listed under Enterprise RAG because its primary decision is packaging the
 completed RAG implementation into `enterprise_rag/`; the `office_agent/` portion
 was only a reserved empty placeholder at that time.
 
-### Enterprise RAG ADRs (001–014)
+### Enterprise RAG ADRs (001–014, 019)
 
 | ADR | Title | Decision in one line |
 |---|---|---|
@@ -37,6 +37,7 @@ was only a reserved empty placeholder at that time.
 | [012](enterprise_rag/012-prompt-injection-hardening.md) | Prompt-injection hardening | Extends ADR 010: Security rules on the control-plane chains (router/graders/rewriter), explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters in the generation context, and deterministic graph-level containment tests. |
 | [013](enterprise_rag/013-eval-harness-v2-expansion.md) | Eval harness v2 expansion | Extends ADR 009: 24-row/6-category dataset (adds `multi_document`, `policy_fallback`), richer deterministic checks (AND/OR contains, not-contains, source titles, min-local-sources, web-search-count, policy), and metadata-only history + delta tracking; still deterministic, still not in CI. |
 | [014](enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md) | `enterprise_rag` package + `office_agent` placeholder | The completed RAG implementation moved under `enterprise_rag/`; `office_agent/` is a reserved empty placeholder; root docs stay repo-level; historical ADRs are preserved, not moved or rewritten. No runtime behavior change. |
+| [019](enterprise_rag/019-hierarchical-runtime-privacy-modes.md) | Hierarchical runtime privacy modes | Two default-off switches: `PRIVACY_MODE` disables Tavily, LangSmith tracing, and both Office LLM assists while preserving the OpenAI RAG path; `OFFLINE_MODE` additionally disables OpenAI and every external service, failing closed with the additive `offline_mode` stop reason. A mode can only restrict; the graph is untouched. |
 
 ### Office Agent ADRs (015–018)
 
