@@ -84,7 +84,7 @@ deterministic Office capabilities keep working.
 
 ```
 .
-├── main.py                      # CLI entry point: interactive Q&A loop over the enterprise_rag engine
+├── main.py                      # Repository-level entry point → launches the Office Agent CLI (office_agent/cli.py)
 ├── enterprise_rag/              # ✅ Enterprise Document Q&A Engine — see enterprise_rag/README.md
 │   ├── README.md                #   Module docs: detailed setup, usage, API, budgets, failure handling
 │   ├── ingestion.py             #   KB build: load local Markdown corpus → split → embed → persist to Chroma
@@ -130,19 +130,26 @@ Copy-Item .env.example .env   # then edit .env and add your keys
 # 4. Build the knowledge base (one-time, before first RAG run)
 uv run python -m enterprise_rag.ingestion
 
-# 5. Run the RAG assistant
+# 5. Run the app — main.py launches the Office Agent CLI (the default entry point)
 uv run python main.py
+
+# Or run the standalone Enterprise RAG CLI (needs steps 3–4 for Knowledge Q&A)
+uv run python -m enterprise_rag.cli
 ```
 
-### Run the local Office Agent demo
+### Run the Office Agent
 
 ```powershell
-# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep,
-# Workflow / Approval, Unknown). Deterministic and offline by default — no API
-# keys or external services required while the optional Office LLM assists are
-# disabled. With OFFICE_LLM_ENABLED set, the Daily Briefing and Email Summary
-# requests attempt to call OpenAI; without a valid OPENAI_API_KEY they fall back
-# to deterministic output with a caveat.
+# Interactive Office Agent CLI — deterministic and offline by default (no API
+# keys or index required while the optional Office LLM assists are disabled).
+# `uv run python main.py` launches the same interface.
+uv run python -m office_agent.cli
+
+# Scripted local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks,
+# Meeting Prep, Workflow / Approval, Unknown). Same offline defaults; with
+# OFFICE_LLM_ENABLED set, the Daily Briefing and Email Summary requests attempt
+# to call OpenAI; without a valid OPENAI_API_KEY they fall back to deterministic
+# output with a caveat.
 uv run python scripts/demo_office_agent_v1.py
 
 # Also run the Knowledge Q&A example (needs the enterprise_rag setup + API keys).
@@ -184,7 +191,7 @@ uv run python -m mypy          # type-check the scoped engine-API surface
 | Office Agent local mock tools (Email, Calendar, Tickets/Tasks, Daily Briefing, Meeting Prep, Workflow/Approval) | **No** by default — local mock data, deterministic, and offline while the optional Office LLM assists are disabled. With `OFFICE_LLM_ENABLED` set, Email Summary and Daily Briefing attempt to call OpenAI; a valid `OPENAI_API_KEY` is required for the LLM-generated digest or narrative. Without one, they fall back to deterministic output with a caveat. |
 | `tests/enterprise_rag/` (`nodes/`, `graph/`, `evals/`), `tests/office_agent/` (excl. `integration/`), CI | **No** — fully mocked |
 | `ruff` / `mypy` | **No** |
-| Knowledge Q&A + `enterprise_rag` engine (`main.py`, `--include-knowledge`) | **Yes** — `OPENAI_API_KEY` (and `TAVILY_API_KEY` when web search is enabled) |
+| Knowledge Q&A + `enterprise_rag` engine (`enterprise_rag.cli`, the Office Agent's knowledge intent, or the demo `--include-knowledge`) | **Yes** — `OPENAI_API_KEY` (and `TAVILY_API_KEY` when web search is enabled) |
 | `tests/enterprise_rag/chains/` + `tests/office_agent/integration/` integration tests, the full eval run | **Yes** — real `gpt-5-mini`; skipped/excluded without keys |
 
 ## Validation

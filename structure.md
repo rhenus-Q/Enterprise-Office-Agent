@@ -57,7 +57,9 @@ The repository is organized as named capability modules (see
   `enterprise_rag` mocked suites patch every lazy client seam.
 - The dedicated Office Agent demo / usage doc is
   [`office_agent/README.md`](office_agent/README.md).
-- **Repo root** — `main.py` (thin CLI over the engine), `tests/`, `evals/`, and
+- **Repo root** — `main.py` (the repository-level entry point; it launches the
+  Office Agent CLI, `office_agent/cli.py`; the standalone Enterprise RAG CLI is
+  `enterprise_rag/cli.py`), `tests/`, `evals/`, and
   `docs/adr/` are repository-level. Root docs
   (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) stay repo-level;
   module-specific usage lives in `enterprise_rag/README.md` and
@@ -114,7 +116,8 @@ presentation: stop-reason caveats + Sources section), `enterprise_rag/ingestion.
 (idempotent Chroma build of the local Markdown corpus — the corpus is local, but
 the build calls the OpenAI embeddings service: collection reset + deterministic
 chunk ids, provenance metadata per document; refuses under `OFFLINE_MODE`),
-`main.py` (thin CLI over the engine).
+`enterprise_rag/cli.py` (the standalone Enterprise RAG interactive CLI over the
+engine, run via `uv run python -m enterprise_rag.cli`).
 
 **Design grammar** (applied consistently):
 - Conditional edge functions are **pure** — they read state and chains, never write.
@@ -123,8 +126,8 @@ chunk ids, provenance metadata per document; refuses under `OFFLINE_MODE`),
 - Every retry cycle passes through `generate`, which increments the `retries`
   counter that `MAX_RETRIES` caps.
 - Shared string constants live in `consts.py`; user-facing presentation lives
-  in `enterprise_rag/graph/formatting.py` (re-exported by `main.py` for backward
-  compatibility).
+  in `enterprise_rag/graph/formatting.py` (imported directly by the CLI, the eval
+  harness, and the engine).
 
 ## 3. GraphState
 
@@ -435,7 +438,7 @@ Bounding this path:
 
 Terminal notice nodes record *why* a run ended without a passing answer;
 `enterprise_rag/graph/formatting.py` maps each reason to a caveat appended after the answer
-(`STOP_REASON_NOTES`; `main.py` re-exports the names). Successful answers are
+(`STOP_REASON_NOTES`). Successful answers are
 printed without any caveat, in both modes.
 
 | `stop_reason` | Meaning | User-facing caveat (summary) |
@@ -627,7 +630,7 @@ insufficient-context / privacy-mode / multi-document / policy-fallback categorie
 graph by `evals/enterprise_rag/run_eval.py`, scored with deterministic checks (stop reasons,
 source provenance including local title checks, counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes) and reported to
 `evals/enterprise_rag/results.md`. The harness runs each row through
-`enterprise_rag.graph.engine.answer_question()` — the same entry point `main.py` uses — so
+`enterprise_rag.graph.engine.answer_question()` — the same entry point the CLI (`enterprise_rag/cli.py`) uses — so
 state seeding is never duplicated; privacy-mode rows pass
 `web_search_enabled=False` per run (no env mutation) and hard-assert
 `web_search_count == 0`, and rows may optionally pin a per-row

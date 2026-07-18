@@ -12,12 +12,14 @@ in [`docs/adr/`](../adr/README.md). For the RAG engine's full workflow, read
 ## Repo layout
 
 ```
-main.py                 # CLI over the enterprise_rag engine
+main.py                 # Repository-level entry point → launches the Office Agent CLI
 enterprise_rag/         # Enterprise Document Q&A / Agentic RAG engine (LangGraph)
+  cli.py                #   Standalone Interactive RAG CLI (uv run python -m enterprise_rag.cli)
   graph/                #   StateGraph, nodes, chains, engine, config, state, consts, formatting
   ingestion.py          #   Build the Chroma index from the local Markdown corpus
   data/                 #   Synthetic AcmeCorp corpus (6 fictional documents)
 office_agent/           # Office-workflow agent: deterministic router + base tools, two optional LLM assists
+  cli.py                #   Interactive Office Agent CLI over answer_office_request()
   README.md             #   Canonical Office Agent usage guide (capabilities, routing, assists)
   router.py             #   Keyword intent router (no LLM)
   engine.py             #   answer_office_request() entry point + dispatch

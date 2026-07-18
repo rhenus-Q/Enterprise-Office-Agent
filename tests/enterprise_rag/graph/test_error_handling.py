@@ -23,17 +23,17 @@ from enterprise_rag.graph.consts import (
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_ERROR,
 )
-from enterprise_rag.graph.graph import grade_generation
-from enterprise_rag.graph.nodes.clear_transient_tool_error import clear_transient_tool_error
-from enterprise_rag.graph.nodes.generate import GENERATION_FAILED_ANSWER
-from enterprise_rag.graph.nodes.tool_error_notice import tool_error_notice
-from main import (
+from enterprise_rag.graph.formatting import (
     GENERATION_ERROR_NOTE,
     RETRIEVAL_ERROR_NOTE,
     TOOL_ERROR_NOTE,
     WEB_SEARCH_ERROR_NOTE,
     format_answer,
 )
+from enterprise_rag.graph.graph import grade_generation
+from enterprise_rag.graph.nodes.clear_transient_tool_error import clear_transient_tool_error
+from enterprise_rag.graph.nodes.generate import GENERATION_FAILED_ANSWER
+from enterprise_rag.graph.nodes.tool_error_notice import tool_error_notice
 
 # ---------------------------------------------------------------------------
 # Helpers (mirrors the other graph test files)

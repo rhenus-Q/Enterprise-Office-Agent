@@ -19,15 +19,15 @@ from enterprise_rag.graph.consts import (
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL,
 )
+from enterprise_rag.graph.formatting import (
+    MAX_RETRIES_NOT_GROUNDED_NOTE,
+    MAX_RETRIES_NOT_USEFUL_NOTE,
+    format_answer,
+)
 from enterprise_rag.graph.graph import MAX_RETRIES, grade_generation
 from enterprise_rag.graph.nodes.max_retries_notice import (
     max_retries_not_grounded_notice,
     max_retries_not_useful_notice,
-)
-from main import (
-    MAX_RETRIES_NOT_GROUNDED_NOTE,
-    MAX_RETRIES_NOT_USEFUL_NOTE,
-    format_answer,
 )
 
 # ---------------------------------------------------------------------------

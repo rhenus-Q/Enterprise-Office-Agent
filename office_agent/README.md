@@ -105,6 +105,22 @@ Knowledge Q&A, which carries through the `enterprise_rag` caveats and sources).
 | `"what is the VPN access policy?"` | `knowledge_qa` |
 | `"order lunch for the team"` | `unknown` |
 
+## Interactive CLI
+
+```powershell
+# Interactive Office Agent CLI over answer_office_request(). It shows the routed
+# intent, the selected tool, the response content, and (when set) the stop
+# reason, sources, and run id. Deterministic tools need no API keys or index;
+# type 'exit' to quit. `uv run python main.py` launches the same interface (the
+# repository-level entry point).
+uv run python -m office_agent.cli
+uv run python main.py
+```
+
+The CLI is a pure presentation layer over the single entry point — no router or
+tool logic is duplicated, and it imports nothing from `enterprise_rag`. See
+[ADR 020](../docs/adr/020-module-owned-cli-entry-points.md).
+
 ## Run the demo script
 
 ```powershell

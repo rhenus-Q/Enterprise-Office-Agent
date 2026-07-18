@@ -34,9 +34,9 @@ from enterprise_rag.graph.consts import (
     STOP_REASON_WEB_FALLBACK_DISABLED,
     WEBSEARCH,
 )
+from enterprise_rag.graph.formatting import WEB_FALLBACK_DISABLED_NOTE, format_answer
 from enterprise_rag.graph.graph import decide_to_generate, grade_generation
 from enterprise_rag.graph.nodes.web_fallback_disabled_notice import web_fallback_disabled_notice
-from main import WEB_FALLBACK_DISABLED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
 # graph.config.web_fallback_policy -- env parsing

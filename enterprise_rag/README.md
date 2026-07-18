@@ -102,8 +102,8 @@ State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with fourteen 
 
 ## Module Structure
 
-The `enterprise_rag` package holds the whole RAG engine. The CLI entry point
-(`main.py`), the RAG test suites (`tests/enterprise_rag/nodes/`, `tests/enterprise_rag/graph/`,
+The `enterprise_rag` package holds the whole RAG engine. The standalone RAG CLI
+(`enterprise_rag/cli.py`, run via `uv run python -m enterprise_rag.cli`), the RAG test suites (`tests/enterprise_rag/nodes/`, `tests/enterprise_rag/graph/`,
 `tests/enterprise_rag/evals/`, `tests/enterprise_rag/chains/`), the Enterprise RAG behavioral eval
 harness (`evals/enterprise_rag/run_eval.py`
 + `evals/enterprise_rag/questions.jsonl`), and the Architecture Decision Records (`docs/adr/`)
@@ -136,7 +136,8 @@ enterprise_rag/                  # Enterprise Document Q&A Engine (企业文档�
 ```
 
 The programmatic entry point is `enterprise_rag.graph.engine.answer_question()`;
-`main.py` at the repo root is a thin CLI over it.
+`enterprise_rag/cli.py` is the standalone interactive CLI over it
+(`uv run python -m enterprise_rag.cli`).
 
 ## Setup
 
@@ -430,7 +431,7 @@ Each document has an effective date, a policy owner, concrete rules (approval th
 ## Run the assistant
 
 ```powershell
-uv run python main.py
+uv run python -m enterprise_rag.cli   # the standalone Enterprise RAG CLI
 ```
 
 ```

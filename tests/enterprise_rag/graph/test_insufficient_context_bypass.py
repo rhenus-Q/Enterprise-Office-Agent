@@ -24,8 +24,8 @@ from enterprise_rag.graph.consts import (
     STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_WEB_SEARCH_DISABLED,
 )
+from enterprise_rag.graph.formatting import WEB_SEARCH_DISABLED_NOTE, format_answer
 from enterprise_rag.graph.graph import grade_generation
-from main import WEB_SEARCH_DISABLED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
 # Helpers (mirrors the other graph test files)

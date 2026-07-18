@@ -23,6 +23,7 @@ from enterprise_rag.graph.consts import (
     STOP_REASON_WEB_SEARCH_DISABLED,
     WEBSEARCH,
 )
+from enterprise_rag.graph.formatting import WEB_SEARCH_DISABLED_NOTE, format_answer
 from enterprise_rag.graph.graph import (
     MAX_RETRIES,
     decide_to_generate,
@@ -30,7 +31,6 @@ from enterprise_rag.graph.graph import (
     route_question,
 )
 from enterprise_rag.graph.nodes.web_search_disabled_notice import web_search_disabled_notice
-from main import WEB_SEARCH_DISABLED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
 # graph.config.web_search_enabled -- env parsing

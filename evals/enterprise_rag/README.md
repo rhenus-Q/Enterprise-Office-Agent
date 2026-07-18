@@ -30,7 +30,7 @@ Required fields per row:
 - `category` - `local_corpus` (5 rows) | `web_fallback` (5) | `insufficient_context` (3) | `privacy_mode` (2) | `multi_document` (4) | `policy_fallback` (5).
 - `question` - the user question sent to the graph.
 - `web_search_enabled` - seeded into graph state per row (the same seam
-  `main.py` uses); `.env` is never touched.
+  the CLI (`enterprise_rag/cli.py`) uses); `.env` is never touched.
 - `expected_behavior` - human-readable description of the expected outcome.
 
 Optional check fields (`null`/absent = not checked):
