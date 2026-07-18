@@ -55,7 +55,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"main.py" = ["F401", "E402"]                    # intentional re-exports after load_dotenv()
 "enterprise_rag/graph/graph.py" = ["E402"]      # imports after load_dotenv()
 "evals/enterprise_rag/run_eval.py" = ["E402"]   # imports after sys.path insert
 "tests/**" = ["E731"]                # monkeypatch lambdas are the house style
@@ -63,6 +62,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.11"
 files = [
+    "enterprise_rag/cli.py",
     "enterprise_rag/graph/engine.py",
     "enterprise_rag/graph/config.py",
     "enterprise_rag/graph/formatting.py",

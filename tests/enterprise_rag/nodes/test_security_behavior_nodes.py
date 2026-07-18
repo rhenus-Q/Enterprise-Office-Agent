@@ -23,9 +23,9 @@ from types import SimpleNamespace
 from langchain_core.documents import Document
 
 from enterprise_rag.graph.consts import STOP_REASON_TOOL_ERROR
+from enterprise_rag.graph.formatting import format_sources
 from enterprise_rag.graph.nodes.grade_documents import grade_documents
 from enterprise_rag.graph.nodes.web_search import web_search
-from main import format_sources
 
 web_search_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
 grade_documents_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")

@@ -21,7 +21,7 @@ from enterprise_rag.graph.consts import (
     WEB_SEARCH_SOURCE,
     WEBSEARCH,
 )
-from main import (
+from enterprise_rag.graph.formatting import (
     LOCAL_SOURCE_FALLBACK_LABEL,
     SOURCES_HEADER,
     WEB_SEARCH_ERROR_NOTE,

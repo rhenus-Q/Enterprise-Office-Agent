@@ -27,9 +27,9 @@ from enterprise_rag.graph.config import (
     max_web_searches_per_run,
 )
 from enterprise_rag.graph.consts import RETRIEVE, STOP_REASON_BUDGET_EXHAUSTED
+from enterprise_rag.graph.formatting import BUDGET_EXHAUSTED_NOTE, format_answer
 from enterprise_rag.graph.graph import grade_generation
 from enterprise_rag.graph.nodes.budget_exhausted_notice import budget_exhausted_notice
-from main import BUDGET_EXHAUSTED_NOTE, format_answer
 
 # ---------------------------------------------------------------------------
 # Config parsing

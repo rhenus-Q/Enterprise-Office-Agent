@@ -63,8 +63,8 @@ Three quality gates: **document relevance**, **answer grounding** (anti-hallucin
 External dependency failures (retriever, Tavily, generation LLM, graders, query rewriter)
 never crash the graph: each call site catches the exception, degrades or stops safely, and
 records a `stop_reason` (`retrieval_error`, `web_search_error`, `generation_error`,
-`tool_error`) so `main.py` appends an honest caveat. Console banners log only the exception
-type, never the message.
+`tool_error`) so the RAG CLI (`enterprise_rag/cli.py`) appends an honest caveat. Console banners
+log only the exception type, never the message.
 
 **Runtime privacy modes** (default off, strict truthy parsing — see
 [ADR 019](docs/adr/019-hierarchical-runtime-privacy-modes.md)):
@@ -87,7 +87,9 @@ service.
 
 | Path | Purpose |
 |------|---------|
-| `main.py` | CLI entry point. Loads `.env`, then runs an interactive Q&A loop over `enterprise_rag.graph.engine.answer_question()`. Re-exports the `enterprise_rag/graph/formatting.py` names (`format_answer`, `format_sources`, caveat notes) for backward compatibility. |
+| `main.py` | Repository-level entry point for the **Enterprise Office Agent** — imports and calls `office_agent.cli.main`, so `uv run python main.py` launches the Office Agent interactive CLI (identical to `uv run python -m office_agent.cli`). It imports nothing from `enterprise_rag`; the old `from main import …` formatting re-export surface is retired ([ADR 020](docs/adr/020-module-owned-cli-entry-points.md)); import those names from `enterprise_rag.graph.formatting`. |
+| `enterprise_rag/cli.py` | The standalone Enterprise RAG interactive CLI: loads `.env`, enforces tracing privacy, prints the OFFLINE_MODE / PRIVACY_MODE / WEB_SEARCH_ENABLED banner, then runs the interactive Q&A loop over `enterprise_rag.graph.engine.answer_question()` with `format_answer` output (caveats + Sources). Side-effect-free import (`.env`/tracing done inside `main()`). Run via `uv run python -m enterprise_rag.cli`. See [ADR 020](docs/adr/020-module-owned-cli-entry-points.md). |
+| `office_agent/cli.py` | The Office Agent interactive CLI over `office_agent.engine.answer_office_request()` — the product-level/default CLI (root `main.py` launches it): displays routed intent, selected tool, response content, and (when set) stop reason, sources, run id. Pure presentation — no router/tool logic duplicated; imports nothing from `enterprise_rag`. Run via `uv run python -m office_agent.cli`. See [ADR 020](docs/adr/020-module-owned-cli-entry-points.md). |
 | `enterprise_rag/__init__.py` | Package marker + docstring for the RAG engine. No clients, no side effects. |
 | `enterprise_rag/README.md` | Module-level documentation: detailed engine setup, usage, privacy mode, fallback policy, programmatic API, budgets, and failure handling (the content that used to dominate the root README). |
 | `office_agent/` | The **Enterprise Office Agent** — seven capabilities: the v1 / Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7 Workflow / Approval Agent. Deterministic keyword router (`router.py`), `answer_office_request()` entry point (`engine.py`), typed intent constants + `ToolResult` schemas (`schemas.py`), unsupported-intent + presentation (`formatting.py`), `tools/` — `knowledge` (thin `enterprise_rag` adapter) plus `email`, `calendar`, `tickets`, `briefing`, `meeting`, `approvals` (local mock-data tools), and `llm_assist/` — two **optional, default-off** LLM assists, the email digest layered on the `email` tool ([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md)) and the Daily Briefing narrative layered on the `briefing` tool ([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)), both gated by the single `OFFICE_LLM_ENABLED` switch (with its own mode readers in `llm_assist/config.py` — no `enterprise_rag` import — so either privacy mode forces the assists off). Local-only and LLM-free except the Knowledge Q&A adapter and (only when explicitly enabled) those two assists; mock data in `mock_data/` is read-only and anchored to the data (not the system clock) — approve/reject and follow-up tasks are *simulated*, never written back. Must never regress `enterprise_rag`. See `office_agent/README.md` and ADRs 015–018. The deterministic capabilities keep working under both privacy modes. |
@@ -114,7 +116,7 @@ service.
 | `evals/enterprise_rag/` | Behavioral eval harness for the RAG graph: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `enterprise_rag.graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report), and `history/`. A full run refuses under `OFFLINE_MODE` (`CONFIG ERROR`, exit 2, report/history untouched); `PRIVACY_MODE` deliberately does *not* block it, but forces web search off, so web-dependent rows fail by design. Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. |
 | `evals/enterprise_rag/history/` | Append-only, metadata-only eval history records (one JSON per full run; never answer text, `page_content`, prompts, or raw state). The harness only writes new records — never edits/deletes. `evals/enterprise_rag/history/*.json` is gitignored by default (the dir is tracked via `.gitkeep`); force-add (`git add -f`) to share a known-good baseline. |
 | `evals/office_agent/llm_assist/` | Standalone offline-validator + approval-gated real-model evals for the two optional Office LLM assists: `run_email_digest_eval.py` / `email_digest_cases.jsonl` and `run_briefing_narrative_eval.py` / `briefing_narrative_cases.jsonl`, sharing `_env.py` (whose `ensure_openai_api_key()` refuses a full run under **either** privacy mode, since both disable the assists being measured). `--validate-only` is keys-free and mode-free; generated `*_results.md` reports are gitignored. Evaluates the assists only — not the seven deterministic capabilities (those are covered by `tests/office_agent/`). |
-| `docs/adr/` | Architecture Decision Records (001–019) with an index in `docs/adr/README.md`, split by owning scope: `docs/adr/enterprise_rag/` (001–014), `docs/adr/office_agent/` (015–018), and the repository-wide [019 — hierarchical runtime privacy modes](docs/adr/019-hierarchical-runtime-privacy-modes.md) directly under `docs/adr/`. When a documented decision changes, update or supersede the matching ADR. |
+| `docs/adr/` | Architecture Decision Records (001–020) with an index in `docs/adr/README.md`, split by owning scope: `docs/adr/enterprise_rag/` (001–014), `docs/adr/office_agent/` (015–018), and the repository-wide ADRs directly under `docs/adr/` — [019 — hierarchical runtime privacy modes](docs/adr/019-hierarchical-runtime-privacy-modes.md) and [020 — module-owned CLI entry points](docs/adr/020-module-owned-cli-entry-points.md). When a documented decision changes, update or supersede the matching ADR. |
 | `docs/roadmap/` | A **local working-artifact area** (see `docs/roadmap/README.md`): `spec/`, `plan/`, `implementation/`, `commands-review/`, plus per-topic `<topic>-review/` dirs (e.g. `architecture-review/`, `security-review/`, `failure-modes-review/`, `test-coverage-review/`). Its contents are ignored by Git by default, and **exactly four files are version-controlled** (workflow infrastructure the `.claude/commands/` files depend on): `docs/roadmap/README.md`, `docs/roadmap/spec/spec-template.md`, `docs/roadmap/plan/plan-template.md`, and `docs/roadmap/implementation/implementation-template.md`. Everything else — specs, plans, implementation reports, and all review reports — **stays local and is never committed**. **Durable conclusions must be promoted** into the tracked documentation instead: `docs/adr/`, `docs/engineering/`, `docs/releases/`, the READMEs, `structure.md`, tests, or code. Reports from project-level `<topic>-review` commands (architecture, security, failure-modes, test-coverage) go under `docs/roadmap/<topic>-review/` with dated `<YYYY-MM-DD>-<focus-slug>-<topic>-review.md` collision-safe filenames and must not overwrite prior reports; `docs/roadmap/commands-review/` holds command-file review reports (e.g. `/review-command`). |
 | `.claude/commands/` | Claude Code slash-command workflow files (spec → plan → implement → review-diff; plus `arch-review`, command-authoring/review, and `update-claude-md`). Each has YAML frontmatter (`description`, `argument-hint`, `allowed-tools`); keep `allowed-tools` minimal and scoped (e.g. `Bash(git status:*)`, not blanket `Bash`). |
 | `tests/conftest.py` | Loads `.env` before collection; provides the `requires_openai` skip marker, which also skips (with an explicit offline reason) under `OFFLINE_MODE`. |
@@ -217,8 +219,12 @@ uv run pre-commit install
 # Build the Chroma index (one-time, before first run)
 uv run python -m enterprise_rag.ingestion
 
-# Run the assistant
+# Run the Office Agent (main.py launches the Office Agent CLI; deterministic tools need no keys/index)
 uv run python main.py
+uv run python -m office_agent.cli
+
+# Run the standalone Enterprise RAG CLI
+uv run python -m enterprise_rag.cli
 
 # Node unit tests — fully mocked, NO API keys required
 uv run pytest tests/enterprise_rag/nodes/ -v
@@ -252,6 +258,8 @@ $files = @(
     "enterprise_rag/graph/chains/hallucination_grader.py",
     "enterprise_rag/graph/chains/answer_grader.py",
     "enterprise_rag/ingestion.py",
+    "enterprise_rag/cli.py",
+    "office_agent/cli.py",
     "main.py"
 )
 

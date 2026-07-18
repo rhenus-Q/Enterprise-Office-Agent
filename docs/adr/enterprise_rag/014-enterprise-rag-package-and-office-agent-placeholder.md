@@ -62,7 +62,10 @@ When they are, they must follow the same rules as the rest of the repo
 
 The CLI entry point remains at the root as a thin wrapper over
 `enterprise_rag.graph.engine`, preserving `uv run python main.py` and the
-`from main import …` re-export surface the tests rely on.
+`from main import …` re-export surface the tests rely on. (Later superseded by
+[ADR 020](../020-module-owned-cli-entry-points.md): the RAG CLI moved to
+`enterprise_rag/cli.py`, root `main.py` became the repository-level Office Agent
+entry point, and the `from main import …` re-export surface was retired.)
 
 ### 4. Documentation is split into repo-level and module-level
 
