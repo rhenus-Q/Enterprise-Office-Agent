@@ -78,9 +78,12 @@ repeated elsewhere.
   provider-backed ingestion.
 - Do not make external network or provider calls (OpenAI, Tavily, Chroma,
   LangSmith, or any other). Do not access external URLs.
-- Never scan `.claude/commands/**` or `docs/roadmap/**` (see "Scope and
-  exclusions"). `docs/roadmap/docs-drift-review/` is an output location only, not
-  an audit input.
+- Never scan `.claude/commands/**` or local `docs/roadmap/**` artifacts (see
+  "Scope and exclusions"). The four tracked `docs/roadmap/` workflow files
+  (`README.md`, `spec/spec-template.md`, `plan/plan-template.md`,
+  `implementation/implementation-template.md`) are the sole exception: they are
+  version-controlled active documentation and **are** audited.
+  `docs/roadmap/docs-drift-review/` is an output location only, not an audit input.
 
 This command remains review-only even when clear drift is found.
 
@@ -94,13 +97,23 @@ checked — including intentional uncommitted changes. Do not treat an uncommitt
 path as stale merely because it differs from `HEAD`.
 
 Build **two** inventories from files tracked by Git, both excluding
-`.claude/commands/**` and all of `docs/roadmap/**`.
+`.claude/commands/**` and all local `docs/roadmap/**` artifacts (specs, plans,
+implementation reports, and review artifacts) — **except** the four tracked
+`docs/roadmap/` workflow files, which are active documentation and are audited.
 
-Markdown inventory:
+Markdown inventory (the blanket `docs/roadmap/**` exclusion drops the local
+artifacts; the second `git ls-files` additively re-includes exactly the four
+tracked workflow files, and returns each only while it is tracked):
 
     git ls-files "*.md" \
       ":(exclude).claude/commands/**" \
       ":(exclude)docs/roadmap/**"
+
+    git ls-files \
+      "docs/roadmap/README.md" \
+      "docs/roadmap/spec/spec-template.md" \
+      "docs/roadmap/plan/plan-template.md" \
+      "docs/roadmap/implementation/implementation-template.md"
 
 Embedded-prose source/config inventory:
 
@@ -134,7 +147,16 @@ code around them evolves.
 | Path | Why excluded |
 |---|---|
 | `.claude/commands/**` | Command definitions, including this file — not project documentation. |
-| `docs/roadmap/**` | Temporary plans, local review artifacts, and process documents — not active documentation. Includes this command's own report directory. |
+| `docs/roadmap/**` local artifacts | Temporary plans, local review artifacts, and process documents — not active documentation. Includes this command's own report directory. **Excludes the four tracked workflow files below, which are audited.** |
+
+**Audited despite living under `docs/roadmap/` (tracked active documentation):**
+
+| Path | Why audited |
+|---|---|
+| `docs/roadmap/README.md` | Version-controlled; documents the roadmap version-control policy and conventions. |
+| `docs/roadmap/spec/spec-template.md` | Version-controlled workflow template the `.claude/commands/` files depend on. |
+| `docs/roadmap/plan/plan-template.md` | Version-controlled workflow template the `.claude/commands/` files depend on. |
+| `docs/roadmap/implementation/implementation-template.md` | Version-controlled workflow template the `.claude/commands/` files depend on. |
 
 **Allowed output location (not audit input):**
 
@@ -178,12 +200,14 @@ drift.
 
 ## Classify documents before judging drift
 
-Do not apply the same freshness rules to every file. Roadmap documents are out of
-scope entirely (excluded above) and are **not** a review category.
+Do not apply the same freshness rules to every file. Local roadmap artifacts
+(specs, plans, implementation reports, review artifacts) are out of scope entirely
+(excluded above) and are **not** a review category. The four tracked roadmap
+workflow files are the exception: audit them as Category A active documentation.
 
 | Category | Examples | Drift rule |
 |---|---|---|
-| **A. Active / current** | `README.md`, `CLAUDE.md`, `structure.md`, module READMEs, `evals/README.md`, `docs/engineering/**` | Expected to describe current reality. Inaccurate current claims are drift. |
+| **A. Active / current** | `README.md`, `CLAUDE.md`, `structure.md`, module READMEs, `evals/README.md`, `docs/engineering/**`, and the four tracked roadmap workflow files (`docs/roadmap/README.md`, `docs/roadmap/spec/spec-template.md`, `docs/roadmap/plan/plan-template.md`, `docs/roadmap/implementation/implementation-template.md`) | Expected to describe current reality. Inaccurate current claims are drift. |
 | **B. Historical decision records** | `docs/adr/**` | Preserve what was true when decided. Flag only: broken link; history presented as current; stale current-status/implementation-note section; wrong supersession reference; missing/incorrect supersession metadata; an objective typo or impossible path already wrong at the time. |
 | **C. Release notes / version snapshots** | `docs/releases/**`, dated validation reports | Old versions/paths/totals may be correct history. Flag only: claims to describe the *current* version; broken current navigation link; a command presented as currently runnable that no longer works; contradictory version relationship; stale current-status section; a pointer to an active doc via an obsolete path. |
 | **D. Generated results / eval reports** | tracked eval or benchmark output Markdown | Treat measured values as point-in-time unless they claim to be current. Check links, headings, scope descriptions, runner/dataset paths, and obvious contradictions. Do not rewrite measured values by inference. |
@@ -363,8 +387,10 @@ Write the detailed report using this structure:
 
     ## Report metadata
     Timestamp; requested scope; report path; repository root; Markdown and
-    embedded-prose discovery rules; exclusions (`.claude/commands/**`,
-    `docs/roadmap/**`); Markdown files discovered; Markdown files reviewed;
+    embedded-prose discovery rules; exclusions (`.claude/commands/**` and local
+    `docs/roadmap/**` artifacts, noting the four tracked roadmap workflow files
+    are audited as active documentation); Markdown files discovered; Markdown
+    files reviewed;
     embedded-prose source/config files discovered; embedded-prose source/config
     files reviewed, split into **read in depth** vs. **Grep-triaged** (located but
     not read in full); files excluded by scope and exclusion rule; relevant
@@ -421,10 +447,11 @@ Write the detailed report using this structure:
     ## Final verdict
     Overall drift risk; any blocking item; whether a repair pass is recommended;
     whether active documentation is trustworthy for onboarding/maintenance; and
-    confirmations that this was review-only, that `.claude/commands/**` and
-    `docs/roadmap/**` were excluded, that no existing file was modified, that no
-    repair was applied, and that no external calls, real-model tests, or full evals
-    ran.
+    confirmations that this was review-only, that `.claude/commands/**` and local
+    `docs/roadmap/**` artifacts were excluded (the four tracked roadmap workflow
+    files audited as active documentation), that no existing file was modified,
+    that no repair was applied, and that no external calls, real-model tests, or
+    full evals ran.
 
 Cite evidence for every confirmed finding; do not quote long passages.
 
@@ -451,9 +478,9 @@ excerpts unless the user asks. Use this structure:
     ## Verdict
     Active documentation is broadly healthy / moderately drifted / significantly
     drifted. Confirm in one paragraph: no repair applied; no existing file
-    modified; only the new report created; `.claude/commands/**` and
-    `docs/roadmap/**` excluded; no external calls, real-model tests, or full evals
-    run.
+    modified; only the new report created; `.claude/commands/**` and local
+    `docs/roadmap/**` artifacts excluded (four tracked roadmap workflow files
+    audited); no external calls, real-model tests, or full evals run.
 
 ---
 
@@ -463,7 +490,9 @@ excerpts unless the user asks. Use this structure:
    state.
 2. Build both inventories — the tracked-Markdown inventory and the tracked
    source/config embedded-prose inventory — excluding `.claude/commands/**` and
-   `docs/roadmap/**`. Apply `$ARGUMENTS` scope when provided.
+   local `docs/roadmap/**` artifacts, but additively including the four tracked
+   roadmap workflow files in the Markdown inventory as active documentation. Apply
+   `$ARGUMENTS` scope when provided.
 3. Classify reviewed documents and prose (active / historical ADR / release /
    generated / embedded documentation prose).
 4. Inspect current repository structure, config, CI, tests, evals, entry points,
