@@ -73,7 +73,7 @@ richer summary — they gain **no action surface** and cannot send, approve, mut
 or execute any office operation. See [`office_agent/llm_assist/`](office_agent/llm_assist/).
 
 Two hierarchical, default-off runtime switches restrict external egress repo-wide
-([ADR 019](docs/adr/enterprise_rag/019-hierarchical-runtime-privacy-modes.md)):
+([ADR 019](docs/adr/019-hierarchical-runtime-privacy-modes.md)):
 `PRIVACY_MODE` disables web search, LangSmith tracing, and both LLM assists while
 preserving the OpenAI RAG path, and `OFFLINE_MODE` additionally disables OpenAI
 and every other external service — Knowledge Q&A, ingestion, and the real-model

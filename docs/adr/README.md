@@ -13,13 +13,15 @@ architecture.
 
 ## Index
 
-ADRs are grouped by the module they primarily concern.
+ADRs are grouped by the module they primarily concern; a decision that spans
+the whole repository is classified as repository-wide and lives directly in
+`docs/adr/`.
 [ADR 014](enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md)
 is listed under Enterprise RAG because its primary decision is packaging the
 completed RAG implementation into `enterprise_rag/`; the `office_agent/` portion
 was only a reserved empty placeholder at that time.
 
-### Enterprise RAG ADRs (001–014, 019)
+### Enterprise RAG ADRs (001–014)
 
 | ADR | Title | Decision in one line |
 |---|---|---|
@@ -37,7 +39,6 @@ was only a reserved empty placeholder at that time.
 | [012](enterprise_rag/012-prompt-injection-hardening.md) | Prompt-injection hardening | Extends ADR 010: Security rules on the control-plane chains (router/graders/rewriter), explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters in the generation context, and deterministic graph-level containment tests. |
 | [013](enterprise_rag/013-eval-harness-v2-expansion.md) | Eval harness v2 expansion | Extends ADR 009: 24-row/6-category dataset (adds `multi_document`, `policy_fallback`), richer deterministic checks (AND/OR contains, not-contains, source titles, min-local-sources, web-search-count, policy), and metadata-only history + delta tracking; still deterministic, still not in CI. |
 | [014](enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md) | `enterprise_rag` package + `office_agent` placeholder | The completed RAG implementation moved under `enterprise_rag/`; `office_agent/` is a reserved empty placeholder; root docs stay repo-level; historical ADRs are preserved, not moved or rewritten. No runtime behavior change. |
-| [019](enterprise_rag/019-hierarchical-runtime-privacy-modes.md) | Hierarchical runtime privacy modes | Two default-off switches: `PRIVACY_MODE` disables Tavily, LangSmith tracing, and both Office LLM assists while preserving the OpenAI RAG path; `OFFLINE_MODE` additionally disables OpenAI and every external service, failing closed with the additive `offline_mode` stop reason. A mode can only restrict; the graph is untouched. |
 
 ### Office Agent ADRs (015–018)
 
@@ -47,6 +48,12 @@ was only a reserved empty placeholder at that time.
 | [016](office_agent/016-office-agent-capability-extensions.md) | Office Agent capability extensions | Extends ADR 015 with the later Meeting Agent / Meeting Prep (v1.5) and Workflow / Approval Agent (v1.6) capabilities: the seven-capability inventory and the current router precedence (email → workflow/approval → ticket → meeting_prep → calendar → daily_briefing → knowledge → unknown). Both extensions are deterministic composite workflows with simulated actions — no LLM (Knowledge Q&A stays the only capability calling `enterprise_rag`), no external integration. |
 | [017](office_agent/017-office-agent-llm-assist-email-digest.md) | Optional LLM-assisted email digest | Partially supersedes ADR 015/016's "No LLM" office stance for the Email Summary tool only: an optional, **default-off** (`OFFICE_LLM_ENABLED`) single-pass structured-output digest in `office_agent/llm_assist/`, with a byte-for-byte flag-off guarantee, deterministic grounding validation, an honest `llm_assist_error` fallback, and injection controls (no action surface). All other tools stay deterministic; keys-free CI is unaffected (real-model test gated under `tests/office_agent/integration/`). |
 | [018](office_agent/018-office-agent-llm-assist-daily-briefing.md) | Optional LLM-assisted Daily Briefing narrative | Extends ADR 017 with a **second** optional, **default-off** assist — for the Daily Briefing tool only. The same `OFFICE_LLM_ENABLED` switch gates a single-pass structured-output narrative (`BriefingNarrative`) that synthesizes emails, meetings, tickets, tasks, and approvals; a separate `collect_briefing_facts()` fact set is the single source of truth for both the LLM input and the grounding whitelist. Prepends narrative → validated references → the unchanged deterministic briefing; keeps the byte-for-byte flag-off guarantee, deterministic grounding (duplicates normalized, not rejected), and the `llm_assist_error` fallback. All other tools stay deterministic. |
+
+### Repository-wide ADRs (019)
+
+| ADR | Title | Decision in one line |
+|---|---|---|
+| [019](019-hierarchical-runtime-privacy-modes.md) | Hierarchical runtime privacy modes | Two default-off switches: `PRIVACY_MODE` disables Tavily, LangSmith tracing, and both Office LLM assists while preserving the OpenAI RAG path; `OFFLINE_MODE` additionally disables OpenAI and every external service, failing closed with the additive `offline_mode` stop reason. A mode can only restrict; the graph is untouched. Governs both `enterprise_rag` and `office_agent`, so it lives at `docs/adr/`. |
 
 ## Conventions
 

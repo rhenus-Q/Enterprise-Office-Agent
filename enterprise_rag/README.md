@@ -174,7 +174,7 @@ See [`.env.example`](../.env.example) for the full template:
 ### Runtime privacy modes (`PRIVACY_MODE` / `OFFLINE_MODE`)
 
 Two hierarchical, default-off switches sit above the per-service flags
-([ADR 019](../docs/adr/enterprise_rag/019-hierarchical-runtime-privacy-modes.md)).
+([ADR 019](../docs/adr/019-hierarchical-runtime-privacy-modes.md)).
 Both use strict truthy parsing (`true`/`1`/`yes`/`on`), and a mode can only
 *restrict* — while active it overrides `WEB_SEARCH_ENABLED=true`,
 `OFFICE_LLM_ENABLED=true`, the tracing variables, and any per-run
