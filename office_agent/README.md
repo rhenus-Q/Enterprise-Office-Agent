@@ -237,6 +237,16 @@ the single `OFFICE_LLM_ENABLED` switch (a truthy `true`/`1`/`yes`/`on`) and boun
 by `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS` (default 60). Setting the flag turns on
 **both** at once; each keeps an independent byte-for-byte flag-off guarantee.
 
+**Either runtime privacy mode overrides the flag.** With `PRIVACY_MODE` or
+`OFFLINE_MODE` active, `office_llm_enabled()` returns `False` even if
+`OFFICE_LLM_ENABLED=true`, so both tools fall back to their exact deterministic
+output and no LLM client is constructed
+([ADR 019](../docs/adr/enterprise_rag/019-hierarchical-runtime-privacy-modes.md)).
+The seven deterministic capabilities are unaffected by either mode and keep
+working fully offline; only Knowledge Q&A (which needs `enterprise_rag` and
+OpenAI) fails closed under `OFFLINE_MODE`, returning the engine's
+`offline_mode` stop reason and caveat through the unchanged adapter.
+
 ### Email digest
 
 When enabled, a single structured-output `gpt-5-mini` call reads the filtered

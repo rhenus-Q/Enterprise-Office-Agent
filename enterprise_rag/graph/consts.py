@@ -27,6 +27,11 @@ STOP_REASON_MAX_RETRIES_NOT_GROUNDED = "max_retries_not_grounded"
 STOP_REASON_MAX_RETRIES_NOT_USEFUL = "max_retries_not_useful"
 STOP_REASON_BUDGET_EXHAUSTED = "budget_exhausted"
 
+# OFFLINE_MODE fail-closed: the engine refused to run the graph because answering
+# requires the OpenAI service. Recorded before the graph executes (no node sets
+# it), so no external request is ever attempted.
+STOP_REASON_OFFLINE_MODE = "offline_mode"
+
 # External-dependency failure stop reasons. Degraded runs record these so the
 # caller can attach an honest caveat instead of crashing or staying silent.
 STOP_REASON_RETRIEVAL_ERROR = "retrieval_error"  # Chroma / retriever failed

@@ -41,8 +41,14 @@ from enterprise_rag.graph.config import (
     WEB_FALLBACK_AGGRESSIVE,
     WEB_FALLBACK_CONSERVATIVE,
     WEB_FALLBACK_DISABLED,
+    offline_mode,
 )
 from enterprise_rag.graph.consts import WEB_SEARCH_SOURCE
+from enterprise_rag.runtime_privacy import enforce_tracing_privacy
+
+# Exit code for a run refused by configuration (distinct from 1 = eval problems),
+# matching the office assist runners' "invalid run" convention.
+EXIT_INVALID_RUN = 2
 
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
@@ -1000,6 +1006,21 @@ def main(argv=None):
         counts = {c: sum(1 for r in rows if r["category"] == c) for c in CATEGORIES}
         print(f"Dataset OK: {len(rows)} rows " + ", ".join(f"{c}={n}" for c, n in counts.items()))
         return 0
+
+    # Full mode only, below this point. OFFLINE_MODE fails closed: the eval drives
+    # the real graph, which needs OpenAI, so refuse before running any row and
+    # leave any existing report/history untouched.
+    if offline_mode():
+        print("CONFIG ERROR: OFFLINE_MODE is enabled — this eval requires the OpenAI service.")
+        print("Unset OFFLINE_MODE to run the full eval, or use --validate-only.")
+        print("No rows were executed; the existing report and history were left untouched.")
+        return EXIT_INVALID_RUN
+
+    # PRIVACY_MODE does NOT block this eval (the OpenAI path is preserved), but
+    # tracing must be neutralized before the first row runs. No-op when no mode
+    # is active. Note: under PRIVACY_MODE web search is forced off, so
+    # web-dependent rows are expected to fail by design.
+    enforce_tracing_privacy()
 
     if args.limit is not None:
         rows = rows[: args.limit]

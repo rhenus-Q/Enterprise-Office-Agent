@@ -41,6 +41,34 @@ def test_ensure_openai_api_key_present_passes(monkeypatch):
     env.ensure_openai_api_key()
 
 
+@pytest.mark.parametrize("mode", ["OFFLINE_MODE", "PRIVACY_MODE"])
+def test_runtime_privacy_mode_raises_config_error_even_with_a_key(monkeypatch, mode):
+    # Either mode disables the assists these runners evaluate, so a full run must
+    # fail closed before any client is constructed -- even with a valid key set.
+    monkeypatch.setattr(env, "load_repo_env", lambda: None)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.delenv("OFFLINE_MODE", raising=False)
+    monkeypatch.delenv("PRIVACY_MODE", raising=False)
+    monkeypatch.setenv(mode, "true")
+
+    with pytest.raises(env.ConfigError) as excinfo:
+        env.ensure_openai_api_key()
+
+    message = str(excinfo.value)
+    assert mode in message
+    assert "No eval cases were executed" in message
+
+
+def test_non_truthy_mode_values_do_not_block_the_run(monkeypatch):
+    monkeypatch.setattr(env, "load_repo_env", lambda: None)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.setenv("OFFLINE_MODE", "false")
+    monkeypatch.setenv("PRIVACY_MODE", "bogus")
+
+    # Must not raise: only an explicit truthy value activates a mode.
+    env.ensure_openai_api_key()
+
+
 def test_load_repo_env_uses_override_false(monkeypatch):
     """`.env` must never override an already-exported process variable."""
 

@@ -162,12 +162,37 @@ See [`.env.example`](../.env.example) for the full template:
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_API_KEY`                                                                    | Yes                                   | Chat models (router, graders, generation) and embeddings                                                                                                                       |
 | `TAVILY_API_KEY`                                                                    | Yes                                   | Web-search fallback node                                                                                                                                                       |
+| `PRIVACY_MODE`                                                                      | Optional (default off)                | Disables Tavily web search, LangSmith tracing, and both optional Office LLM assists; preserves the OpenAI RAG path (see below)                                                  |
+| `OFFLINE_MODE`                                                                      | Optional (default off)                | Everything `PRIVACY_MODE` disables, plus OpenAI and all other external services; Knowledge Q&A, ingestion, and real-model evals fail closed (see below)                          |
 | `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` to disable all external web search (privacy mode)                                                                                                               |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
 | `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`                    | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGCHAIN_TRACING_V2=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. |
 
 `.env` is gitignored; only `.env.example` is committed.
+
+### Runtime privacy modes (`PRIVACY_MODE` / `OFFLINE_MODE`)
+
+Two hierarchical, default-off switches sit above the per-service flags
+([ADR 019](../docs/adr/enterprise_rag/019-hierarchical-runtime-privacy-modes.md)).
+Both use strict truthy parsing (`true`/`1`/`yes`/`on`), and a mode can only
+*restrict* — while active it overrides `WEB_SEARCH_ENABLED=true`,
+`OFFICE_LLM_ENABLED=true`, the tracing variables, and any per-run
+`AnswerOptions`. Precedence: `OFFLINE_MODE` > `PRIVACY_MODE` > individual flags.
+
+* **`PRIVACY_MODE`** — nothing leaves the machine except the OpenAI calls the
+  system needs. Disables Tavily web search, LangSmith tracing, and both optional
+  Office LLM assists. Knowledge Q&A and ingestion work exactly as normal.
+* **`OFFLINE_MODE`** — nothing leaves the machine at all. Adds OpenAI chat and
+  embeddings to the above. It fails closed deterministically instead of
+  attempting a call: `answer_question()` short-circuits **before the graph** and
+  returns `stop_reason="offline_mode"` with an honest caveat; ingestion exits `2`
+  before building a client; the real-model eval runners refuse with a
+  `CONFIG ERROR`; `requires_openai` tests skip. Every `--validate-only` mode and
+  all deterministic Office Agent capabilities keep working.
+
+Note: running the full RAG eval under `PRIVACY_MODE` fails its web-dependent rows
+by design — that is correct mode behavior, not a regression.
 
 ### Privacy mode (`WEB_SEARCH_ENABLED=false`)
 

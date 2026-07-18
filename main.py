@@ -9,8 +9,13 @@ from dotenv import load_dotenv
 # constructed at runtime, so .env must be loaded before the graph runs.
 load_dotenv()
 
-from enterprise_rag.graph.config import web_search_enabled
+from enterprise_rag.graph.config import offline_mode, privacy_mode, web_search_enabled
 from enterprise_rag.graph.engine import answer_question
+from enterprise_rag.runtime_privacy import enforce_tracing_privacy
+
+# Runtime privacy modes are applied immediately after .env is loaded, before any
+# chain can run, so a PRIVACY_MODE / OFFLINE_MODE process never exports a trace.
+enforce_tracing_privacy()
 
 # Presentation lives in enterprise_rag/graph/formatting.py (shared with the eval harness and
 # the engine). Re-exported here so existing imports `from main import ...`
@@ -38,9 +43,23 @@ def main():
     print("Agentic RAG Assistant for Enterprise Document Q&A")
     print("Type 'exit' to quit.\n")
 
+    # Runtime privacy modes, most restrictive first. OFFLINE_MODE disables the
+    # OpenAI path entirely, so every question ends with the offline caveat --
+    # say so up front instead of letting the user discover it per question.
+    if offline_mode():
+        print(
+            "OFFLINE_MODE is ENABLED. No external service is contacted, so "
+            "Knowledge Q&A is unavailable and every question returns the "
+            "deterministic offline response.\n"
+        )
+    elif privacy_mode():
+        print(
+            "PRIVACY_MODE is ENABLED. Web search and LangSmith tracing are "
+            "disabled; answers come from the local knowledge base only.\n"
+        )
     # Privacy mode toggle: when WEB_SEARCH_ENABLED=false, questions are never
     # sent to an external web search service (Tavily).
-    if not web_search_enabled():
+    elif not web_search_enabled():
         print(
             "Web search is DISABLED (WEB_SEARCH_ENABLED=false). "
             "Answers come from the local knowledge base only.\n"

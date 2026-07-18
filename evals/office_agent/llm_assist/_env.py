@@ -29,6 +29,11 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _ENV_PATH = _PROJECT_ROOT / ".env"
 
+# Values that enable a runtime privacy mode. Matches the parsing in
+# enterprise_rag/graph/config.py and office_agent/llm_assist/config.py; duplicated
+# rather than imported to keep this helper dependency-free.
+_TRUTHY_VALUES = {"true", "1", "yes", "on"}
+
 # Error categories surfaced by the runners. CONFIG_ERROR and INFRA_ERROR both
 # mean "the run is invalid" (no model-quality pass rate); EVAL_FAIL is an ordinary
 # behavioral failure that still counts toward the pass rate.
@@ -62,17 +67,33 @@ def load_repo_env() -> None:
 
 
 def ensure_openai_api_key() -> None:
-    """Full-mode precondition: load `.env` (process env wins), then require a
-    non-blank `OPENAI_API_KEY`.
+    """Full-mode precondition: load `.env` (process env wins), refuse to run under
+    a runtime privacy mode, then require a non-blank `OPENAI_API_KEY`.
 
-    Raises `ConfigError` (with a clear, key-free message) when the key is missing
-    or blank so the caller can fail fast — before executing any eval case,
-    constructing any client, or making any model call. Never prints the key.
+    Raises `ConfigError` (with a clear, key-free message) when `OFFLINE_MODE` or
+    `PRIVACY_MODE` is active, or when the key is missing or blank, so the caller
+    can fail fast — before executing any eval case, constructing any client, or
+    making any model call. Never prints the key.
+
+    Both modes refuse because these runners evaluate the two optional Office LLM
+    assists, which either mode disables: a full run would measure a capability
+    that is switched off. `.env` is loaded first so a mode declared there is
+    honored. This refusal is also why the runners need no tracing call — no model
+    call can occur under a mode, so no trace can be exported.
     """
 
     import os
 
     load_repo_env()
+
+    for mode in ("OFFLINE_MODE", "PRIVACY_MODE"):
+        if os.getenv(mode, "false").strip().lower() in _TRUTHY_VALUES:
+            raise ConfigError(
+                f"{mode} is enabled, which disables the optional Office LLM assists.\n"
+                f"Unset {mode} to run a real-model eval, or use --validate-only.\n"
+                "No eval cases were executed."
+            )
+
     key = os.getenv("OPENAI_API_KEY")
     if key is None or not key.strip():
         raise ConfigError(

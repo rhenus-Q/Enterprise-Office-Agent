@@ -371,8 +371,32 @@ should too.
 Enabling LangSmith tracing (`LANGCHAIN_TRACING_V2=true`; see `.env.example`)
 sends prompts, user questions, retrieved document content, intermediate chain
 data, and model outputs to an external service (LangSmith). It is **independent
-of `WEB_SEARCH_ENABLED` and is not disabled by privacy mode** — leave it
-disabled in privacy-sensitive deployments.
+of `WEB_SEARCH_ENABLED`** (that switch does not disable tracing), but the runtime
+privacy modes below **do** disable it — leave it disabled in privacy-sensitive
+deployments that do not set a mode.
+
+## 9b. Runtime privacy modes (`PRIVACY_MODE` / `OFFLINE_MODE`)
+
+Two hierarchical, default-off switches above the per-service flags
+([ADR 019](docs/adr/enterprise_rag/019-hierarchical-runtime-privacy-modes.md)),
+read by `enterprise_rag/graph/config.py` (`privacy_mode()`, `offline_mode()`,
+`privacy_restrictions_active()`) with strict truthy parsing
+(`true`/`1`/`yes`/`on`). Precedence: `OFFLINE_MODE` > `PRIVACY_MODE` >
+individual flags > per-run `AnswerOptions`. **A mode can only restrict.**
+
+- **`PRIVACY_MODE`** forces `web_search_enabled()` to `False`, neutralizes both
+  LangSmith variables via `enterprise_rag/runtime_privacy.py`
+  (`enforce_tracing_privacy()`, called after each `load_dotenv()` and per-run in
+  `answer_question()`), and forces `office_llm_enabled()` off. The OpenAI RAG
+  path is unchanged.
+- **`OFFLINE_MODE`** adds OpenAI: `answer_question()` short-circuits *before* the
+  graph with the additive `STOP_REASON_OFFLINE_MODE` (`enterprise_rag/graph/consts.py`)
+  and its `OFFLINE_MODE_NOTE` caveat; `enterprise_rag/ingestion.py` exits `2` at
+  the script entry and raises from `get_retriever()`; the eval runners refuse;
+  `requires_openai` skips.
+
+The graph itself is untouched: `seed_state()` applies the web-search floor for
+every caller, and the offline refusal happens before the graph runs.
 
 ### Rewritten-query egress (residual privacy path)
 

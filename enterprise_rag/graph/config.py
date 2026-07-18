@@ -13,6 +13,52 @@ import os
 # Values (case-insensitive, whitespace-stripped) that disable a boolean flag.
 _FALSY_VALUES = {"false", "0", "no", "off"}
 
+# Values (case-insensitive, whitespace-stripped) that count as "enabled" for the
+# default-off runtime privacy modes. Mirrors office_agent/llm_assist/config.py so
+# PRIVACY_MODE / OFFLINE_MODE parse identically across both packages: only an
+# explicit truthy value turns a mode on, so typos or unset values never activate
+# a restriction.
+_TRUTHY_VALUES = {"true", "1", "yes", "on"}
+
+
+def privacy_mode() -> bool:
+    """
+    Read the PRIVACY_MODE toggle from the environment (default off).
+
+    Privacy mode keeps user/document data on the machine except for OpenAI: it
+    forces off Tavily web search, LangSmith tracing, and the optional Office
+    Agent LLM assists while preserving the core OpenAI RAG path. Only an explicit
+    truthy value enables it; anything else (including a typo) leaves it off.
+    """
+
+    return os.getenv("PRIVACY_MODE", "false").strip().lower() in _TRUTHY_VALUES
+
+
+def offline_mode() -> bool:
+    """
+    Read the OFFLINE_MODE toggle from the environment (default off).
+
+    Offline mode is the higher-precedence tier: it implies every PRIVACY_MODE
+    restriction and additionally disables OpenAI chat/embeddings and all other
+    external services, so Knowledge Q&A, ingestion, real-model evals, and
+    integrations fail closed. Only an explicit truthy value enables it.
+    """
+
+    return os.getenv("OFFLINE_MODE", "false").strip().lower() in _TRUTHY_VALUES
+
+
+def privacy_restrictions_active() -> bool:
+    """
+    True when either runtime privacy mode is active (the hierarchy: OFFLINE_MODE
+    implies PRIVACY_MODE).
+
+    Callers use this as the single "restrict external egress beyond the core
+    OpenAI RAG path" signal — it is what forces web search off and neutralizes
+    tracing regardless of the individual WEB_SEARCH_ENABLED / tracing flags.
+    """
+
+    return privacy_mode() or offline_mode()
+
 
 def web_search_enabled() -> bool:
     """
@@ -22,7 +68,14 @@ def web_search_enabled() -> bool:
     explicit falsy value, preserving the original always-on behavior. Only an
     explicit "false" / "0" / "no" / "off" enables privacy mode, in which user
     questions are never sent to an external web search service.
+
+    Either runtime privacy mode (PRIVACY_MODE / OFFLINE_MODE) forces this off
+    regardless of WEB_SEARCH_ENABLED: a mode can only *restrict*, so it overrides
+    an explicit WEB_SEARCH_ENABLED=true.
     """
+
+    if privacy_restrictions_active():
+        return False
 
     return os.getenv("WEB_SEARCH_ENABLED", "true").strip().lower() not in _FALSY_VALUES
 
