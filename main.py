@@ -54,8 +54,10 @@ def main():
         )
     elif privacy_mode():
         print(
-            "PRIVACY_MODE is ENABLED. Web search and LangSmith tracing are "
-            "disabled; answers come from the local knowledge base only.\n"
+            "PRIVACY_MODE is ENABLED. Tavily web search and LangSmith tracing "
+            "are disabled and answers come from the local knowledge base, but "
+            "this is not offline operation: questions and retrieved document "
+            "text are still sent to OpenAI to generate the answer.\n"
         )
     # Privacy mode toggle: when WEB_SEARCH_ENABLED=false, questions are never
     # sent to an external web search service (Tavily).
