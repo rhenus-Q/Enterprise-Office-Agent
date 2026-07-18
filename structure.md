@@ -111,8 +111,9 @@ graph's node updates (`stream_mode="updates"`), merged onto the seeded state
 — GraphState has only last-value channels, so this reproduces `invoke()`
 exactly and tracing can never change behavior), `enterprise_rag/graph/formatting.py` (shared
 presentation: stop-reason caveats + Sources section), `enterprise_rag/ingestion.py`
-(offline, idempotent Chroma build of the local Markdown corpus: collection
-reset + deterministic chunk ids, provenance metadata per document),
+(idempotent Chroma build of the local Markdown corpus — the corpus is local, but
+the build calls the OpenAI embeddings service: collection reset + deterministic
+chunk ids, provenance metadata per document; refuses under `OFFLINE_MODE`),
 `main.py` (thin CLI over the engine).
 
 **Design grammar** (applied consistently):
@@ -175,7 +176,9 @@ Three pure decision functions in `enterprise_rag/graph/graph.py`:
 - Privacy mode off → an LLM router picks `retrieve` (knowledge-base topics) or
   `websearch` (current/external information).
 - Privacy mode on → always `retrieve`, **without calling the router LLM** (the
-  question never leaves the local environment, and the call is saved).
+  question never reaches the external search service, and one router call is
+  saved; it still reaches OpenAI downstream via embedding, grading, and
+  generation).
 - Router LLM failure → **falls back to `retrieve`** (the safe, local-first
   default), so a router timeout / auth / quota / network / parse error degrades
   to local retrieval instead of crashing the graph. Because this is a *pure*
@@ -438,6 +441,7 @@ printed without any caveat, in both modes.
 | `stop_reason` | Meaning | User-facing caveat (summary) |
 |---|---|---|
 | `""` | Both gates passed | none |
+| `offline_mode` | `OFFLINE_MODE` is enabled; `answer_question()` short-circuits before the graph, so no client is built and no request is made | "OFFLINE_MODE is enabled, so Knowledge Q&A is unavailable… No external request was made." |
 | `web_search_disabled` | Grounded but off-target; web search unavailable | "Web search is disabled… answer limited to the local knowledge base." |
 | `web_fallback_disabled` | Grounded but off-target; `WEB_FALLBACK_POLICY=disabled` forbids escalating a local-only run to the web | "Web fallback is disabled by policy… answered only from the local knowledge base." |
 | `max_retries_not_grounded` | Retry limit hit; answer still failed grounding | "Did not pass the anti-hallucination check… do not treat as fully reliable." |

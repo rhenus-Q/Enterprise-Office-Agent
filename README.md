@@ -30,8 +30,10 @@ boundary in detail.
   explicit **document-relevance**, **answer-grounding** (anti-hallucination), and
   **answer-usefulness** gates; failed gates trigger bounded, input-changing
   retries; runs that cannot end with a passing answer record a machine-readable
-  `stop_reason` and surface an honest user-facing caveat. A privacy mode disables
-  web search entirely so questions never leave the local environment.
+  `stop_reason` and surface an honest user-facing caveat. Setting
+  `WEB_SEARCH_ENABLED=false` disables web search entirely, so questions never
+  reach an external search service — they are still sent to OpenAI for
+  embedding, grading, and generation.
 - **`office_agent`** classifies a free-text request into exactly one intent with
   a deterministic keyword router (no LLM routing) and dispatches to one tool.
 
@@ -101,7 +103,7 @@ deterministic Office capabilities keep working.
 ├── docs/
 │   ├── engineering/             #   Onboarding, testing strategy, release checklist
 │   ├── releases/                #   Release notes (office-agent-v1.6.md)
-│   └── adr/                     #   Architecture Decision Records 001–018 (repo-level; index in docs/adr/README.md)
+│   └── adr/                     #   Architecture Decision Records 001–019 (repo-level; index in docs/adr/README.md)
 ├── evals/                       # Eval harnesses by module (not in CI): enterprise_rag/ (RAG behavioral eval) + office_agent/llm_assist/ (assist evals)
 ├── tests/                       # node/ + graph/ + evals/ + office_agent/ (fully mocked) and chains/ (integration, key-gated)
 ├── .github/workflows/ci.yml     # CI: fully mocked suites + lint — no API keys
@@ -136,8 +138,11 @@ uv run python main.py
 
 ```powershell
 # Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep,
-# Workflow / Approval, Unknown). Deterministic and offline — no API keys or
-# external services required.
+# Workflow / Approval, Unknown). Deterministic and offline by default — no API
+# keys or external services required while the optional Office LLM assists are
+# disabled. With OFFICE_LLM_ENABLED set, the Daily Briefing and Email Summary
+# requests attempt to call OpenAI; without a valid OPENAI_API_KEY they fall back
+# to deterministic output with a caveat.
 uv run python scripts/demo_office_agent_v1.py
 
 # Also run the Knowledge Q&A example (needs the enterprise_rag setup + API keys).
@@ -176,17 +181,17 @@ uv run python -m mypy          # type-check the scoped engine-API surface
 
 | Surface | API keys? |
 |---|---|
-| Office Agent local mock tools (Email, Calendar, Tickets/Tasks, Daily Briefing, Meeting Prep, Workflow/Approval) | **No** — local mock data, deterministic, offline |
+| Office Agent local mock tools (Email, Calendar, Tickets/Tasks, Daily Briefing, Meeting Prep, Workflow/Approval) | **No** by default — local mock data, deterministic, and offline while the optional Office LLM assists are disabled. With `OFFICE_LLM_ENABLED` set, Email Summary and Daily Briefing attempt to call OpenAI; a valid `OPENAI_API_KEY` is required for the LLM-generated digest or narrative. Without one, they fall back to deterministic output with a caveat. |
 | `tests/enterprise_rag/` (`nodes/`, `graph/`, `evals/`), `tests/office_agent/` (excl. `integration/`), CI | **No** — fully mocked |
 | `ruff` / `mypy` | **No** |
 | Knowledge Q&A + `enterprise_rag` engine (`main.py`, `--include-knowledge`) | **Yes** — `OPENAI_API_KEY` (and `TAVILY_API_KEY` when web search is enabled) |
 | `tests/enterprise_rag/chains/` + `tests/office_agent/integration/` integration tests, the full eval run | **Yes** — real `gpt-5-mini`; skipped/excluded without keys |
 
-## Current validation status
+## Validation
 
-Last verified: 2026-07-02
-
-The most recent local validation of the v1.6 baseline:
+A dated local validation snapshot of the v1.6 baseline (**2026-07-02** — a
+historical record, not the current baseline; the suites have grown since, so
+re-run the commands above for present totals):
 
 - Office Agent demo: **passed** (local-only, no keys)
 - `tests/office_agent/`: **137 passed**
