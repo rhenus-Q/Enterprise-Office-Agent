@@ -58,7 +58,23 @@ Thumbs.db
 evals/enterprise_rag/history/*.json
 
 # ---- Local planning / roadmap drafts ----
-/docs/roadmap
+# docs/roadmap/ is a local working-artifact area (see docs/roadmap/README.md).
+# Everything is ignored EXCEPT the README and the three workflow templates, which
+# are tracked because .claude/commands/ files depend on them. Git cannot negate a
+# path inside an excluded directory, so each tracked file needs its parent
+# directory un-ignored and then re-ignored.
+/docs/roadmap/*
+!/docs/roadmap/README.md
+!/docs/roadmap/spec/
+/docs/roadmap/spec/*
+!/docs/roadmap/spec/spec-template.md
+!/docs/roadmap/plan/
+/docs/roadmap/plan/*
+!/docs/roadmap/plan/plan-template.md
+!/docs/roadmap/implementation/
+/docs/roadmap/implementation/*
+!/docs/roadmap/implementation/implementation-template.md
+
 #Internally modified documents
 /Doc
 
