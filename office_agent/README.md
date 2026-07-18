@@ -241,7 +241,7 @@ by `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS` (default 60). Setting the flag turns on
 `OFFLINE_MODE` active, `office_llm_enabled()` returns `False` even if
 `OFFICE_LLM_ENABLED=true`, so both tools fall back to their exact deterministic
 output and no LLM client is constructed
-([ADR 019](../docs/adr/enterprise_rag/019-hierarchical-runtime-privacy-modes.md)).
+([ADR 019](../docs/adr/019-hierarchical-runtime-privacy-modes.md)).
 The seven deterministic capabilities are unaffected by either mode and keep
 working fully offline; only Knowledge Q&A (which needs `enterprise_rag` and
 OpenAI) fails closed under `OFFLINE_MODE`, returning the engine's

@@ -4,15 +4,19 @@ Status: Accepted
 
 Date: 2026-07-18
 
+Scope: **Repository-wide** — this decision governs `enterprise_rag`, `office_agent`,
+the root entry points, tracing, ingestion, the evals, and the tests, so the ADR
+lives at `docs/adr/` rather than under either module's ADR directory.
+
 ## Context
 
 The repository accumulated one switch per external service, each with its own
 default and its own parsing:
 
-- `WEB_SEARCH_ENABLED` (default **on**) — the Tavily privacy switch ([ADR 002](002-web-search-privacy-mode.md)).
+- `WEB_SEARCH_ENABLED` (default **on**) — the Tavily privacy switch ([ADR 002](enterprise_rag/002-web-search-privacy-mode.md)).
 - `OFFICE_LLM_ENABLED` (default **off**) — the two optional Office LLM assists
-  ([ADR 017](../office_agent/017-office-agent-llm-assist-email-digest.md),
-  [ADR 018](../office_agent/018-office-agent-llm-assist-daily-briefing.md)).
+  ([ADR 017](office_agent/017-office-agent-llm-assist-email-digest.md),
+  [ADR 018](office_agent/018-office-agent-llm-assist-daily-briefing.md)).
 - `LANGCHAIN_TRACING_V2` / `LANGSMITH_TRACING` — LangSmith export, which was
   explicitly **not** covered by privacy mode; `.env.example` carried a warning
   saying so.
@@ -31,7 +35,7 @@ Two operator intents were therefore impossible to express in one place:
 The second gap was the sharper one: failing with a raw network exception is not
 the repo's failure convention. Every other external-dependency failure degrades
 to a machine-readable `stop_reason` plus an honest user-facing caveat
-([ADR 006](006-graceful-degradation.md)).
+([ADR 006](enterprise_rag/006-graceful-degradation.md)).
 
 ## Decision
 
@@ -89,11 +93,11 @@ Implementation points:
   `.env.example` previously warned about is closed.
 - Offline behavior is honest and deterministic: an explicit caveat and a
   machine-readable `stop_reason`, never a raw connection error — consistent with
-  [ADR 006](006-graceful-degradation.md) and [ADR 001](001-stop-reason.md).
+  [ADR 006](enterprise_rag/006-graceful-degradation.md) and [ADR 001](enterprise_rag/001-stop-reason.md).
 - `offline_mode` is an **additive** `stop_reason`. No existing stop reason,
   caveat, routing decision, node, prompt, or model name changed.
 - The graph is untouched. `PRIVACY_MODE` reuses the already-supported
-  `web_search_enabled=False` state path from [ADR 002](002-web-search-privacy-mode.md);
+  `web_search_enabled=False` state path from [ADR 002](enterprise_rag/002-web-search-privacy-mode.md);
   `OFFLINE_MODE` refuses in the engine *before* the graph runs.
 - The deterministic Office capabilities keep working fully offline, which makes
   the Office Agent genuinely usable on an air-gapped machine.

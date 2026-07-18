@@ -381,7 +381,7 @@ deployments that do not set a mode.
 ## 9b. Runtime privacy modes (`PRIVACY_MODE` / `OFFLINE_MODE`)
 
 Two hierarchical, default-off switches above the per-service flags
-([ADR 019](docs/adr/enterprise_rag/019-hierarchical-runtime-privacy-modes.md)),
+([ADR 019](docs/adr/019-hierarchical-runtime-privacy-modes.md)),
 read by `enterprise_rag/graph/config.py` (`privacy_mode()`, `offline_mode()`,
 `privacy_restrictions_active()`) with strict truthy parsing
 (`true`/`1`/`yes`/`on`). Precedence: `OFFLINE_MODE` > `PRIVACY_MODE` >
