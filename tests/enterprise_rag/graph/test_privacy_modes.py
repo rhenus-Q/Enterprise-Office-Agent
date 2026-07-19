@@ -302,6 +302,45 @@ def test_offline_run_still_writes_a_metadata_only_trace(monkeypatch, tmp_path):
     assert trace["sources"] == []
 
 
+def _stub_graph(monkeypatch):
+    """Minimal compiled-graph stand-in (no `stream` -> the engine uses invoke)."""
+
+    monkeypatch.setattr(
+        graph_module,
+        "app",
+        SimpleNamespace(invoke=lambda state: {**state, "generation": "A", "stop_reason": ""}),
+    )
+
+
+@pytest.mark.parametrize("mode", MODE_VARS)
+def test_answer_question_enforces_tracing_privacy_per_run(monkeypatch, mode):
+    # enforce_tracing_privacy() is unit-tested above; this pins that the ENGINE
+    # actually calls it on every run. That is the layer protecting long-lived
+    # programmatic callers (a service, a notebook, the Office Agent adapter)
+    # that never re-run an entry point's load_dotenv() init.
+    for name in _TRACING_ENV_VARS:
+        monkeypatch.setenv(name, "true")
+    _enable(monkeypatch, mode)
+    _stub_graph(monkeypatch)  # unused under OFFLINE_MODE (short-circuits first)
+
+    result = answer_question("Q")
+
+    for name in _TRACING_ENV_VARS:
+        assert os.environ[name] == "false"
+    assert result.run_id  # the run still completed and returned a result
+
+
+def test_answer_question_leaves_tracing_untouched_when_modes_off(modes_off, monkeypatch):
+    for name in _TRACING_ENV_VARS:
+        monkeypatch.setenv(name, "true")
+    _stub_graph(monkeypatch)
+
+    answer_question("Q")
+
+    for name in _TRACING_ENV_VARS:
+        assert os.environ[name] == "true"  # no mode -> the engine touches nothing
+
+
 def test_privacy_mode_alone_still_runs_the_graph(monkeypatch):
     # PRIVACY_MODE preserves the OpenAI RAG path: only OFFLINE_MODE short-circuits.
     _enable(monkeypatch, "PRIVACY_MODE")

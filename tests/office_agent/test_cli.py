@@ -8,6 +8,9 @@ or hit any external service. They verify presentation and loop control only.
 """
 
 import builtins
+import runpy
+import sys
+from pathlib import Path
 
 from office_agent import cli
 from office_agent.schemas import INTENT_UNKNOWN, INTENT_WORKFLOW_APPROVAL, OfficeAgentResponse
@@ -102,6 +105,35 @@ def test_cli_skips_empty_input_and_exits(monkeypatch, capsys):
     assert calls == []  # empty input never dispatched
 
 
+def test_cli_strips_the_request_and_exit_is_case_insensitive(monkeypatch, capsys):
+    """Input is `.strip()`ed before dispatch and exit words match case-insensitively.
+
+    The tests above only feed already-trimmed text and lowercase exit words, so
+    neither `input().strip()` nor the `request.lower()` exit comparison is
+    pinned by them.
+    """
+
+    _script_input(monkeypatch, ["   show pending approvals   ", "EXIT"])
+    seen = []
+    monkeypatch.setattr(
+        cli,
+        "answer_office_request",
+        lambda req: (
+            seen.append(req)
+            or OfficeAgentResponse(
+                intent=INTENT_WORKFLOW_APPROVAL,
+                content="Pending approvals: 2",
+                tool="approvals",
+            )
+        ),
+    )
+
+    cli.main()
+
+    assert seen == ["show pending approvals"]  # surrounding whitespace dropped
+    assert "Bye." in capsys.readouterr().out  # uppercase EXIT still ends the loop
+
+
 def test_root_main_delegates_to_office_cli():
     """Root main.py is the repository-level Office Agent entry point.
 
@@ -113,3 +145,25 @@ def test_root_main_delegates_to_office_cli():
     import main as root_main
 
     assert root_main.main is cli.main
+
+
+def test_main_py_script_execution_invokes_the_office_cli(monkeypatch):
+    """`uv run python main.py` must actually start the Office Agent CLI.
+
+    The delegation test above pins the *binding*; this pins the
+    `if __name__ == "__main__"` guard that turns that binding into a run.
+    `main.py` resolves `main` at import time via
+    `from office_agent.cli import main`, so patching the attribute on
+    `office_agent.cli` before executing the file is sufficient.
+    """
+
+    calls = []
+    monkeypatch.setattr(cli, "main", lambda: calls.append("called"))
+    # Execute a fresh copy under __main__ semantics, keeping sys.modules clean so
+    # this test neither depends on nor disturbs the plain `import main` above.
+    monkeypatch.delitem(sys.modules, "main", raising=False)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    runpy.run_path(str(repo_root / "main.py"), run_name="__main__")
+
+    assert calls == ["called"]
