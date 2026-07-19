@@ -33,7 +33,7 @@ htmlcov/
 coverage.xml
 
 # ---- Project data: persisted vector store ----
-# Rebuilt locally via `uv run python ingestion.py`; do not commit.
+# Rebuilt locally via `uv run python -m enterprise_rag.ingestion`; do not commit.
 chroma_db/
 
 # ---- Build artifacts ----
@@ -52,11 +52,38 @@ Thumbs.db
 
 # ---- Eval history records ----
 # Generated at runtime — gitignored by default so history files do not bloat
-# the repo. The directory itself is tracked via evals/history/.gitkeep.
-# To share a specific baseline, force-add it: git add -f evals/history/<file>.json
-evals/history/*.json
+# the repo. The directory itself is tracked via evals/enterprise_rag/history/.gitkeep.
+# To share a specific baseline, force-add it:
+#   git add -f evals/enterprise_rag/history/<file>.json
+evals/enterprise_rag/history/*.json
 
 # ---- Local planning / roadmap drafts ----
-/docs/roadmap
+# docs/roadmap/ is a local working-artifact area (see docs/roadmap/README.md).
+# Everything is ignored EXCEPT the README and the three workflow templates, which
+# are tracked because .claude/commands/ files depend on them. Git cannot negate a
+# path inside an excluded directory, so each tracked file needs its parent
+# directory un-ignored and then re-ignored.
+/docs/roadmap/*
+!/docs/roadmap/README.md
+!/docs/roadmap/spec/
+/docs/roadmap/spec/*
+!/docs/roadmap/spec/spec-template.md
+!/docs/roadmap/plan/
+/docs/roadmap/plan/*
+!/docs/roadmap/plan/plan-template.md
+!/docs/roadmap/implementation/
+/docs/roadmap/implementation/*
+!/docs/roadmap/implementation/implementation-template.md
+
 #Internally modified documents
 /Doc
+
+# Generated Office-assist eval reports
+/evals/office_agent/llm_assist/email_digest_results.md
+/evals/office_agent/llm_assist/briefing_narrative_results.md
+
+# Generated Enterprise RAG eval report
+/evals/enterprise_rag/results.md
+
+#old_claude_command
+.claude/commands/old_command

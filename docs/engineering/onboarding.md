@@ -12,21 +12,25 @@ in [`docs/adr/`](../adr/README.md). For the RAG engine's full workflow, read
 ## Repo layout
 
 ```
-main.py                 # CLI over the enterprise_rag engine
+main.py                 # Repository-level entry point → launches the Office Agent CLI
 enterprise_rag/         # Enterprise Document Q&A / Agentic RAG engine (LangGraph)
+  cli.py                #   Standalone Interactive RAG CLI (uv run python -m enterprise_rag.cli)
   graph/                #   StateGraph, nodes, chains, engine, config, state, consts, formatting
   ingestion.py          #   Build the Chroma index from the local Markdown corpus
   data/                 #   Synthetic AcmeCorp corpus (6 fictional documents)
-office_agent/           # Deterministic office-workflow agent
+office_agent/           # Office-workflow agent: deterministic router + base tools, two optional LLM assists
+  cli.py                #   Interactive Office Agent CLI over answer_office_request()
+  README.md             #   Canonical Office Agent usage guide (capabilities, routing, assists)
   router.py             #   Keyword intent router (no LLM)
   engine.py             #   answer_office_request() entry point + dispatch
   schemas.py            #   Intent constants + typed dataclasses
   tools/                #   One tool per intent
+  llm_assist/           #   Optional, default-off LLM assists (email digest + briefing narrative)
   mock_data/            #   Fictional AcmeCorp JSON (read-only, deterministic)
 scripts/                # Local demos (demo_office_agent_v1.py)
-tests/                  # node/ graph/ evals/ office_agent/ (mocked) + chains/ (key-gated)
-evals/                  # Behavioral eval harness for enterprise_rag (not in CI)
-docs/                   # ADRs, engineering docs, release notes, Office Agent demo doc
+tests/                  # enterprise_rag/{nodes,graph,evals} + office_agent/ (mocked) + enterprise_rag/chains/ & office_agent/integration/ (key-gated real-model)
+evals/                  # Behavioral evals (not in CI): enterprise_rag/ + office_agent/llm_assist/
+docs/                   # ADRs (adr/), engineering docs, release notes
 ```
 
 ## Module boundary (read this first)
@@ -45,6 +49,14 @@ docs/                   # ADRs, engineering docs, release notes, Office Agent de
   formatting.
 - **Mock tools are local-only, deterministic, CI-safe, and read-only by
   default.** Simulated actions never mutate the repo mock data.
+- **Two optional, default-off LLM assists** live in
+  [`office_agent/llm_assist/`](../../office_agent/llm_assist/) — an **Email
+  Digest** on Email Summary and a **Daily Briefing Narrative** on Daily Briefing.
+  Gated by `OFFICE_LLM_ENABLED`, they make a single structured-output
+  `gpt-5-mini` call, ground it against the tool's selected facts, and fall back to
+  the deterministic output on any failure. They are presentation layers — **not**
+  new intents or capabilities — and, alongside Knowledge Q&A, the only sanctioned
+  LLM paths in `office_agent`. The router itself remains LLM-free.
 
 ## Setup with uv
 
@@ -56,11 +68,19 @@ uv sync --group dev                 # create .venv from the committed uv.lock
 uv run pre-commit install           # one-time per clone (mirrors CI lint)
 ```
 
-Only the RAG engine / Knowledge Q&A needs API keys and a built index:
+Most of the Office Agent is local and key-free. API keys are needed only for:
+
+- **Knowledge Q&A / the RAG engine** — `OPENAI_API_KEY`, a built **Chroma** index,
+  and optionally `TAVILY_API_KEY` (when web search is enabled).
+- **The two optional Office LLM assists** — `OPENAI_API_KEY` only (**no** Chroma),
+  and only when `OFFICE_LLM_ENABLED` is set.
 
 ```powershell
 Copy-Item .env.example .env         # add OPENAI_API_KEY (+ TAVILY_API_KEY if web search on)
-uv run python -m enterprise_rag.ingestion   # one-time Chroma build
+uv run python -m enterprise_rag.ingestion   # one-time Chroma build (Knowledge Q&A only)
+
+# Optional: enable the two default-off Office LLM assists (needs OPENAI_API_KEY, no Chroma).
+# Set OFFICE_LLM_ENABLED=true in .env; OFFICE_LLM_REQUEST_TIMEOUT_SECONDS bounds each call (default 60).
 ```
 
 ## Run the local Office Agent demo
@@ -73,18 +93,18 @@ uv run python scripts/demo_office_agent_v1.py --include-knowledge   # also hits 
 ```
 
 For the full capability list, routing precedence, and example requests, see the
-dedicated demo / usage doc: [`docs/office-agent-v1-demo.md`](../office-agent-v1-demo.md).
+dedicated demo / usage doc: [`office_agent/README.md`](../../office_agent/README.md).
 
 ## Run the tests
 
 ```powershell
 # Fully mocked suites — NO API keys required
-uv run pytest tests/node/ tests/graph/ tests/evals/ tests/office_agent/ -v
+uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -v
 
 # Office Agent suite only
-uv run pytest tests/office_agent/ -v
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v
 
-# Whole suite (chains/ integration tests are skipped without OPENAI_API_KEY)
+# Whole suite (integration tests are skipped without OPENAI_API_KEY)
 uv run pytest -v
 ```
 
@@ -109,12 +129,16 @@ uv run mypy                    # type-check the scoped engine-API surface
 | Office Agent mock data | [`office_agent/mock_data/`](../../office_agent/mock_data/) (read-only JSON) |
 | enterprise_rag logic | [`enterprise_rag/graph/`](../../enterprise_rag/graph/) (engine, nodes, chains, graph) |
 | RAG corpus + ingestion | [`enterprise_rag/data/`](../../enterprise_rag/data/) + [`enterprise_rag/ingestion.py`](../../enterprise_rag/ingestion.py) |
-| Office Agent tests | [`tests/office_agent/`](../../tests/office_agent/) |
+| Office LLM assists (optional, default-off) | [`office_agent/llm_assist/`](../../office_agent/llm_assist/) — email digest + briefing narrative; `config.py` reads `OFFICE_LLM_ENABLED` / `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS` |
+| Office Agent tests | [`tests/office_agent/`](../../tests/office_agent/) (mocked/offline) and [`tests/office_agent/integration/`](../../tests/office_agent/integration/) (gated real-model assist chains) |
+| Office assist behavioral evals | [`evals/office_agent/llm_assist/`](../../evals/office_agent/llm_assist/) — runners + `*_cases.jsonl` datasets |
+| Why the assists are shaped this way | [ADR 017](../adr/office_agent/017-office-agent-llm-assist-email-digest.md) (email digest), [ADR 018](../adr/office_agent/018-office-agent-llm-assist-daily-briefing.md) (briefing narrative) |
 
 ## How to add a new Office Agent tool safely
 
-The Office Agent is deterministic and local by design. To add a capability
-without regressing anything:
+The Office Agent's router and base tools are deterministic and local by design
+(the two optional LLM assists are the separate, explicit exception covered below).
+To add a **base capability** without regressing anything:
 
 1. **Add an intent constant** in `office_agent/schemas.py` (`INTENT_*`) and append
    it to `OFFICE_INTENTS`. Keep it in lockstep with the router and the dispatch.
@@ -127,8 +151,10 @@ without regressing anything:
      never at import time;
    - read any mock data as **read-only** and anchor dates to the data, **not** the
      system clock;
-   - contact **no external service** and use **no LLM** (Knowledge Q&A is the only
-     exception, and it already exists as an adapter — do not duplicate RAG logic);
+   - by default contact **no external service** and use **no LLM** — a new *base*
+     tool stays deterministic and local (Knowledge Q&A already exists as the RAG
+     adapter — do not duplicate RAG logic; adding an LLM assist is a separate,
+     explicit decision covered below, not part of a normal tool);
    - keep any "action" **simulated** (computed in the response); only an explicit
      persistence *seam* (e.g. a `persist_path=` argument used by tests) may write,
      and never to the repo `mock_data/`.
@@ -136,9 +162,34 @@ without regressing anything:
 5. **Add fully mocked tests** in `tests/office_agent/` (patch the Knowledge
    adapter; never call external services). Include a no-mutation assertion if the
    tool simulates an action.
-6. **Update the docs** — [`docs/office-agent-v1-demo.md`](../office-agent-v1-demo.md),
+6. **Update the docs** — [`office_agent/README.md`](../../office_agent/README.md),
    `README.md`, and `structure.md` — and add release notes if it ships as a new
    version.
+
+## How to add a new Office Agent LLM assist (rare, explicit)
+
+Base tools stay deterministic; adding an LLM assist is a deliberate, separately
+justified step — **not** a default and **not** a new intent. Follow the pattern
+the two existing assists use ([`office_agent/llm_assist/`](../../office_agent/llm_assist/),
+[ADR 017](../adr/office_agent/017-office-agent-llm-assist-email-digest.md) /
+[ADR 018](../adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)):
+
+1. **Record the decision in a new ADR** — an assist is an architectural change.
+2. **Gate it default-off** behind `OFFICE_LLM_ENABLED` and keep a byte-for-byte
+   flag-off guarantee (flag unset ⇒ the deterministic output, no client built).
+3. **Build the model client lazily** (`@lru_cache`), only when enabled, and bound
+   each call by `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS`.
+4. **Make a single structured-output `gpt-5-mini` call and validate its output
+   against the exact facts the tool selected** (grounding). The assist has **no
+   action surface** — it cannot send, reply, approve, reject, delete, modify, or
+   persist anything.
+5. **Fall back deterministically** on any timeout / API / parse / grounding
+   failure: return the deterministic output plus an honest caveat and an
+   `llm_assist_error` stop reason.
+6. **Test it three ways** — mocked/offline tests in `tests/office_agent/`
+   (including the flag-off guarantee, patched at the LLM seam), a gated
+   real-model chain test in `tests/office_agent/integration/`, and a behavioral eval under
+   `evals/office_agent/llm_assist/`.
 
 ## What not to touch casually
 
@@ -152,7 +203,7 @@ without regressing anything:
 - **`.env` files, model names, and dependencies** — do not add dependencies or
   swap models as a side effect.
 - **`docs/roadmap/`** and generated/ignored artifacts (e.g.
-  `docs/roadmap/architecture-review/`, `evals/history/*.json`).
+  `docs/roadmap/architecture-review/`, `evals/enterprise_rag/history/*.json`).
 
 ## Common pre-PR validation checklist
 
@@ -162,7 +213,7 @@ Run these from the repo root before opening a PR (see
 ```powershell
 git status --short
 git diff --check
-uv run pytest tests/office_agent/ -v          # or the full suite: uv run pytest -v
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v   # or the full suite: uv run pytest -v
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy

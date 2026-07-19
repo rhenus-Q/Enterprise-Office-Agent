@@ -15,7 +15,7 @@ handling, and a fully mocked, CI-safe test suite.
 | Module | Status | What it is |
 |---|---|---|
 | [`enterprise_rag/`](enterprise_rag/README.md) | ✅ **Implemented** | **Enterprise Document Q&A Engine** — a self-correcting Agentic RAG (CRAG-style) LangGraph workflow that answers questions from an ingested internal-document knowledge base, with web-search fallback, privacy mode, three quality gates, bounded self-correction, per-run budgets, graceful degradation, and deterministic provenance. Entry point: `enterprise_rag.graph.engine.answer_question()`. |
-| [`office_agent/`](office_agent/) | ✅ **Implemented (v1.6 / Phase 7)** | **Enterprise Office Agent** — a deterministic, LLM-free intent router over seven capabilities: one Knowledge Q&A adapter over `enterprise_rag` plus six local mock-data tools. Entry point: `office_agent.engine.answer_office_request()`. Every capability except Knowledge Q&A runs on local mock data with no LLM and no external services. |
+| [`office_agent/`](office_agent/) | ✅ **Implemented (v1.6 / Phase 7)** | **Enterprise Office Agent** — a **deterministic-by-default** intent router over seven capabilities: one Knowledge Q&A adapter over `enterprise_rag` plus six local mock-data tools. Entry point: `office_agent.engine.answer_office_request()`. The router and every core tool workflow are deterministic; Knowledge Q&A delegates to the `enterprise_rag` engine, and two capabilities (Email Summary, Daily Briefing) optionally support a bounded, single-pass LLM assist that is **disabled by default** and falls back to the deterministic output. |
 
 The two modules stay decoupled: `office_agent` reaches `enterprise_rag` only
 through a thin Knowledge Q&A adapter, and it never duplicates retrieval,
@@ -30,8 +30,10 @@ boundary in detail.
   explicit **document-relevance**, **answer-grounding** (anti-hallucination), and
   **answer-usefulness** gates; failed gates trigger bounded, input-changing
   retries; runs that cannot end with a passing answer record a machine-readable
-  `stop_reason` and surface an honest user-facing caveat. A privacy mode disables
-  web search entirely so questions never leave the local environment.
+  `stop_reason` and surface an honest user-facing caveat. Setting
+  `WEB_SEARCH_ENABLED=false` disables web search entirely, so questions never
+  reach an external search service — they are still sent to OpenAI for
+  embedding, grading, and generation.
 - **`office_agent`** classifies a free-text request into exactly one intent with
   a deterministic keyword router (no LLM routing) and dispatches to one tool.
 
@@ -50,41 +52,60 @@ boundary in detail.
 ### Local mock behavior vs. future production integration
 
 Every Office Agent tool except Knowledge Q&A reads static, entirely fictional
-AcmeCorp JSON from [`office_agent/mock_data/`](office_agent/mock_data/). The mock
-data is **read-only** and **anchored to the data, not the system clock**, so the
-tools are deterministic and CI-safe. "Task creation" and approve/reject
-decisions are **simulated** (computed in the response), never written back. No
-external service is ever contacted (no Gmail, Outlook, Google Calendar, Slack,
-Jira, Linear, Asana, or Trello). Replacing a mock loader with a real integration
-is deliberately left as future production work and is **not** part of this
-repository. Only Knowledge Q&A reaches an LLM / external services, and only
-through the `enterprise_rag` engine.
+AcmeCorp JSON from [`office_agent/mock_data/`](office_agent/mock_data/). These
+data providers are **deterministic/mock-backed demonstrations**: the mock data is
+**read-only** and **anchored to the data, not the system clock**, so the tools are
+deterministic and CI-safe. "Task creation" and approve/reject decisions are
+**simulated** (computed in the response), never written back. No external service
+is ever contacted (no Gmail, Outlook, Google Calendar, Slack, Jira, Linear, Asana,
+or Trello). Replacing a mock loader with a real integration is deliberately left as
+future production work and is **not** part of this repository.
+
+The default path is therefore deterministic, but it is **not** true that no Office
+capability other than Knowledge Q&A can call an LLM. Two presentation/synthesis
+paths — the **Email Summary** digest ([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md))
+and the **Daily Briefing** narrative ([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md))
+— may optionally call the external `gpt-5-mini` model. Both assists are **disabled
+by default**; setting `OFFICE_LLM_ENABLED` enables both at once, and if an assist is
+disabled or fails the tool returns its deterministic result (with an honest caveat
+on failure). These assists only re-synthesize already-selected local data into a
+richer summary — they gain **no action surface** and cannot send, approve, mutate,
+or execute any office operation. See [`office_agent/llm_assist/`](office_agent/llm_assist/).
+
+Two hierarchical, default-off runtime switches restrict external egress repo-wide
+([ADR 019](docs/adr/019-hierarchical-runtime-privacy-modes.md)):
+`PRIVACY_MODE` disables web search, LangSmith tracing, and both LLM assists while
+preserving the OpenAI RAG path, and `OFFLINE_MODE` additionally disables OpenAI
+and every other external service — Knowledge Q&A, ingestion, and the real-model
+evals then fail closed with explicit, deterministic behavior, while the local
+deterministic Office capabilities keep working.
 
 ## Repository layout
 
 ```
 .
-├── main.py                      # CLI entry point: interactive Q&A loop over the enterprise_rag engine
+├── main.py                      # Repository-level entry point → launches the Office Agent CLI (office_agent/cli.py)
 ├── enterprise_rag/              # ✅ Enterprise Document Q&A Engine — see enterprise_rag/README.md
 │   ├── README.md                #   Module docs: detailed setup, usage, API, budgets, failure handling
 │   ├── ingestion.py             #   KB build: load local Markdown corpus → split → embed → persist to Chroma
 │   ├── data/acmecorp_internal_docs/  #   Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 │   └── graph/                   #   StateGraph, nodes, chains, engine, config, state, consts, formatting
 ├── office_agent/                # ✅ Enterprise Office Agent (router + Knowledge Q&A adapter + six local mock tools)
+│   ├── README.md                #   Module guide: all seven capabilities, usage, optional LLM assists
 │   ├── router.py                #   Deterministic keyword intent router (no LLM)
 │   ├── engine.py                #   answer_office_request() entry point + tool dispatch
 │   ├── schemas.py               #   Intent constants + typed ToolResult / response dataclasses
 │   ├── tools/                   #   knowledge, email, calendar, tickets, briefing, meeting, approvals
+│   ├── llm_assist/              #   Isolated boundary for optional, structured, grounded Office LLM assists (default off)
 │   └── mock_data/               #   Fictional AcmeCorp JSON (read-only, deterministic)
 ├── scripts/demo_office_agent_v1.py  # Local-only Office Agent demo
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
-│   ├── office-agent-v1-demo.md  #   Dedicated Office Agent demo & usage doc (all seven capabilities)
 │   ├── engineering/             #   Onboarding, testing strategy, release checklist
 │   ├── releases/                #   Release notes (office-agent-v1.6.md)
-│   └── adr/                     #   Architecture Decision Records 001–015 (repo-level; index in docs/adr/README.md)
-├── evals/                       # Behavioral eval harness for enterprise_rag (dataset, runner, report) — not in CI
-├── tests/                       # node/ + graph/ + evals/ + office_agent/ (fully mocked) and chains/ (integration, key-gated)
+│   └── adr/                     #   Architecture Decision Records 001–020 (repo-level; index in docs/adr/README.md)
+├── evals/                       # Eval harnesses by module (not in CI): enterprise_rag/ (RAG behavioral eval) + office_agent/llm_assist/ (assist evals)
+├── tests/                       # enterprise_rag/{nodes,graph,evals} + office_agent/ (fully mocked); chains/ + office_agent/integration/ (key-gated)
 ├── .github/workflows/ci.yml     # CI: fully mocked suites + lint — no API keys
 ├── pyproject.toml               # uv project config (deps, ruff, mypy, pytest)
 └── CLAUDE.md                    # Repo-level guidance for Claude Code
@@ -109,16 +130,26 @@ Copy-Item .env.example .env   # then edit .env and add your keys
 # 4. Build the knowledge base (one-time, before first RAG run)
 uv run python -m enterprise_rag.ingestion
 
-# 5. Run the RAG assistant
+# 5. Run the app — main.py launches the Office Agent CLI (the default entry point)
 uv run python main.py
+
+# Or run the standalone Enterprise RAG CLI (needs steps 3–4 for Knowledge Q&A)
+uv run python -m enterprise_rag.cli
 ```
 
-### Run the local Office Agent demo
+### Run the Office Agent
 
 ```powershell
-# Local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks, Meeting Prep,
-# Workflow / Approval, Unknown). Deterministic and offline — no API keys or
-# external services required.
+# Interactive Office Agent CLI — deterministic and offline by default (no API
+# keys or index required while the optional Office LLM assists are disabled).
+# `uv run python main.py` launches the same interface.
+uv run python -m office_agent.cli
+
+# Scripted local-only demo (Daily Briefing, Email, Calendar, Tickets/Tasks,
+# Meeting Prep, Workflow / Approval, Unknown). Same offline defaults; with
+# OFFICE_LLM_ENABLED set, the Daily Briefing and Email Summary requests attempt
+# to call OpenAI; without a valid OPENAI_API_KEY they fall back to deterministic
+# output with a caveat.
 uv run python scripts/demo_office_agent_v1.py
 
 # Also run the Knowledge Q&A example (needs the enterprise_rag setup + API keys).
@@ -126,20 +157,20 @@ uv run python scripts/demo_office_agent_v1.py --include-knowledge
 ```
 
 Or call it programmatically via `office_agent.engine.answer_office_request(...)`.
-See [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md) for the full
+See [`office_agent/README.md`](office_agent/README.md) for the full
 capability list, routing precedence, and example requests.
 
 ## Tests
 
 ```powershell
 # Fully mocked suites — NO API keys required
-uv run python -m pytest tests/node/ tests/graph/ tests/evals/ tests/office_agent/ -v
+uv run python -m pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -v
 
 # Office Agent suite only (fully mocked / deterministic)
-uv run python -m pytest tests/office_agent/ -v
+uv run python -m pytest tests/office_agent/ --ignore=tests/office_agent/integration -v
 
 # Integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
-uv run python -m pytest tests/chains/ -v
+uv run python -m pytest tests/enterprise_rag/chains/ tests/office_agent/integration/ -v
 
 # Whole suite
 uv run python -m pytest -v
@@ -157,15 +188,17 @@ uv run python -m mypy          # type-check the scoped engine-API surface
 
 | Surface | API keys? |
 |---|---|
-| Office Agent local mock tools (Email, Calendar, Tickets/Tasks, Daily Briefing, Meeting Prep, Workflow/Approval) | **No** — local mock data, deterministic, offline |
-| `tests/node/`, `tests/graph/`, `tests/evals/`, `tests/office_agent/`, CI | **No** — fully mocked |
+| Office Agent local mock tools (Email, Calendar, Tickets/Tasks, Daily Briefing, Meeting Prep, Workflow/Approval) | **No** by default — local mock data, deterministic, and offline while the optional Office LLM assists are disabled. With `OFFICE_LLM_ENABLED` set, Email Summary and Daily Briefing attempt to call OpenAI; a valid `OPENAI_API_KEY` is required for the LLM-generated digest or narrative. Without one, they fall back to deterministic output with a caveat. |
+| `tests/enterprise_rag/` (`nodes/`, `graph/`, `evals/`), `tests/office_agent/` (excl. `integration/`), CI | **No** — fully mocked |
 | `ruff` / `mypy` | **No** |
-| Knowledge Q&A + `enterprise_rag` engine (`main.py`, `--include-knowledge`) | **Yes** — `OPENAI_API_KEY` (and `TAVILY_API_KEY` when web search is enabled) |
-| `tests/chains/` integration tests, the full eval run | **Yes** — real `gpt-5-mini`; skipped/excluded without keys |
+| Knowledge Q&A + `enterprise_rag` engine (`enterprise_rag.cli`, the Office Agent's knowledge intent, or the demo `--include-knowledge`) | **Yes** — `OPENAI_API_KEY` (and `TAVILY_API_KEY` when web search is enabled) |
+| `tests/enterprise_rag/chains/` + `tests/office_agent/integration/` integration tests, the full eval run | **Yes** — real `gpt-5-mini`; skipped/excluded without keys |
 
-## Current validation status
+## Validation
 
-The most recent local validation of the v1.6 baseline:
+A dated local validation snapshot of the v1.6 baseline (**2026-07-02** — a
+historical record, not the current baseline; the suites have grown since, so
+re-run the commands above for present totals):
 
 - Office Agent demo: **passed** (local-only, no keys)
 - `tests/office_agent/`: **137 passed**
@@ -177,7 +210,8 @@ The most recent local validation of the v1.6 baseline:
 GitHub Actions CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs
 two parallel keys-free jobs on every push and pull request: **`mocked-tests`**
 (the fully mocked suites) and **`lint`** (`ruff check`, `ruff format --check`, and
-scoped `mypy`). The key-gated `tests/chains/` suite and the full eval run are
+scoped `mypy`). The key-gated `tests/enterprise_rag/chains/` and
+`tests/office_agent/integration/` suites and the full eval run are
 deliberately excluded.
 
 ## Limitations and non-goals
@@ -200,7 +234,7 @@ deliberately excluded.
   engine: full setup, usage, configuration, and API reference.
 - **[`structure.md`](structure.md)** — architecture deep-dive: the full workflow,
   state machine, routing, and the `enterprise_rag` / `office_agent` module boundary.
-- **[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md)** — the
+- **[`office_agent/README.md`](office_agent/README.md)** — the
   dedicated Office Agent demo & usage doc: all seven capabilities, routing
   precedence, the programmatic API, and example requests.
 - **[`docs/engineering/onboarding.md`](docs/engineering/onboarding.md)** — new-engineer
@@ -215,17 +249,21 @@ deliberately excluded.
   Office Agent v1.6 release notes.
 - **[`docs/adr/`](docs/adr/README.md)** — Architecture Decision Records: *why* the
   code is the way it is. The package refactor that introduced this module layout is
-  [ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md);
-  the Office Agent architecture is
-  [ADR 015](docs/adr/015-office-agent-v1-architecture.md).
+  [ADR 014](docs/adr/enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md);
+  the original five-capability Office Agent v1 architecture is
+  [ADR 015](docs/adr/office_agent/015-office-agent-v1-architecture.md), and the later Meeting
+  and Workflow / Approval capability extensions (the current seven-capability
+  inventory and router precedence) are
+  [ADR 016](docs/adr/office_agent/016-office-agent-capability-extensions.md). The two optional,
+  default-off Office LLM assists are the Email Summary digest
+  ([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md)) and the Daily
+  Briefing narrative ([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)).
 
 ## Working in this repository
 
 - **`enterprise_rag` is the behavior-stable module.** Preserve its graph routing,
   prompts, model names, state schema, and test expectations unless a change is
   explicitly requested (see [CLAUDE.md](CLAUDE.md) for the full rules).
-- **`office_agent` is deterministic and local by design.** Keep it LLM-free
-  (no LLM routing), keep the mock tools local-only and CI-safe, route Knowledge
-  Q&A only through the adapter, and never regress `enterprise_rag`.
+- **`office_agent` uses deterministic routing and local base workflows by default.** Keep the router LLM-free (no LLM routing), keep the mock tools local-only and CI-safe, invoke Knowledge Q&A only through the adapter, keep the two optional LLM assists default-off with their byte-for-byte flag-off guarantee, and never regress `enterprise_rag`.
 - Both modules follow the same discipline: side-effect-free imports and lazy
   `@lru_cache` external clients.

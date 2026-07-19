@@ -1,7 +1,7 @@
 ---
 description: Apply scoped fixes from a project-level review report
 argument-hint: Review report path, or review topic/focus such as "failure-modes overall"
-allowed-tools: Read, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(git diff --stat:*), Bash(uv run python -m py_compile:*), Bash(uv run pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run pytest tests/evals:*)
+allowed-tools: Read, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(git diff --stat:*), Bash(uv run python -m py_compile:*), Bash(uv run pytest tests/enterprise_rag/nodes:*), Bash(uv run pytest tests/enterprise_rag/graph:*), Bash(uv run pytest tests/enterprise_rag/evals:*)
 ---
 You are applying scoped fixes from a completed project-level review report.
 
@@ -33,7 +33,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -53,8 +53,9 @@ Supported review report families:
 * `docs/roadmap/security-review/`
 * `docs/roadmap/failure-modes-review/`
 * `docs/roadmap/test-coverage-review/`
+* `docs/roadmap/docs-drift-review/`
 
-This command is for project-level review reports.
+This command is for project-level review reports. Documentation-drift reports under `docs/roadmap/docs-drift-review/` are project-level review reports (handled here), not command-file review reports.
 
 Do not use this command for command-file review reports under:
 
@@ -79,6 +80,21 @@ A fix is clear and narrowly scoped only if the report identifies:
 * the affected area or likely files
 * a specific recommended fix
 * a validation path or obvious minimal validation
+
+### Documentation-drift reports (`docs/roadmap/docs-drift-review/`)
+
+Documentation-drift reports do not use `Must fix` / `Should fix soon` / `Optional`
+headings. Map their vocabulary onto the priority order above before selecting:
+
+* A `Confirmed drift` finding classified `SAFE TO FIX` → treat as `Must fix` (apply;
+  follow the report's `Suggested repair order` → `Safe mechanical fixes` grouping).
+* A finding classified `REVIEW BEFORE FIXING` → treat as `Should fix soon` (apply only
+  the first clear, narrowly scoped one; if it changes semantics or is architectural,
+  stop and ask).
+* `Possible drift`, anything classified `DO NOT CHANGE`, and anything under `Historical
+  references preserved` → never apply automatically.
+* Severity is a tiebreaker for ordering only: `BLOCKING` / `HIGH` rank as `Must fix`,
+  `MEDIUM` as `Should fix soon`, `LOW` as `Optional`.
 
 ## Step 1. Validate input
 
@@ -113,6 +129,7 @@ Search only under these directories:
 * `docs/roadmap/security-review/`
 * `docs/roadmap/failure-modes-review/`
 * `docs/roadmap/test-coverage-review/`
+* `docs/roadmap/docs-drift-review/`
 
 Use the input words as topic/focus hints.
 
@@ -122,6 +139,8 @@ Examples:
 * `security overall`
 * `test-coverage privacy`
 * `architecture graph`
+* `docs-drift overall`
+* `docs-drift office-agent`
 
 Resolve the match:
 
@@ -203,10 +222,10 @@ If applying a timeout, budget, or failure-handling fix:
 If applying a test-coverage fix:
 
 * add the smallest behavioral test that locks the reviewed risk
-* add the test to the most appropriate existing test file via `Edit` (under `tests/node/`, `tests/graph/`, or `tests/evals/`)
+* add the test to the most appropriate existing test file via `Edit` (under `tests/enterprise_rag/nodes/`, `tests/enterprise_rag/graph/`, or `tests/enterprise_rag/evals/`)
 * if the fix would genuinely require a new test module, stop and ask the user — this command edits existing files via `Edit` and does not create new files
 * do not add API-key-requiring tests by default
-* do not modify `tests/chains/`
+* do not modify `tests/enterprise_rag/chains/`
 * do not make brittle tests that depend on implementation details unnecessarily
 
 If applying a documentation fix:
@@ -214,6 +233,7 @@ If applying a documentation fix:
 * keep wording durable and concise
 * do not add changelog entries
 * do not copy large report excerpts
+* documentation-drift and other report fixes may edit any tracked doc (e.g. `README.md`, `structure.md`, `docs/adr/**`, `evals/**/README.md`), not only files under `enterprise_rag/`; validate a docs-only edit with `git diff --check` rather than a test run
 
 ## Step 6. Validate the change
 
@@ -230,15 +250,15 @@ Then run the smallest relevant validation only if applicable.
 Allowed validation examples:
 
 ```powershell
-uv run python -m py_compile graph/engine.py graph/config.py
-uv run pytest tests/graph -q
-uv run pytest tests/node -q
-uv run pytest tests/evals -q
+uv run python -m py_compile enterprise_rag/graph/engine.py enterprise_rag/graph/config.py
+uv run pytest tests/enterprise_rag/graph -q
+uv run pytest tests/enterprise_rag/nodes -q
+uv run pytest tests/enterprise_rag/evals -q
 ```
 
 Do not run full eval.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 

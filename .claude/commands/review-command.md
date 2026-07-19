@@ -1,7 +1,7 @@
 ---
 description: Review a Claude Code command file for correctness, safety, and project fit
 argument-hint: Command path or command name, for example .claude/commands/arch-review.md or /arch-review
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing a Claude Code command file for this Agentic RAG project.
@@ -38,7 +38,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -69,6 +69,14 @@ Write a new command review report under:
 `docs/roadmap/commands-review/`
 
 Do not overwrite previous command review reports.
+
+## Step 0. Determine the authoritative date and time
+
+Before the first report write, run this command exactly once:
+
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+
+Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
 
 ## Step 1. Validate and resolve input
 
@@ -119,7 +127,7 @@ Then read relevant peer commands for consistency.
 Prefer reading only these peer commands if they exist:
 
 * `.claude/commands/review-diff.md`
-* `.claude/commands/implement-spec.md`
+* `.claude/commands/imple-spec.md`
 * `.claude/commands/arch-review.md`
 * `.claude/commands/update-claude-md.md`
 * `.claude/commands/new-spec.md`
@@ -147,7 +155,7 @@ Create a unique report filename using this format:
 
 Where:
 
-* `<YYYY-MM-DD>` is today's date.
+* `<YYYY-MM-DD>` is the verified date from Step 0.
 * `<command-slug>` is the command file name without `.md`.
 * Convert the command name to lowercase and keep only letters, numbers, and hyphens where possible.
 
@@ -216,7 +224,7 @@ Review whether it protects:
 * fallback policy semantics
 * full eval
 * `ingestion.py`
-* `tests/chains/`
+* `tests/enterprise_rag/chains/`
 * API-key-requiring commands
 * commits
 * branch creation or switching
@@ -280,7 +288,7 @@ Check consistency with:
 
 * `/new-spec`
 * `/plan-spec`
-* `/implement-spec`
+* `/imple-spec`
 * `/review-diff`
 * `/arch-review`
 * `/update-claude-md`

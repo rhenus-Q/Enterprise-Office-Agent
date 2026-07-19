@@ -1,7 +1,7 @@
 ---
 description: Review failure handling, cost/budget controls, and production-readiness risks and write a timestamped failure-mode review report
 argument-hint: Optional review focus, for example "web search failures" or "budget limits"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing failure modes, failure handling, cost/budget controls, and production-readiness risks in this Agentic RAG project.
@@ -40,7 +40,7 @@ Do not run full eval.
 
 Do not run `ingestion.py`.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 Do not run API-key-requiring commands.
 
@@ -75,6 +75,14 @@ Write a new failure-mode review report under:
 
 Do not overwrite previous failure-mode review reports.
 
+## Step 0. Determine the authoritative date and time
+
+Before the first report write, run this command exactly once:
+
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+
+Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
+
 ## Report filename rule
 
 Create a unique report filename using this format:
@@ -83,7 +91,7 @@ Create a unique report filename using this format:
 
 Where:
 
-* `<YYYY-MM-DD>` is today's date.
+* `<YYYY-MM-DD>` is the verified date from Step 0.
 
 * `<focus-slug>` is derived from `$ARGUMENTS`.
 
@@ -144,7 +152,7 @@ Run:
 git status --short
 ```
 
-If today's date is needed for the report filename, use a minimal date command.
+Use the authoritative date from Step 0 for the report filename and body; do not use any other date source.
 
 Then inspect only failure-mode-relevant files.
 
@@ -182,16 +190,17 @@ Inspect these areas as needed.
 
 ### Eval and tests
 
-* `evals/run_eval.py`
-* `evals/questions.jsonl`
-* `evals/README.md`
-* `tests/node/`
-* `tests/graph/`
-* `tests/evals/`
+* `evals/enterprise_rag/run_eval.py`
+* `evals/enterprise_rag/questions.jsonl`
+* `evals/enterprise_rag/README.md`
+* `evals/office_agent/llm_assist/`
+* `tests/enterprise_rag/nodes/`
+* `tests/enterprise_rag/graph/`
+* `tests/enterprise_rag/evals/`
 
-Inspect `tests/chains/` only if needed to assess failure-related test coverage.
+Inspect `tests/enterprise_rag/chains/` only if needed to assess failure-related test coverage.
 
-Do not run `tests/chains/`.
+Do not run `tests/enterprise_rag/chains/`.
 
 ### Tooling and CI
 

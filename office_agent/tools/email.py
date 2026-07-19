@@ -3,9 +3,16 @@ office_agent.tools.email — deterministic mock Email Summary tool.
 
 Reads a small, entirely fictional AcmeCorp inbox from
 `office_agent/mock_data/emails.json` and produces a concise, deterministic
-summary. There is NO LLM and NO connection to Gmail/Outlook/any mail service —
-Phase 2 is local-only and CI-safe. A real mail adapter can replace `load_emails`
-in a later phase behind the same `summarize_emails` interface.
+summary. There is NO connection to Gmail/Outlook/any mail service — local-only and
+CI-safe. A real mail adapter can replace `load_emails` in a later phase behind the
+same `summarize_emails` interface.
+
+The deterministic summary is the default and only behavior unless the optional,
+**default-off** LLM digest (`office_agent.llm_assist`, gated by `OFFICE_LLM_ENABLED`)
+is enabled. With the flag off, no LLM client is constructed and the output is
+byte-for-byte identical to the deterministic summary; when on, a single
+structured-output call appends an LLM-assisted digest and any failure falls back
+to the deterministic summary with an honest caveat (see `_maybe_apply_llm_digest`).
 
 Supported query filters (case-insensitive substring, first match wins):
 `unread`, `important`/`high`/`priority`/`urgent`, response-needed
@@ -22,6 +29,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from office_agent.llm_assist import config as llm_config
+from office_agent.llm_assist import email_digest
+from office_agent.llm_assist.email_models import EmailDigest
 from office_agent.schemas import INTENT_EMAIL_SUMMARY, ToolResult
 
 Email = dict[str, Any]
@@ -113,12 +123,77 @@ def _email_bullet(email: Email) -> str:
     return f"- {prefix} {email.get('subject', '(no subject)')} — from {email.get('from', 'unknown')}{suffix}"
 
 
+def _render_digest(digest: EmailDigest, matched: list[Email]) -> str:
+    """Render a validated `EmailDigest` deterministically.
+
+    Subjects in the priority section are looked up from the matched emails by id
+    (the validated `priority_order` ids), never taken from the LLM output.
+    """
+
+    subject_by_id = {
+        str(email.get("id", "")): email.get("subject", "(no subject)") for email in matched
+    }
+
+    lines = ["Digest (LLM-assisted):", digest.summary, "", "Action items (extracted):"]
+    if digest.action_items:
+        for item in digest.action_items:
+            deadline = f" (deadline: {item.deadline})" if item.deadline else ""
+            lines.append(f"- [{item.email_id}] {item.ask}{deadline}")
+    else:
+        lines.append("- None.")
+
+    lines += ["", "Priority order:"]
+    if digest.priority_order:
+        for index, email_id in enumerate(digest.priority_order, start=1):
+            lines.append(f"{index}. {subject_by_id.get(email_id, '(unknown)')} ({email_id})")
+    else:
+        lines.append("- None.")
+
+    return "\n".join(lines)
+
+
+def _maybe_apply_llm_digest(content: str, matched: list[Email]) -> ToolResult:
+    """Optionally append an LLM-assisted digest to the deterministic summary.
+
+    Default **off**: when `OFFICE_LLM_ENABLED` is not truthy, this returns exactly
+    the deterministic `ToolResult` and never constructs an LLM client. When enabled,
+    it runs a single structured-output call; any failure (timeout, API error,
+    structured-output parse failure, Pydantic validation error, or grounding
+    failure from `validate_digest`) logs a type-only banner and falls back to the
+    deterministic summary plus a caveat and `stop_reason="llm_assist_error"`. It
+    never re-raises — the assist can never crash the Office Agent.
+    """
+
+    if not llm_config.office_llm_enabled():
+        return ToolResult(tool=EMAIL_TOOL_NAME, content=content)
+
+    try:
+        digest = email_digest.digest_emails(matched)
+        email_digest.validate_digest(digest, matched)
+    except Exception as exc:
+        # Deliberate catch-all: the optional assist must degrade, never crash.
+        # Log only the exception type (repo convention), never the message.
+        print(f"---EMAIL DIGEST ASSIST FAILED ({type(exc).__name__})---")
+        return ToolResult(
+            tool=EMAIL_TOOL_NAME,
+            content=f"{content}\n\n{llm_config.LLM_ASSIST_ERROR_NOTE}",
+            stop_reason=llm_config.STOP_REASON_LLM_ASSIST_ERROR,
+        )
+
+    return ToolResult(
+        tool=EMAIL_TOOL_NAME,
+        content=f"{content}\n\n{_render_digest(digest, matched)}",
+    )
+
+
 def summarize_emails(query: str) -> ToolResult:
     """Summarize the mock inbox for `query` and return a ToolResult.
 
     The content includes a one-line summary (filter + counts), the matching
     messages as bullets, and an explicit action-items list for messages that
-    require a response. Everything is deterministic — same input, same output.
+    require a response. The deterministic summary is identical on every run; the
+    optional, default-off LLM digest (`_maybe_apply_llm_digest`) only ever appends
+    to it and never alters the deterministic lines.
     """
 
     label, matched = filter_for_query(query)
@@ -127,6 +202,7 @@ def summarize_emails(query: str) -> ToolResult:
     lines = [f"Inbox summary — {label}: {len(matched)} of {total} message(s)."]
 
     if not matched:
+        # No matches: skip the assist entirely (no LLM call) — output unchanged.
         lines += ["", "No matching emails."]
         return ToolResult(tool=EMAIL_TOOL_NAME, content="\n".join(lines))
 
@@ -141,4 +217,4 @@ def summarize_emails(query: str) -> ToolResult:
             for email in action_items
         ]
 
-    return ToolResult(tool=EMAIL_TOOL_NAME, content="\n".join(lines))
+    return _maybe_apply_llm_digest("\n".join(lines), matched)

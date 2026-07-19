@@ -38,7 +38,8 @@ Office Agent v1.6 / Phase 7:
   with *simulated* approve/reject decisions and follow-up tasks (the mock data is
   never mutated); no LLM and no external service.
 
-Everything except Knowledge Q&A is local, mock, deterministic, and LLM-free.
+Everything except Knowledge Q&A uses local deterministic base workflows by default.
+Email Summary and Daily Briefing may optionally add default-off bounded LLM assists.
 Anything added here must follow the same rules as the rest of the repo
 (side-effect-free imports, lazy external clients, local-only mock data) and must
 not change or regress `enterprise_rag` behavior or its tests (see CLAUDE.md).

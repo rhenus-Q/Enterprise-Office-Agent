@@ -5,11 +5,16 @@
 **A self-correcting, enterprise-style document Q&A engine built with LangGraph (CRAG pattern).**
 
 > This is the `enterprise_rag` module of the [Enterprise Office Agent](../README.md)
-> repository — the completed Enterprise Document Q&A / RAG engine. It is the only
-> completed module here; `office_agent/` is the deterministic Office Agent
-> companion module that routes office-style requests to local mock tools and uses
-> `enterprise_rag` only for Knowledge Q&A. See the [repo-level README](../README.md) for the big
-> picture and [structure.md](../structure.md) for the architecture deep-dive.
+> repository — the completed Enterprise Document Q&A / Agentic RAG engine and the
+> subject of this document. It sits alongside an implemented companion module,
+> [`office_agent/`](../office_agent/), a deterministic keyword-routed Office Agent
+> over seven office capabilities. Most Office Agent capabilities run on local mock
+> data with no LLM; its **Knowledge Q&A** capability is a thin adapter over this
+> `enterprise_rag` engine, and its **Email Digest** and **Daily Briefing narrative**
+> are optional, default-off LLM assists. See the
+> [repo-level README](../README.md) for the big picture, the
+> [Office Agent demo doc](../office_agent/README.md) for that module's
+> behavior, and [structure.md](../structure.md) for the architecture deep-dive.
 
 ## Overview
 
@@ -80,7 +85,7 @@ flowchart TD
    * `generation_error` → the generation LLM call itself failed; the run ends immediately with a safe placeholder answer, never graded,
    * `tool_error` → a grader call failed; the run ends through a terminal notice node with the answer explicitly flagged as unverified.
 
-State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with thirteen fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`, `insufficient_context`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](../structure.md) §3 for the full field-by-field table.
+State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with fourteen fields: the working data (`question`, `documents`, `generation`), control flags (`web_search`, `web_search_enabled`, `web_fallback_policy`, `insufficient_context`), the retry machinery (`retries`, `stop_reason`, `retry_feedback`, `search_query`), and the per-run budget counters (`llm_call_count`, `web_search_count`, `web_result_grading_count`). See [structure.md](../structure.md) §3 for the full field-by-field table.
 
 ## Tech Stack
 
@@ -90,18 +95,23 @@ State is a `TypedDict` defined in `enterprise_rag/graph/state.py` with thirteen 
 | LLM                | OpenAI `gpt-5-mini` (router, graders, generation — all structured output via Pydantic) |
 | Embeddings         | `OpenAIEmbeddings`                                                                     |
 | Vector store       | Chroma (local persistence)                                                             |
-| Web search         | Tavily (`langchain-tavily`)                                                            |
+| Web search         | Tavily (`tavily-python` SDK)                                                            |
 | Chains             | LangChain LCEL                                                                         |
 | Package management | uv (`pyproject.toml` + committed `uv.lock`)                                            |
 | Testing            | pytest (mocked unit tests + key-gated integration tests)                               |
 
 ## Module Structure
 
-The `enterprise_rag` package holds the whole RAG engine. The CLI entry point
-(`main.py`), the test suites (`tests/`), the eval harness (`evals/`), and the
-Architecture Decision Records (`docs/adr/`) live at the **repo root** and all
-target this module — see the [repo-level README](../README.md) for the full
-repository layout.
+The `enterprise_rag` package holds the whole RAG engine. The standalone RAG CLI
+(`enterprise_rag/cli.py`, run via `uv run python -m enterprise_rag.cli`), the RAG test suites (`tests/enterprise_rag/nodes/`, `tests/enterprise_rag/graph/`,
+`tests/enterprise_rag/evals/`, `tests/enterprise_rag/chains/`), the Enterprise RAG behavioral eval
+harness (`evals/enterprise_rag/run_eval.py`
++ `evals/enterprise_rag/questions.jsonl`), and the Architecture Decision Records (`docs/adr/`)
+live at the **repo root** and target this module. The repo root also holds the
+Office Agent's own tests (`tests/office_agent/`, including the gated
+`tests/office_agent/integration/`) and
+assist evals (`evals/office_agent/llm_assist/`), which target `office_agent/` instead — see
+the [repo-level README](../README.md) for the full repository layout.
 
 ```
 enterprise_rag/                  # Enterprise Document Q&A Engine (企业文档问答引擎)
@@ -126,7 +136,8 @@ enterprise_rag/                  # Enterprise Document Q&A Engine (企业文档�
 ```
 
 The programmatic entry point is `enterprise_rag.graph.engine.answer_question()`;
-`main.py` at the repo root is a thin CLI over it.
+`enterprise_rag/cli.py` is the standalone interactive CLI over it
+(`uv run python -m enterprise_rag.cli`).
 
 ## Setup
 
@@ -151,13 +162,38 @@ See [`.env.example`](../.env.example) for the full template:
 | Variable                                                                            | Required                              | Used for                                                                                                                                                                       |
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_API_KEY`                                                                    | Yes                                   | Chat models (router, graders, generation) and embeddings                                                                                                                       |
-| `TAVILY_API_KEY`                                                                    | Yes                                   | Web-search fallback node                                                                                                                                                       |
+| `TAVILY_API_KEY`                                                                    | Yes (while web search is enabled — the default) | Web-search fallback node                                                                                                                                                       |
+| `PRIVACY_MODE`                                                                      | Optional (default off)                | Disables Tavily web search, LangSmith tracing, and both optional Office LLM assists; preserves the OpenAI RAG path (see below)                                                  |
+| `OFFLINE_MODE`                                                                      | Optional (default off)                | Everything `PRIVACY_MODE` disables, plus OpenAI and all other external services; Knowledge Q&A, ingestion, and real-model evals fail closed (see below)                          |
 | `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` to disable all external web search (privacy mode)                                                                                                               |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
-| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. |
+| `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`                    | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGCHAIN_TRACING_V2=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. |
 
 `.env` is gitignored; only `.env.example` is committed.
+
+### Runtime privacy modes (`PRIVACY_MODE` / `OFFLINE_MODE`)
+
+Two hierarchical, default-off switches sit above the per-service flags
+([ADR 019](../docs/adr/019-hierarchical-runtime-privacy-modes.md)).
+Both use strict truthy parsing (`true`/`1`/`yes`/`on`), and a mode can only
+*restrict* — while active it overrides `WEB_SEARCH_ENABLED=true`,
+`OFFICE_LLM_ENABLED=true`, the tracing variables, and any per-run
+`AnswerOptions`. Precedence: `OFFLINE_MODE` > `PRIVACY_MODE` > individual flags.
+
+* **`PRIVACY_MODE`** — nothing leaves the machine except the OpenAI calls the
+  system needs. Disables Tavily web search, LangSmith tracing, and both optional
+  Office LLM assists. Knowledge Q&A and ingestion work exactly as normal.
+* **`OFFLINE_MODE`** — nothing leaves the machine at all. Adds OpenAI chat and
+  embeddings to the above. It fails closed deterministically instead of
+  attempting a call: `answer_question()` short-circuits **before the graph** and
+  returns `stop_reason="offline_mode"` with an honest caveat; ingestion exits `2`
+  before building a client; the real-model eval runners refuse with a
+  `CONFIG ERROR`; `requires_openai` tests skip. Every `--validate-only` mode and
+  all deterministic Office Agent capabilities keep working.
+
+Note: running the full RAG eval under `PRIVACY_MODE` fails its web-dependent rows
+by design — that is correct mode behavior, not a regression.
 
 ### Privacy mode (`WEB_SEARCH_ENABLED=false`)
 
@@ -208,7 +244,7 @@ Invalid values fall back to `conservative`. The environment variable is the
 *default* source only: the engine resolves the effective policy into per-run
 graph state at run start, so callers (evals, tests, future automation) can
 pass a different policy per run without touching the environment. Rationale
-and trade-offs: [ADR 011](../docs/adr/011-web-fallback-policy.md).
+and trade-offs: [ADR 011](../docs/adr/enterprise_rag/011-web-fallback-policy.md).
 
 ### Programmatic engine API
 
@@ -271,10 +307,9 @@ In addition to the engine's lightweight metadata-only trace JSON, LangSmith
 tracing can be enabled through environment variables:
 
 ```env
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=your_langsmith_api_key
-LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-LANGSMITH_PROJECT=enterprise-ai-automation-agent
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key
+LANGCHAIN_PROJECT=enterprise-ai-automation-agent
 ```
 
 The two tracing layers serve different purposes:
@@ -396,7 +431,7 @@ Each document has an effective date, a policy owner, concrete rules (approval th
 ## Run the assistant
 
 ```powershell
-uv run python main.py
+uv run python -m enterprise_rag.cli   # the standalone Enterprise RAG CLI
 ```
 
 ```
@@ -442,33 +477,42 @@ sources, so a sources list never implies a failed answer was verified.
 
 ```powershell
 # Unit tests — fully mocked, NO API keys required
-uv run pytest tests/node/ -v
+uv run pytest tests/enterprise_rag/nodes/ -v
 
 # Graph routing / privacy-toggle tests — fully mocked, NO API keys required
-uv run pytest tests/graph/ -v
+uv run pytest tests/enterprise_rag/graph/ -v
 
 # Eval-harness helper tests — fully mocked, NO API keys required
-uv run pytest tests/evals/ -v
+uv run pytest tests/enterprise_rag/evals/ -v
 
-# Integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
-uv run pytest tests/chains/ -v
+# RAG chain integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
+uv run pytest tests/enterprise_rag/chains/ -v
 
 # Whole suite
 uv run pytest -v
 ```
 
+The Office Agent has its own suites at the repo root — the fully mocked
+`tests/office_agent/` (CI-safe) and the key-gated `tests/office_agent/integration/` (real
+`gpt-5-mini` for the two LLM assists) — documented in the
+[Office Agent demo doc](../office_agent/README.md), not here.
+
 CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs two parallel
 jobs on every push and pull request — both keys-free:
 
-* **`mocked-tests`**: the three fully mocked suites (`tests/node/`,
-  `tests/graph/`, `tests/evals/`), which also doubles as a regression test that
-  imports stay side-effect-free.
-* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
-  engine-API surface: `enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`,
-  `enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`).
+* **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/`,
+  `tests/enterprise_rag/graph/`, `tests/enterprise_rag/evals/`, and the Office
+  Agent's `tests/office_agent/` excluding its gated `integration/`), which also
+  doubles as a regression test that imports stay side-effect-free.
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy`. The mypy scope is
+  the `[tool.mypy]` `files` list in `pyproject.toml`: the standalone CLI
+  (`enterprise_rag/cli.py`) and the engine-API surface
+  (`engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py`) plus the
+  graph `nodes/` and `chains/` packages, plus the whole `office_agent/` package.
 
-The key-gated integration suite (`tests/chains/`) and the full eval run are
-deliberately excluded from CI.
+The key-gated integration suites (`tests/enterprise_rag/chains/`,
+`tests/office_agent/integration/`) and
+the full eval runs are deliberately excluded from CI.
 
 ## Dev hygiene
 
@@ -491,36 +535,47 @@ uv run ruff check --fix . ; uv run ruff format .
 uv run pre-commit run --all-files
 ```
 
-Mypy is scoped to the engine-API surface (`enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`,
-`enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`); nodes, chains,
-tests, and `enterprise_rag/ingestion.py` are outside scope. Mypy is **not** a pre-commit hook
-(hook-venv isolation makes it unreliable for LangChain-typed code); run it
-directly or via CI instead.
+Mypy's scope is the `[tool.mypy]` `files` list in [`pyproject.toml`](../pyproject.toml):
+the standalone CLI (`enterprise_rag/cli.py`),
+the engine-API surface (`enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`,
+`enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`),
+the graph `enterprise_rag/graph/nodes/` and `enterprise_rag/graph/chains/` packages, and the whole
+`office_agent/` package. The graph-assembly module (`enterprise_rag/graph/graph.py`),
+`enterprise_rag/ingestion.py`, and the tests stay outside scope (`graph.py` and
+`ingestion.py` are followed silently when imported by in-scope modules). Mypy is
+**not** a pre-commit hook (hook-venv isolation makes it unreliable for
+LangChain-typed code); run it directly or via CI instead.
 
 ## Behavioral evals
 
-Beyond code-path tests, [`evals/`](../evals/) contains a lightweight behavioral
-evaluation harness: 24 realistic questions
-([`evals/questions.jsonl`](../evals/questions.jsonl)) across six categories —
+Beyond code-path tests, the repo-root [`evals/`](../evals/) directory holds the
+**Enterprise RAG behavioral eval** — `evals/enterprise_rag/run_eval.py` over
+`evals/enterprise_rag/questions.jsonl`, writing `evals/enterprise_rag/results.md` — which exercises *this*
+`enterprise_rag` graph. (A separate `evals/office_agent/llm_assist/` subdirectory evaluates
+the Office Agent's optional Email Digest and Daily Briefing LLM assists; it is
+not part of this engine's eval and is documented with the Office Agent.) The
+Enterprise RAG eval is a lightweight behavioral harness: 24 realistic questions
+([`evals/enterprise_rag/questions.jsonl`](../evals/enterprise_rag/questions.jsonl)) across six categories —
 answerable from the AcmeCorp corpus (5), requiring web fallback (5),
 unanswerable without fabricating (3), privacy-mode guarantees (2), multi-document provenance (4), and fallback-policy behavior (5). The
 runner drives the real graph and applies **deterministic** checks (stop
 reasons, source provenance including required local titles, run counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes — no
 LLM-as-judge), then writes a Markdown report to
-[`evals/results.md`](../evals/results.md):
+[`evals/enterprise_rag/results.md`](../evals/enterprise_rag/results.md):
 
 ```powershell
 # Validate the dataset format only — no API calls
-uv run python evals/run_eval.py --validate-only
+uv run python evals/enterprise_rag/run_eval.py --validate-only
 
 # Full eval — real OpenAI/Tavily calls, requires keys (not part of CI)
-uv run python evals/run_eval.py
-uv run python evals/run_eval.py --limit 3
+uv run python evals/enterprise_rag/run_eval.py
+uv run python evals/enterprise_rag/run_eval.py --limit 3
 ```
 
 The harness's pure helpers (loading, validation, checks, metrics, rendering)
-are unit-tested without API calls in `tests/evals/`. See
-[`evals/README.md`](../evals/README.md) for the dataset schema and check rules.
+are unit-tested without API calls in `tests/enterprise_rag/evals/`. See
+[`evals/enterprise_rag/README.md`](../evals/enterprise_rag/README.md) for the
+dataset schema and check rules.
 
 ## Architecture decision records
 
@@ -535,13 +590,13 @@ accepted, and the alternatives deliberately not chosen. Start with the
 
 ### Mocked unit tests vs. API-based chain tests
 
-|                | `tests/node/` + `tests/graph/` + `tests/evals/` (unit)                                                                       | `tests/chains/` (integration)                                                                 |
+|                | `tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` (unit)                                                                       | `tests/enterprise_rag/chains/` (integration)                                                                 |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model                      |
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories           | Real OpenAI API calls                                                                         |
 | Requirements   | No API keys                                                                                                                  | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost   | Seconds, free                                                                                                                | ~1 minute, small API cost                                                                     |
-| Status         | 305 tests passing (69 node + 200 graph + 36 evals)                                                                           | 38 tests passing                                                                              |
+| CI             | Run keys-free on every push/PR (the `mocked-tests` job, alongside `tests/office_agent/`)                                     | Excluded from CI — needs a real key                                                           |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
@@ -551,7 +606,7 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 * **Observability is split across two layers, but not yet production-grade** — LangSmith tracing is supported through environment variables, and the engine records lightweight per-run metadata (`run_id`, node path, timings, counters, stop reasons, and optional trace JSON). However, console logs are still `print()`-based, there is no structured logging or metrics backend, and the README does not yet include trace screenshots or saved LangSmith trace examples.
 * **Per-document sequential grading** — relevance grading makes one LLM call per chunk/result, so latency and cost scale with the number of items graded.
 * **Grounding feedback is coarse-grained** — failed grounding currently produces a fixed corrective instruction, not a rationale listing which claims were unsupported.
-* **Prompt-injection defense is prompt-level only** — the generation prompt explicitly treats retrieved content, especially web results, as untrusted evidence, never as instructions ([ADR 010](../docs/adr/010-prompt-injection-defense.md)). This is a first-line mitigation, not a complete solution: the relevance gate checks topicality, not safety, and there is no injection detection, content sanitization, or domain allowlisting. Generation has no tools to call, which limits — but does not eliminate — the impact of injected instructions.
+* **Prompt-injection defense is layered but still not a complete security boundary** — the trust boundary spans the whole pipeline: the generation prompt treats retrieved content, especially web results, as untrusted evidence, never as instructions ([ADR 010](../docs/adr/enterprise_rag/010-prompt-injection-defense.md)); the control-plane chains (router, both graders, query rewriter) carry explicit *Security rules* blocks so a payload embedded in the content they classify cannot steer the decision, and each document in the generation context is wrapped in explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters ([ADR 012](../docs/adr/enterprise_rag/012-prompt-injection-hardening.md)). Deterministic, key-free graph-level tests pin the structural containment (privacy mode and `disabled` fallback can't be flipped by content, ungraded content never reaches generation, provenance stays metadata-only). These reduce risk but do not constitute a production security boundary: instruction and data still share one context window, so a sufficiently adversarial payload can still influence a real model's verdict or answer; the relevance gate checks topicality, not safety; and there is still no dedicated injection detector, content-sanitization layer, or domain allowlist. The mocked tests prove wiring-level containment, not live-model immunity. Generation has no tools to call, which limits — but does not eliminate — the impact of injected instructions.
 
 ## Future Improvements
 

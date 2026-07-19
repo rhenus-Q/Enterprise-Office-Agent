@@ -1,17 +1,29 @@
 # CI: two parallel jobs, both keys-free.
 #
-# mocked-tests: runs the fully mocked test suites (tests/node/ + tests/graph/ +
-# tests/evals/) on every push and pull request. These suites mock every external
-# dependency at its lazy factory seam (tests/evals/ covers only the eval
-# harness's pure helpers), so the job needs NO API keys (OpenAI / Tavily /
-# LangSmith). The integration suite (tests/chains/) calls the real model and the
-# full eval run (evals/run_eval.py) costs real API money; both are deliberately
+# mocked-tests: runs the fully mocked test suites (tests/enterprise_rag/nodes/ +
+# tests/enterprise_rag/graph/ + tests/enterprise_rag/evals/ + tests/office_agent/,
+# excluding the gated real-model tests/office_agent/integration/) on every push
+# and pull request. These suites mock every external dependency at its lazy
+# factory seam (the evals/ helper tests cover only the eval harness's pure
+# helpers; tests/office_agent/ patches the knowledge adapter so no real
+# enterprise_rag graph call is made), so the job needs NO API keys (OpenAI /
+# Tavily / LangSmith). The real-model suites (tests/enterprise_rag/chains/ and
+# tests/office_agent/integration/) call the real model and the full eval run
+# (evals/enterprise_rag/run_eval.py) costs real API money; all are deliberately
 # excluded from CI.
 #
-# lint: runs ruff (lint + format check) and mypy (scoped to
-# enterprise_rag/graph/engine.py, enterprise_rag/graph/config.py,
-# enterprise_rag/graph/formatting.py, enterprise_rag/graph/state.py,
-# enterprise_rag/graph/consts.py).
+# Coverage for enterprise_rag/ and office_agent/ is reported to the job log
+# (--cov-report=term). There is deliberately NO --cov-fail-under gate: the
+# number is informational visibility into untested new code, never a build
+# failure. Local `uv run pytest` stays coverage-free (no addopts in
+# pyproject.toml), so only CI pays the instrumentation cost.
+#
+# lint: runs ruff (lint + format check) and mypy. The mypy scope is the
+# [tool.mypy] `files` list in pyproject.toml (the single source of truth): the
+# enterprise_rag CLI (cli.py) and graph engine surface
+# (engine/config/formatting/state/consts plus nodes/ and chains/) and the
+# office_agent package, including office_agent/llm_assist/. A type regression
+# in any of those fails this job.
 # No API keys required. Runs in parallel with mocked-tests so test feedback
 # is never delayed by lint failures.
 
@@ -40,7 +52,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run mocked test suites (no API keys required)
-        run: uv run pytest tests/node/ tests/graph/ tests/evals/ -q
+        run: uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -q --cov=enterprise_rag --cov=office_agent --cov-report=term
 
   lint:
     runs-on: ubuntu-latest

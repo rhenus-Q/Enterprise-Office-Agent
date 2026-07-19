@@ -1,39 +1,170 @@
+import re
 from functools import lru_cache
+from typing import Any
+from urllib.parse import urlparse
 
 from langchain_core.documents import Document
-from langchain_tavily import TavilySearch
+from tavily import TavilyClient
 
 from enterprise_rag.graph.chains.retrieval_grader import get_retrieval_grader
-from enterprise_rag.graph.config import max_web_results_to_grade, max_web_searches_per_run
+from enterprise_rag.graph.config import (
+    external_request_timeout_seconds,
+    max_web_results_to_grade,
+    max_web_searches_per_run,
+)
 from enterprise_rag.graph.consts import (
+    STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_ERROR,
     WEB_SEARCH_SOURCE,
 )
 from enterprise_rag.graph.state import GraphState
 
+# --- Web-source metadata sanitization -------------------------------------
+# Titles and URLs in web results are attacker-controlled external content. They
+# are cleaned/validated here, at the single point where `web_sources` metadata is
+# built, so the sanitized values flow unchanged into the Sources section, the
+# engine trace source lines, and CLI output — no downstream renderer repeats this
+# logic. Retrieved page_content is deliberately NOT sanitized here (only the
+# citation metadata). All helpers are deterministic and side-effect-free.
+
+# Maximum stored length of a web-source title: long enough for real page titles,
+# short enough to keep one Sources line readable and to bound memory.
+MAX_SOURCE_TITLE_LENGTH = 200
+
+# Maximum accepted length of a web-source URL. Overlong URLs are rejected
+# (omitted), never truncated — a truncated URL would be a broken, misleading link.
+MAX_SOURCE_URL_LENGTH = 2048
+
+# Stable fallback shown when a cited result's title sanitizes to empty.
+WEB_SOURCE_FALLBACK_TITLE = "Web result"
+
+# The only URL schemes allowed to appear in a citation.
+_ALLOWED_URL_SCHEMES = ("http", "https")
+
+# ANSI/VT CSI escape sequences (e.g. "\x1b[31m"): ESC "[" params intermediates
+# final byte. Removed whole so an escape's payload never survives as visible text.
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+# Control characters to delete outright: every C0 control EXCEPT the whitespace
+# ones (\t \n \v \f \r — those are normalized to spaces by str.split() below),
+# plus DEL and the C1 range. Also removes any lone ESC left by the ANSI pass.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f]")
+
+
+def _strip_control_sequences(text: str) -> str:
+    """Remove ANSI escape sequences, then non-whitespace control characters."""
+
+    return _CONTROL_CHARS_RE.sub("", _ANSI_ESCAPE_RE.sub("", text))
+
+
+def _sanitize_source_title(value) -> str:
+    """Clean an external web-result title for safe citation.
+
+    Strips ANSI escapes and control characters, normalizes tabs/newlines/repeated
+    whitespace to single spaces, trims, caps the length deterministically, and
+    falls back to a stable label when nothing usable remains. Normal Unicode text
+    is preserved. Because all newlines are collapsed to spaces, a title can never
+    inject an additional Sources line.
+    """
+
+    cleaned = _strip_control_sequences(str(value or ""))
+    # split()/join collapses any remaining whitespace (incl. the tabs/newlines
+    # kept above) into single spaces and trims leading/trailing runs.
+    cleaned = " ".join(cleaned.split())
+    if len(cleaned) > MAX_SOURCE_TITLE_LENGTH:
+        cleaned = cleaned[:MAX_SOURCE_TITLE_LENGTH].rstrip()
+    return cleaned or WEB_SOURCE_FALLBACK_TITLE
+
+
+def _sanitize_source_url(value) -> str:
+    """Validate an external web-result URL for safe citation.
+
+    Returns a clean http(s) URL, or "" when the value is unusable: an unsafe
+    scheme (only http/https accepted), a missing host, embedded whitespace or
+    control characters, over length, or unparseable. Uses stdlib parsing only —
+    it never resolves, fetches, or normalizes over the network. Valid query
+    strings and fragments are preserved.
+    """
+
+    cleaned = _strip_control_sequences(str(value or "")).strip()
+    # A well-formed URL has no internal whitespace; any remaining whitespace is
+    # malformed/hostile (e.g. "java\tscript:"), so reject rather than repair.
+    if not cleaned or any(ch.isspace() for ch in cleaned):
+        return ""
+    if len(cleaned) > MAX_SOURCE_URL_LENGTH:
+        return ""
+    try:
+        parsed = urlparse(cleaned)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() not in _ALLOWED_URL_SCHEMES:
+        return ""
+    if not parsed.netloc:
+        return ""
+    return cleaned
+
+
+# Number of web results requested per search (unchanged from the previous tool).
+MAX_WEB_RESULTS = 3
+
 
 @lru_cache(maxsize=1)
-def get_web_search_tool():
+def get_tavily_client() -> TavilyClient:
     """
-    Lazily build and cache the Tavily search tool (langchain-tavily).
-    Deferring construction keeps module import free of Tavily API-key validation,
-    which also makes the web_search node easy to mock in tests.
+    Lazily build and cache the official Tavily SDK client (tavily-python).
+
+    Deferring construction keeps module import side-effect-free: the SDK reads
+    TAVILY_API_KEY only when the client is constructed (first use at runtime),
+    not at import time, and tests mock the seam so no key or network is needed.
     """
 
-    return TavilySearch(max_results=3)
+    return TavilyClient()
+
+
+class TavilySearchAdapter:
+    """
+    Thin adapter preserving the node's `get_web_search_tool().invoke({"query": q})`
+    interface over the official Tavily SDK.
+
+    `TavilyClient.search()` returns the raw API dict (`{"results": [...], ...}`)
+    — the same shape `_extract_results` already parses — so the response is
+    returned unchanged (no normalization). The explicit `timeout`
+    (EXTERNAL_REQUEST_TIMEOUT_SECONDS, resolved per call so an env override is
+    honored) bounds the HTTP request; `max_results` is unchanged.
+    """
+
+    def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+        query = str(payload["query"])
+        return get_tavily_client().search(
+            query=query,
+            max_results=MAX_WEB_RESULTS,
+            timeout=external_request_timeout_seconds(),
+        )
+
+
+@lru_cache(maxsize=1)
+def get_web_search_tool() -> TavilySearchAdapter:
+    """
+    Lazily build and cache the web-search adapter (see TavilySearchAdapter).
+
+    This is the single seam the web_search node calls and the tests patch;
+    keeping it preserves the `.invoke({"query": ...})` interface unchanged.
+    """
+
+    return TavilySearchAdapter()
 
 
 def _extract_results(search_results):
     """
     Defensively pull usable results out of a Tavily response.
 
-    langchain-tavily's TavilySearch returns a dict with a "results" list; the
-    legacy community tool returned the list directly, and error responses can
-    be a plain string or an {"error": ...} dict. Accept both shapes, skip
-    anything malformed, and keep only entries with non-empty text content.
-    Each usable entry is reduced to {"content", "url", "title"} ("" when a
-    field is missing) so page-level provenance survives alongside the text.
+    The Tavily SDK's `search()` returns a dict with a "results" list; error
+    responses can also surface as a plain string or an {"error": ...} dict.
+    Accept both shapes, skip anything malformed, and keep only entries with
+    non-empty text content. Each usable entry is reduced to
+    {"content", "url", "title"} ("" when a field is missing) so page-level
+    provenance survives alongside the text.
     """
 
     if isinstance(search_results, dict):
@@ -121,14 +252,22 @@ def web_search(state: GraphState):
         print(
             f"---WEB SEARCH FAILED ({type(exc).__name__}): CONTINUING WITH LOCAL DOCUMENTS ONLY---"
         )
-        return {
+        failure = {
             "question": question,
             "documents": documents,
             # The failed attempt counts against the budget, so a persistently
             # failing search API cannot drive an unbounded retry loop.
             "web_search_count": web_search_count + 1,
-            "stop_reason": STOP_REASON_WEB_SEARCH_ERROR,
         }
+        # An earlier retrieval_error is a more upstream whole-source failure: on a
+        # compound outage (retriever failed, then the web fallback also failed)
+        # it must win, or the final caveat would claim we "answered only from the
+        # local knowledge base" when the local knowledge base was itself
+        # unavailable. Only record web_search_error when retrieval did not
+        # already fail.
+        if state.get("stop_reason") != STOP_REASON_RETRIEVAL_ERROR:
+            failure["stop_reason"] = STOP_REASON_WEB_SEARCH_ERROR
+        return failure
     web_search_count += 1
 
     results = _extract_results(search_results)
@@ -187,9 +326,15 @@ def web_search(state: GraphState):
         web_sources = []
         seen_urls = set()
         for result in relevant_results:
-            if result["url"] and result["url"] not in seen_urls:
-                seen_urls.add(result["url"])
-                web_sources.append({"title": result["title"], "url": result["url"]})
+            # Sanitize/validate at this single boundary: an entry is cited only
+            # when its URL passes validation (safe http/https). The title is
+            # cleaned; page_content and relevance are unaffected.
+            safe_url = _sanitize_source_url(result["url"])
+            if safe_url and safe_url not in seen_urls:
+                seen_urls.add(safe_url)
+                web_sources.append(
+                    {"title": _sanitize_source_title(result["title"]), "url": safe_url}
+                )
 
         documents.append(
             Document(
@@ -217,8 +362,11 @@ def web_search(state: GraphState):
         "web_result_grading_count": web_result_grading_count,
         "llm_call_count": llm_call_count,
     }
-    # Only write stop_reason on failure: a normal pass must not clobber a
-    # reason recorded by an earlier node.
-    if grading_error:
+    # Record the transient tool_error only when no earlier reason is set: a
+    # normal pass must not clobber a reason recorded by an earlier node, and a
+    # transient per-result grading failure must not overwrite a persistent
+    # whole-source degradation (e.g. retrieval_error) that the user should
+    # still see in the final caveat.
+    if grading_error and not state.get("stop_reason"):
         result["stop_reason"] = STOP_REASON_TOOL_ERROR
     return result

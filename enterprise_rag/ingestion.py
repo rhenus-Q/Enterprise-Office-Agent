@@ -12,9 +12,11 @@ The corpus under enterprise_rag/data/acmecorp_internal_docs/ is entirely fiction
 content (no real company data) — replace it with real internal documents in
 an actual deployment. Each document carries provenance metadata (source,
 title, source_type, document_category) that survives chunking and feeds the
-user-facing Sources section in main.py.
+user-facing Sources section rendered by enterprise_rag/graph/formatting.py
+(shown by the CLI, enterprise_rag/cli.py).
 """
 
+import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -24,7 +26,26 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from enterprise_rag.graph.config import external_request_timeout_seconds, offline_mode
+from enterprise_rag.runtime_privacy import enforce_tracing_privacy
+
 load_dotenv()
+
+# Applied right after .env is loaded: PRIVACY_MODE still ingests with OpenAI, but
+# must not export a LangSmith trace of the corpus.
+enforce_tracing_privacy()
+
+# Exit code used by the OFFLINE_MODE script guard. Non-zero so a scripted build
+# fails loudly; distinct from 1 so "refused by configuration" is visibly
+# different from an ordinary ingestion failure.
+OFFLINE_EXIT_CODE = 2
+
+# Message shared by the script guard and the retriever guard, so the reason is
+# identical wherever offline ingestion is refused.
+OFFLINE_INGESTION_MESSAGE = (
+    "OFFLINE_MODE is enabled: ingestion requires the OpenAI embeddings service, "
+    "so the knowledge base was not built and no external request was made."
+)
 
 
 # Corpus location, anchored to this file's directory so ingestion works from any CWD.
@@ -145,7 +166,10 @@ def build_vectorstore():
     documents = load_documents()
     splits = split_documents(documents)
 
-    embeddings = OpenAIEmbeddings()
+    # `timeout` (the alias of OpenAIEmbeddings' request_timeout) bounds the
+    # wall-clock of each embeddings HTTP request, mirroring the ChatOpenAI
+    # timeout in the chains.
+    embeddings = OpenAIEmbeddings(timeout=external_request_timeout_seconds())
 
     # Idempotent rebuild: drop any previous index of the same collection.
     Chroma(
@@ -179,7 +203,16 @@ def get_retriever():
         VectorStoreRetriever
     """
 
-    embeddings = OpenAIEmbeddings()
+    # Fail closed under OFFLINE_MODE: refuse before constructing any client, so
+    # no embeddings request is ever attempted. Defense in depth — the engine's
+    # offline short-circuit means the supported path never reaches this.
+    if offline_mode():
+        raise RuntimeError(OFFLINE_INGESTION_MESSAGE)
+
+    # `timeout` bounds each query-embedding HTTP request (the retriever's only
+    # external call; Chroma similarity search itself is local). A timeout raises
+    # like any retriever failure and is mapped to retrieval_error by the node.
+    embeddings = OpenAIEmbeddings(timeout=external_request_timeout_seconds())
 
     vectorstore = Chroma(
         collection_name=COLLECTION_NAME,
@@ -192,5 +225,21 @@ def get_retriever():
     return retriever
 
 
-if __name__ == "__main__":
+def main():
+    """
+    Script entry point: refuse under OFFLINE_MODE, otherwise build the index.
+
+    The guard runs before build_vectorstore(), so no OpenAIEmbeddings or Chroma
+    client is constructed and no external request is attempted when offline.
+    Factored out of the __main__ block so it stays keys-free testable.
+    """
+
+    if offline_mode():
+        print(OFFLINE_INGESTION_MESSAGE)
+        sys.exit(OFFLINE_EXIT_CODE)
+
     build_vectorstore()
+
+
+if __name__ == "__main__":
+    main()

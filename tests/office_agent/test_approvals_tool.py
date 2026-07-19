@@ -134,17 +134,31 @@ def test_summarize_approved_and_rejected_approvals():
 
 
 def test_topic_filter_narrows_to_expense_approvals():
-    result = approvals.handle_approval_request("show expense approvals")
-    assert result.tool == INTENT_WORKFLOW_APPROVAL
-    # Every listed approval id is an expense-related one.
+    query = "show expense approvals"
+    all_approvals = approvals.load_approvals()
     expense_ids = {
         a["id"]
-        for a in approvals.load_approvals()
+        for a in all_approvals
         if a["policy_area"] == "expense_reimbursement" or "expenses" in a["labels"]
     }
-    assert expense_ids
+    other_ids = {a["id"] for a in all_approvals} - expense_ids
+    assert expense_ids and other_ids
+
+    # The filtering contract: exactly the expense approvals, nothing else. Note the
+    # topic view dispatches on the view label plus the raw query — passing the query
+    # alone would fall through to the "all approvals" branch and silently pass.
+    matched = approvals.filter_approvals("topic approvals", query)
+    assert {a["id"] for a in matched} == expense_ids
+
+    # Output level: the header count and the rendered bullets must agree, so a
+    # filter that leaked every approval cannot pass on presence checks alone.
+    result = approvals.handle_approval_request(query)
+    assert result.tool == INTENT_WORKFLOW_APPROVAL
+    assert f"{len(expense_ids)} of {len(all_approvals)}" in result.content
     for approval_id in expense_ids:
         assert approval_id in result.content
+    for approval_id in other_ids:
+        assert approval_id not in result.content
 
 
 def test_status_for_specific_approval_id():

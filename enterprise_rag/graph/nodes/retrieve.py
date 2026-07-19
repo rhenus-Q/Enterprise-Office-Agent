@@ -22,7 +22,7 @@ def retrieve(state: GraphState):
 
     A retriever / Chroma failure must not crash the run: it degrades to the
     existing web-search fallback (web_search=True, same mechanism as
-    irrelevant documents) and records stop_reason so main.py can warn the
+    irrelevant documents) and records stop_reason so the CLI can warn the
     user that local retrieval failed. In privacy mode the fallback is ignored
     and generation returns the deterministic insufficient-context answer.
     """

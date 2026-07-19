@@ -2,8 +2,8 @@
 formatting.py
 
 Deterministic presentation of a final graph state: stop-reason caveats and
-the "Sources:" provenance section. Shared by the CLI (main.py), the eval
-harness (evals/run_eval.py), and the engine API (enterprise_rag/graph/engine.py), so none
+the "Sources:" provenance section. Shared by the CLI (enterprise_rag/cli.py), the eval
+harness (evals/enterprise_rag/run_eval.py), and the engine API (enterprise_rag/graph/engine.py), so none
 of them duplicate formatting logic and evals never import CLI-only code.
 
 Pure module: no clients, no env reads, no LLM — only string building from
@@ -15,6 +15,7 @@ from enterprise_rag.graph.consts import (
     STOP_REASON_GENERATION_ERROR,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED,
     STOP_REASON_MAX_RETRIES_NOT_USEFUL,
+    STOP_REASON_OFFLINE_MODE,
     STOP_REASON_RETRIEVAL_ERROR,
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_FALLBACK_DISABLED,
@@ -88,8 +89,17 @@ TOOL_ERROR_NOTE = (
     "incomplete or not fully verified."
 )
 
+# Caveat shown when OFFLINE_MODE stopped the run before the graph executed.
+# Knowledge Q&A needs the OpenAI service, which offline mode disables; the
+# wording is explicit that nothing was sent anywhere.
+OFFLINE_MODE_NOTE = (
+    "Note: OFFLINE_MODE is enabled, so Knowledge Q&A is unavailable — it "
+    "requires the OpenAI service. No external request was made."
+)
+
 # Maps a recorded stop reason to the caveat appended to the final answer.
 STOP_REASON_NOTES = {
+    STOP_REASON_OFFLINE_MODE: OFFLINE_MODE_NOTE,
     STOP_REASON_WEB_SEARCH_DISABLED: WEB_SEARCH_DISABLED_NOTE,
     STOP_REASON_WEB_FALLBACK_DISABLED: WEB_FALLBACK_DISABLED_NOTE,
     STOP_REASON_MAX_RETRIES_NOT_GROUNDED: MAX_RETRIES_NOT_GROUNDED_NOTE,

@@ -16,7 +16,7 @@ the Architecture Decision Records under [docs/adr/](docs/adr/README.md).
 ## Repository context and module boundaries
 
 The repository is organized as named capability modules (see
-[ADR 014](docs/adr/014-enterprise-rag-package-and-office-agent-placeholder.md)):
+[ADR 014](docs/adr/enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md)):
 
 - **`enterprise_rag/`** — the completed Enterprise Document Q&A / RAG engine that
   the rest of this document describes. All engine code lives here
@@ -24,9 +24,12 @@ The repository is organized as named capability modules (see
   `enterprise_rag/data/…`); its public entry point is
   `enterprise_rag.graph.engine.answer_question()`.
 - **`office_agent/`** — the implemented **Enterprise Office Agent** (through
-  v1.6 / Phase 7: seven capabilities). A deterministic, LLM-free intent router
+  v1.6 / Phase 7: seven capabilities). A **deterministic-by-default** intent router
   over local capabilities; public entry point
-  `office_agent.engine.answer_office_request()`. It is documented in
+  `office_agent.engine.answer_office_request()`. The router and core tool workflows
+  are deterministic and LLM-free; two capabilities (Email Summary, Daily Briefing)
+  add an optional, default-off, single-pass LLM assist (`office_agent/llm_assist/`,
+  ADRs 017–018). It is documented in
   [The Office Agent module](#the-office-agent-module) at the end of this file, and
   must not change or regress `enterprise_rag` behavior or its tests.
 
@@ -53,12 +56,14 @@ The repository is organized as named capability modules (see
   fully mocked/deterministic (the Knowledge adapter is patched), and the
   `enterprise_rag` mocked suites patch every lazy client seam.
 - The dedicated Office Agent demo / usage doc is
-  [`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md).
-- **Repo root** — `main.py` (thin CLI over the engine), `tests/`, `evals/`, and
+  [`office_agent/README.md`](office_agent/README.md).
+- **Repo root** — `main.py` (the repository-level entry point; it launches the
+  Office Agent CLI, `office_agent/cli.py`; the standalone Enterprise RAG CLI is
+  `enterprise_rag/cli.py`), `tests/`, `evals/`, and
   `docs/adr/` are repository-level. Root docs
   (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) stay repo-level;
   module-specific usage lives in `enterprise_rag/README.md` and
-  `docs/office-agent-v1-demo.md`.
+  `office_agent/README.md`.
 
 The numbered sections below (§1–§15) describe the `enterprise_rag` engine itself;
 the Office Agent module is documented in its own section at the end.
@@ -108,9 +113,11 @@ graph's node updates (`stream_mode="updates"`), merged onto the seeded state
 — GraphState has only last-value channels, so this reproduces `invoke()`
 exactly and tracing can never change behavior), `enterprise_rag/graph/formatting.py` (shared
 presentation: stop-reason caveats + Sources section), `enterprise_rag/ingestion.py`
-(offline, idempotent Chroma build of the local Markdown corpus: collection
-reset + deterministic chunk ids, provenance metadata per document),
-`main.py` (thin CLI over the engine).
+(idempotent Chroma build of the local Markdown corpus — the corpus is local, but
+the build calls the OpenAI embeddings service: collection reset + deterministic
+chunk ids, provenance metadata per document; refuses under `OFFLINE_MODE`),
+`enterprise_rag/cli.py` (the standalone Enterprise RAG interactive CLI over the
+engine, run via `uv run python -m enterprise_rag.cli`).
 
 **Design grammar** (applied consistently):
 - Conditional edge functions are **pure** — they read state and chains, never write.
@@ -119,8 +126,8 @@ reset + deterministic chunk ids, provenance metadata per document),
 - Every retry cycle passes through `generate`, which increments the `retries`
   counter that `MAX_RETRIES` caps.
 - Shared string constants live in `consts.py`; user-facing presentation lives
-  in `enterprise_rag/graph/formatting.py` (re-exported by `main.py` for backward
-  compatibility).
+  in `enterprise_rag/graph/formatting.py` (imported directly by the CLI, the eval
+  harness, and the engine).
 
 ## 3. GraphState
 
@@ -152,7 +159,7 @@ behave like today's defaults.
 |---|---|---|
 | `retrieve` | `RETRIEVE` | Top-3 similarity search against the persisted Chroma collection. |
 | `grade_documents` | `GRADE_DOCUMENTS` | Grade each chunk (`retrieval_grader`); keep relevant ones, set `web_search=True` if any failed. |
-| `websearch` | `WEBSEARCH` | Tavily search (`langchain-tavily`) + relevance gate on results (see §7); appends/replaces the web supplement, recording each contributing page's title/URL in `web_sources` metadata. |
+| `websearch` | `WEBSEARCH` | Tavily search (`tavily-python` SDK) + relevance gate on results (see §7); appends/replaces the web supplement, recording each contributing page's title/URL in `web_sources` metadata. |
 | `generate` | `GENERATE` | Generate the answer from question + documents (+ `retry_feedback`); increments `retries`. Empty context → deterministic insufficient-context answer, no LLM call, `insufficient_context=True` (skips the graders downstream). |
 | `add_grounding_feedback` | `ADD_GROUNDING_FEEDBACK` | Pass-through: writes the corrective instruction into `retry_feedback`. |
 | `rewrite_query` | `REWRITE_QUERY` | Pass-through: rewrites the question into a more specific search query (`query_rewriter` chain) using the previous not-useful answer; writes `search_query`. |
@@ -172,7 +179,14 @@ Three pure decision functions in `enterprise_rag/graph/graph.py`:
 - Privacy mode off → an LLM router picks `retrieve` (knowledge-base topics) or
   `websearch` (current/external information).
 - Privacy mode on → always `retrieve`, **without calling the router LLM** (the
-  question never leaves the local environment, and the call is saved).
+  question never reaches the external search service, and one router call is
+  saved; it still reaches OpenAI downstream via embedding, grading, and
+  generation).
+- Router LLM failure → **falls back to `retrieve`** (the safe, local-first
+  default), so a router timeout / auth / quota / network / parse error degrades
+  to local retrieval instead of crashing the graph. Because this is a *pure*
+  conditional edge, it cannot write state, so no `stop_reason` is recorded for a
+  router failure — the run continues through the normal quality gates (see §13).
 
 **`decide_to_generate`** (after document grading)
 - All chunks relevant → `generate`.
@@ -300,7 +314,7 @@ page can still carry prompt-injection text ("ignore previous instructions",
 "reveal secrets", …) and pass the gate correctly. The generation prompt
 therefore explicitly treats all retrieved context as untrusted evidence,
 never as instructions — a first-line, prompt-level defense documented in
-[ADR 010](docs/adr/010-prompt-injection-defense.md).
+[ADR 010](docs/adr/enterprise_rag/010-prompt-injection-defense.md).
 
 ## 8. Meaningful retries
 
@@ -346,16 +360,91 @@ principled exception in both modes: the deterministic insufficient-context
 answer skips the graders — it contains no claims to verify, and regenerating
 from the same empty context cannot improve it (see §5).
 
+### Input redaction boundary
+
+Separately from web-search privacy, `answer_question()` performs **best-effort
+secret redaction** on the incoming question *before* it seeds state, so
+secret-like values do not reach the retriever, router, graders, generator, or
+the outbound web-search query (`enterprise_rag/graph/engine.py`). This is an
+`answer_question()`-level guarantee: **`seed_state()` does not independently
+redact input**, so calling `app.invoke(seed_state(question))` directly bypasses
+it. Supported application callers (the CLI, the eval harness, and the Office
+Agent knowledge adapter) always go through `answer_question()`; new callers
+should too.
+
+### LangSmith tracing (privacy caveat)
+
+Enabling LangSmith tracing (`LANGCHAIN_TRACING_V2=true`; see `.env.example`)
+sends prompts, user questions, retrieved document content, intermediate chain
+data, and model outputs to an external service (LangSmith). It is **independent
+of `WEB_SEARCH_ENABLED`** (that switch does not disable tracing), but the runtime
+privacy modes below **do** disable it — leave it disabled in privacy-sensitive
+deployments that do not set a mode.
+
+## 9b. Runtime privacy modes (`PRIVACY_MODE` / `OFFLINE_MODE`)
+
+Two hierarchical, default-off switches above the per-service flags
+([ADR 019](docs/adr/019-hierarchical-runtime-privacy-modes.md)),
+read by `enterprise_rag/graph/config.py` (`privacy_mode()`, `offline_mode()`,
+`privacy_restrictions_active()`) with strict truthy parsing
+(`true`/`1`/`yes`/`on`). Precedence: `OFFLINE_MODE` > `PRIVACY_MODE` >
+individual flags > per-run `AnswerOptions`. **A mode can only restrict.**
+
+- **`PRIVACY_MODE`** forces `web_search_enabled()` to `False`, neutralizes both
+  LangSmith variables via `enterprise_rag/runtime_privacy.py`
+  (`enforce_tracing_privacy()`, called after each `load_dotenv()` and per-run in
+  `answer_question()`), and forces `office_llm_enabled()` off. The OpenAI RAG
+  path is unchanged.
+- **`OFFLINE_MODE`** adds OpenAI: `answer_question()` short-circuits *before* the
+  graph with the additive `STOP_REASON_OFFLINE_MODE` (`enterprise_rag/graph/consts.py`)
+  and its `OFFLINE_MODE_NOTE` caveat; `enterprise_rag/ingestion.py` exits `2` at
+  the script entry and raises from `get_retriever()`; the eval runners refuse;
+  `requires_openai` skips.
+
+The graph itself is untouched: `seed_state()` applies the web-search floor for
+every caller, and the offline refusal happens before the graph runs.
+
+### Rewritten-query egress (residual privacy path)
+
+The `not_useful → rewrite_query → websearch` retry rewrites the search query from
+the **previous (not-useful) answer**, which was generated from the local corpus
+(and possibly an earlier web supplement). So the outbound Tavily query is not
+always a copy of the user's question:
+
+```text
+curated corpus or prior web content
+→ generated answer
+→ rewritten search query
+→ external Tavily request
+```
+
+Bounding this path:
+
+- **Input redaction runs first.** `answer_question()` redacts secret-like values
+  from the user question *before* they enter state, so the original raw input does
+  not reach the retriever, generator, or the outbound query.
+- **Privacy mode removes the path entirely.** With `WEB_SEARCH_ENABLED=false` the
+  `websearch` node is unreachable and `rewrite_query` is never invoked, so nothing
+  derived from the corpus is ever sent to Tavily.
+- **Residual caveat.** The corpus shipped here is curated/synthetic, so this is
+  benign in this repository. But **input-question redaction does not guarantee
+  removal of every sensitive fragment that originates from retrieved corpus or web
+  content** and is then folded into the rewritten query. Callers with stricter
+  data-egress requirements should run in privacy mode and review their external
+  tracing/search configuration rather than relying on input redaction alone. This
+  is a residual egress path to be aware of, not a confirmed leak.
+
 ## 10. stop_reason and user-facing caveats
 
 Terminal notice nodes record *why* a run ended without a passing answer;
 `enterprise_rag/graph/formatting.py` maps each reason to a caveat appended after the answer
-(`STOP_REASON_NOTES`; `main.py` re-exports the names). Successful answers are
+(`STOP_REASON_NOTES`). Successful answers are
 printed without any caveat, in both modes.
 
 | `stop_reason` | Meaning | User-facing caveat (summary) |
 |---|---|---|
 | `""` | Both gates passed | none |
+| `offline_mode` | `OFFLINE_MODE` is enabled; `answer_question()` short-circuits before the graph, so no client is built and no request is made | "OFFLINE_MODE is enabled, so Knowledge Q&A is unavailable… No external request was made." |
 | `web_search_disabled` | Grounded but off-target; web search unavailable | "Web search is disabled… answer limited to the local knowledge base." |
 | `web_fallback_disabled` | Grounded but off-target; `WEB_FALLBACK_POLICY=disabled` forbids escalating a local-only run to the web | "Web fallback is disabled by policy… answered only from the local knowledge base." |
 | `max_retries_not_grounded` | Retry limit hit; answer still failed grounding | "Did not pass the anti-hallucination check… do not treat as fully reliable." |
@@ -375,10 +464,16 @@ an error caveat. Whole-source degradations (`retrieval_error`,
 `web_search_error`) persist even on success — an entire evidence source was
 unavailable, which the user should see — and the terminal `tool_error`
 (verification itself failed, recorded by `tool_error_notice`) always ends the
-run flagged. Terminal notice nodes overwrite an earlier reason when a later
-failure ends the run — the reason that actually stopped the run wins. Nodes
-only write `stop_reason` on failure, so a successful step never clobbers an
-earlier recorded reason (the success-path cleanup node is the one deliberate
+run flagged. This persistence is enforced at the write site: a mid-run node
+records a **transient** `tool_error` (`grade_documents`, `websearch`,
+`rewrite_query`) **only when no earlier `stop_reason` is already set**, so a
+later transient failure can never overwrite a persistent whole-source reason
+(and therefore can never be cleared away by the success-path cleanup, which
+only clears `tool_error`). Terminal notice nodes are unaffected — they still
+deliberately write their final reason when a later failure ends the run, so
+the reason that actually stopped the run wins. Nodes otherwise only write
+`stop_reason` on failure, so a successful step never clobbers an earlier
+recorded reason (the success-path cleanup node is the one deliberate
 exception).
 
 ### Answer provenance (Sources section)
@@ -408,6 +503,21 @@ document content (the engine exposes the same lines as
   page cite it once); an empty document list produces no section at all.
 - Caveat ordering: the stop-reason caveat is printed *before* the sources,
   so a sources list next to an error never implies the answer was verified.
+
+### `AnswerResult.raw_state` is content-bearing (persistence caveat)
+
+`AnswerResult` exposes two very different surfaces. `sources`, `stop_reason`, the
+budget/observability counters, and the optional metadata-only trace JSON are the
+**safe** persistence/observability surfaces — the trace is metadata-only *by
+construction* (`build_trace` reads named fields; it never dumps `raw_state`). By
+contrast, **`AnswerResult.raw_state` is content-bearing**: it is a copy of the
+final `GraphState` and can contain the full retrieved `Document` objects (including
+`page_content`) and other internal runtime state. It is retained in memory
+intentionally, so callers that need the user-facing rendering can call
+`enterprise_rag.graph.formatting.format_answer(result.raw_state)`. It **must not be
+logged, serialized, or persisted indiscriminately** — doing so would spill document
+content the metadata trace deliberately keeps out. Keeping `raw_state` in memory is
+intentional; the metadata-only trace not serializing it is the point of the split.
 
 ## 11. Retry exhaustion
 
@@ -444,14 +554,48 @@ case the `MAX_RETRIES` loop can produce, so the budgets never bind unless
 explicitly tightened; invalid or non-positive env values fall back to the
 defaults so a budget can never be accidentally disabled.
 
+Two clarifications on how the budgets behave: **budgets are checked at loop
+boundaries** (the `grade_generation` checks and the defensive guards inside
+`websearch`), not after every counted call, so a run's final counters may
+finish slightly above the configured value — the overshoot is bounded by a
+single loop round. And **budget limits are read from the environment at check
+time**, rather than being fixed into per-run state at run start the way
+`web_search_enabled` and `web_fallback_policy` are; today's callers do not
+change the environment mid-run, so the effective limit is stable in practice.
+
+**No total wall-clock deadline (operational limitation).** The budgets above bound
+*counts*, and `LLM_REQUEST_TIMEOUT_SECONDS` bounds a *single* LLM request, but the
+engine imposes **no one total wall-clock deadline over the complete run**. This is
+not an unbounded loop — the retry cap and the per-run budgets keep the number of
+steps finite — but several slow-yet-successful external calls (retrieval, multiple
+graded web results, repeated generations) can still add up to a long overall
+request. A future API front-end, queue worker, or service boundary that needs a
+hard end-to-end latency ceiling should enforce that total-request deadline itself
+(alongside the per-call timeout and the count budgets), as the engine does not.
+
 ## 13. External dependency failure handling
 
 Every external call is wrapped in a `try/except Exception` at its existing
 seam. The design rules:
 
 - **Failures in nodes write `stop_reason` directly** (nodes are the only
-  legal state writers). Failures inside the pure `grade_generation` edge
-  return a dedicated outcome routed to the `tool_error_notice` node instead.
+  legal state writers). Failures inside a pure conditional edge cannot write
+  state: `grade_generation` returns a dedicated outcome routed to the
+  `tool_error_notice` node instead, and `route_question` falls back to
+  `retrieve` **without** recording a `stop_reason` (a router failure therefore
+  produces no caveat — the run simply degrades to local retrieval).
+- **Unexpected internal / programmer errors may still propagate
+  (`answer_question()` exception contract).** The guarantee above covers the
+  *expected* external-dependency failures at their wrapped seams — those
+  normally return an `AnswerResult` carrying degraded behavior and/or a
+  machine-readable `stop_reason`. It is not a total guarantee: a truly
+  unexpected error (a bug in a node, a programmer error, any future unwrapped
+  seam) is not caught by a top-level catch-all and may surface from
+  `answer_question()`, which therefore does **not** promise an `AnswerResult`
+  for every possible exception. There is intentionally no blanket `try/except`
+  around the whole run, so callers that require process isolation or an
+  always-structured API response must add their own exception handling at the
+  integration boundary.
 - **Console banners log only the exception type** (e.g.
   `---WEB SEARCH FAILED (TimeoutError): ...---`) — never the message, which
   could carry secrets, keys, or paths.
@@ -467,6 +611,7 @@ Per dependency:
 
 | Failure | Reaction | Continues? |
 |---|---|---|
+| Question router (`route_question`) | Fall back to `retrieve` (local-first); pure edge, so no `stop_reason` and no caveat | yes |
 | Retriever / Chroma (`retrieve`) | Empty documents + `web_search=True` → degrade to web fallback (privacy mode: deterministic insufficient-context answer); `grade_documents` preserves the incoming flag | yes |
 | Tavily (`websearch`) | Local documents only (stale web supplement already dropped); attempt budgeted | yes |
 | Generation LLM (`generate`) | Safe placeholder answer + `generation_error`; `grade_generation` routes straight to `END` — never graded | no |
@@ -481,25 +626,27 @@ in privacy mode still never calls the router, Tavily, or the rewriter).
 
 | Suite | What it covers | External calls |
 |---|---|---|
-| `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
-| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
-| `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
-| `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
+| `tests/enterprise_rag/nodes/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
+| `tests/enterprise_rag/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
+| `tests/enterprise_rag/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
+| `tests/enterprise_rag/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
 
-Separate from the test suites, `evals/` holds a **behavioral eval harness**:
+Separate from the test suites, `evals/enterprise_rag/` holds a **behavioral eval
+harness** for the RAG graph (the optional Office Agent LLM-assist evals live
+separately under `evals/office_agent/llm_assist/`):
 a 24-question JSONL dataset (local-corpus / web-fallback /
 insufficient-context / privacy-mode / multi-document / policy-fallback categories) run through the real compiled
-graph by `evals/run_eval.py`, scored with deterministic checks (stop reasons,
+graph by `evals/enterprise_rag/run_eval.py`, scored with deterministic checks (stop reasons,
 source provenance including local title checks, counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes) and reported to
-`evals/results.md`. The harness runs each row through
-`enterprise_rag.graph.engine.answer_question()` — the same entry point `main.py` uses — so
+`evals/enterprise_rag/results.md`. The harness runs each row through
+`enterprise_rag.graph.engine.answer_question()` — the same entry point the CLI (`enterprise_rag/cli.py`) uses — so
 state seeding is never duplicated; privacy-mode rows pass
 `web_search_enabled=False` per run (no env mutation) and hard-assert
 `web_search_count == 0`, and rows may optionally pin a per-row
 `web_fallback_policy`. The full run needs real API keys and is deliberately
 excluded from CI; `--validate-only` checks the dataset with no API calls.
 
-Run the mocked suites with `uv run pytest tests/node/ tests/graph/ tests/evals/ -v`
+Run the mocked suites with `uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ -v`
 (no API keys required).
 
 ## 15. Known limitations & future improvements
@@ -516,8 +663,8 @@ Future improvements (rough priority): structured logging and metrics-friendly ob
 
 GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every push and pull request — both keys-free:
 
-* **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
-* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface: `enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`, `enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`).
+* **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` + `tests/office_agent/`, excluding the gated `tests/office_agent/integration/`); the key-gated `tests/enterprise_rag/chains/` suite and the full eval run are excluded.
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scope defined by the `[tool.mypy]` `files` list in `pyproject.toml`: the standalone CLI `enterprise_rag/cli.py` and the engine-API surface — `enterprise_rag/graph/engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py` — plus `enterprise_rag/graph/nodes/`, `enterprise_rag/graph/chains/`, and the `office_agent/` package, including the optional LLM-assist boundary `office_agent/llm_assist/`).
 
 ## The Office Agent module
 
@@ -526,7 +673,11 @@ Office Agent**, implemented through v1.6 / Phase 7 with seven capabilities (v1 /
 Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7
 Workflow / Approval Agent). It is the
 office-automation companion to the `enterprise_rag` engine and is intentionally
-small, deterministic, and — except for Knowledge Q&A — local and LLM-free. It is
+small and **deterministic by default**: the router and every core tool workflow
+are deterministic and local, Knowledge Q&A delegates to `enterprise_rag`, and two
+capabilities (Email Summary, Daily Briefing) add an optional, default-off,
+single-pass LLM assist (`office_agent/llm_assist/`; see
+[Optional LLM assists](#optional-llm-assists-office_agentllm_assist) below). It is
 **not** a LangGraph graph; it is a thin keyword router + tool dispatch.
 
 **Design:**
@@ -572,8 +723,12 @@ small, deterministic, and — except for Knowledge Q&A — local and LLM-free. I
 tool is a thin *adapter* that calls
 `enterprise_rag.graph.engine.answer_question()` and reuses its formatting
 (caveats + `Sources:` section); no retrieval, generation, or graph logic is
-reimplemented. Knowledge Q&A is the only office tool that reaches an LLM /
-external services (through the RAG engine); every other tool is local mock data.
+reimplemented. Knowledge Q&A is the only office tool that reaches an LLM through
+the RAG engine; every other tool is backed by local mock data. Two of those tools
+(Email Summary, Daily Briefing) may **optionally** call `gpt-5-mini` directly for a
+default-off presentation/synthesis assist (see
+[Optional LLM assists](#optional-llm-assists-office_agentllm_assist)) — those
+assists read the already-selected local data and have no action surface.
 
 **Local mock data** (`office_agent/mock_data/`) — `emails.json`,
 `calendar_events.json`, `tickets.json`, `tasks.json`, `approvals.json`,
@@ -582,8 +737,10 @@ stay side-effect-free), treated as **read-only** (task "creation" and approve/
 reject decisions are *simulated*, never written back), and
 **anchored to the data rather than the system clock** ("today" / "next meeting"
 are resolved from the data), so every mock tool is deterministic and CI-safe. No
-external service is ever contacted (no Gmail / Outlook / Google Calendar / Slack /
-Jira / Linear / Asana / Trello).
+integration service is ever contacted (no Gmail / Outlook / Google Calendar /
+Slack / Jira / Linear / Asana / Trello); the only external call any office tool can
+make is the optional, default-off `gpt-5-mini` assist on Email Summary / Daily
+Briefing described above (and the RAG engine behind Knowledge Q&A).
 
 **Meeting Agent / Meeting Prep (v1.5 / Phase 6)** is an advanced *composition*
 capability. It selects one meeting deterministically ("next", best topic match on
@@ -606,11 +763,77 @@ clock. An optional `record_decision(..., persist_path=...)` seam writes only to 
 caller-provided path (tests use `tmp_path`), never the repo mock data. Like the
 other mock tools it uses no LLM and contacts no external service.
 
+### Optional LLM assists (`office_agent/llm_assist/`)
+
+`office_agent/llm_assist/` is the **isolated boundary** for optional, structured,
+grounded Office LLM assistance. It hosts **two** assists — the **Email Digest**
+([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md)) layered on the
+Email Summary tool, and the **Daily Briefing Narrative**
+([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)) layered on the
+Daily Briefing tool. Both:
+
+- share the single `OFFICE_LLM_ENABLED` switch (in `llm_assist/config.py`), which
+  is **default-off** — with the flag unset/false no `ChatOpenAI` client is
+  constructed and each tool's output is **byte-for-byte identical** to its
+  deterministic form;
+- make **one** bounded, single-pass structured-output call to `gpt-5-mini`
+  (`temperature=0`, per-request timeout from `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS`),
+  built lazily behind an `@lru_cache` factory (side-effect-free imports) and
+  importing nothing from `enterprise_rag`;
+- cross the boundary **only** as a validated Pydantic model (`EmailDigest` in
+  `email_models.py`, `BriefingNarrative` in `briefing_models.py`);
+- **ground every reference against deterministic source identifiers** — the email
+  digest against the filtered email ids, the briefing against the collected
+  `(source_type, id)` fact pairs — and render titles/subjects by looking them up
+  from the deterministic facts, never from the model;
+- on **any** failure (timeout, API error, structured-output parse failure,
+  validation error, grounding failure) return the **unchanged deterministic
+  output** plus an honest per-tool caveat and `stop_reason="llm_assist_error"`; the
+  assist never re-raises, and console logging is exception-type only;
+- have **no action surface** — no tools are bound; the model cannot send, approve,
+  reject, create, delete, mutate, or execute anything. It only re-synthesizes
+  already-selected local data.
+
+The assist flow is a single straight line, not a state machine:
+
+```text
+deterministic fact collection
+→ one bounded LCEL structured-output call
+→ grounding/validation
+→ deterministic rendering
+→ fallback to the original deterministic output (on any failure)
+```
+
+**Why LangChain/LCEL rather than LangGraph.** These assists are single-pass with
+no multi-node state machine, no conditional orchestration loop, no human interrupt,
+and no autonomous action execution — so a plain LCEL chain (`prompt | structured_llm`)
+is the right-sized tool. Using LangGraph here would add a graph with nothing to
+orchestrate. This is a deliberate scope match, **not** a limitation: the
+self-correcting graph lives where it is warranted (`enterprise_rag`), and the
+bounded narrative assists live where a single call suffices.
+
+**Daily Briefing critical-fact behavior.** The briefing narrative's fact set
+(`office_agent.tools.briefing.collect_briefing_facts`) is the single source of
+truth for both the LLM input and the grounding whitelist. Beyond `{source_type,
+id, title}`, meeting/ticket facts may carry deterministic **critical metadata**
+(e.g. `importance`, `priority`, `status`, `conflicts_with`, `critical_reasons`).
+At a high level the design requires that: every fact carrying one or more
+`critical_reasons` **must be covered** in the narrative and its references; for
+every supplied schedule conflict **both sides must be referenced** (a meeting whose
+`conflicts_with` names another id, and that other meeting); and conflict
+counterparts may be **retained beyond the ordinary per-source soft cap** so a
+conflict is never structurally omitted from the fact set. Duplicate references are
+deduplicated (not rejected) because references are a citation surface, not an
+ordering.
+
 **Demo & docs.** `scripts/demo_office_agent_v1.py` runs a few requests through
 `answer_office_request()` and prints the selected intent + response for each; it
 is local-only and deterministic by default (`--include-knowledge` additionally
 exercises the real RAG pipeline, which needs the `enterprise_rag` setup and API
 keys). Full usage and the capability list are in
-[`docs/office-agent-v1-demo.md`](docs/office-agent-v1-demo.md); the architecture
-decision behind the module is
-[ADR 015](docs/adr/015-office-agent-v1-architecture.md).
+[`office_agent/README.md`](office_agent/README.md); the architecture
+decisions behind the module are
+[ADR 015](docs/adr/office_agent/015-office-agent-v1-architecture.md) (the original
+five-capability v1) and
+[ADR 016](docs/adr/office_agent/016-office-agent-capability-extensions.md) (the later Meeting
+and Workflow / Approval extensions — the current seven-capability architecture).

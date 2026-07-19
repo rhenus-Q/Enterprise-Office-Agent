@@ -1,8 +1,11 @@
 # Release Checklist
 
 A pre-release / pre-PR checklist for the Enterprise Office Agent. Run every
-command from the repository root. Everything here is keys-free except the parts
-explicitly marked as needing the RAG setup.
+command from the repository root. Most of this checklist is **keys-free** —
+matching what CI runs offline. A few validations need a real `OPENAI_API_KEY`
+(Knowledge Q&A / the RAG engine, the two optional Office LLM assists, and their
+gated real-model tests / full evals); those are called out explicitly and run
+**only with explicit approval**.
 
 ## 1. Working-tree hygiene
 
@@ -26,12 +29,42 @@ uv run python scripts/demo_office_agent_v1.py
 ## 3. Tests
 
 ```powershell
-uv run pytest tests/office_agent/ -v      # Office Agent suite
-uv run pytest -v                          # full suite (chains/ skips without keys)
+uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v   # Office Agent suite
+uv run pytest -v                          # full suite (integration tests skip without keys)
 ```
 
-- [ ] `tests/office_agent/` passes (v1.6 baseline: **137 passed**).
-- [ ] Full suite passes (v1.6 baseline: **592 passed**, chains/ skipped without keys).
+- [ ] `tests/office_agent/` (excl. `integration/`) passes (fully mocked, no keys).
+- [ ] Full suite passes (`tests/enterprise_rag/chains/` and `tests/office_agent/integration/` skip without
+  `OPENAI_API_KEY`).
+
+## 3a. Office LLM-assist validation (optional, mostly key-gated)
+
+The two assists (Email Digest, Daily Briefing Narrative) are **default-off**.
+Verify the flag-off guarantee and dataset schemas offline; treat real-model
+checks as approval-gated.
+
+- [ ] With `OFFICE_LLM_ENABLED` unset/false, Email Summary and Daily Briefing
+  return their byte-for-byte deterministic output (covered by
+  `tests/office_agent/`, no keys).
+- [ ] `.env.example` matches the code: `OFFICE_LLM_ENABLED` default-off and
+  `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS` default `60`.
+- [ ] Both assist eval datasets validate offline (no keys):
+
+```powershell
+uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --validate-only
+uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --validate-only
+```
+
+- [ ] **Only with explicit approval and a real `OPENAI_API_KEY`:** the gated
+  real-model chain tests (`uv run pytest tests/office_agent/integration/ -v`) and the full
+  assist behavioral evals (the same runners **without** `--validate-only`).
+
+## 3b. Enterprise RAG real-model validation (key-gated)
+
+- [ ] `uv run python evals/enterprise_rag/run_eval.py --validate-only` passes
+  (keys-free).
+- [ ] **Only with explicit approval and real keys:** `tests/enterprise_rag/chains/` and the full
+  RAG behavioral eval.
 
 ## 4. Lint, format check, mypy
 
@@ -47,14 +80,19 @@ uv run mypy
 
 ## 5. Docs consistency checks
 
-- [ ] `README.md`, `structure.md`, `docs/office-agent-v1-demo.md`, and the release
-  notes agree on the capability count (**seven**) and the version map.
-- [ ] `docs/office-agent-v1-demo.md` still exists and is referenced from the docs
+- [ ] `README.md`, `structure.md`, `office_agent/README.md`, and the release
+  notes agree on:
+  - the capability count (**seven**) and the version map (below);
+  - the **two optional LLM assists** (Email Digest, Daily Briefing Narrative)
+    described as presentation layers, **not** additional capabilities or intents;
+  - the assists being **default-off** (gated by `OFFICE_LLM_ENABLED`) with a
+    deterministic fallback.
+- [ ] `office_agent/README.md` still exists and is referenced from the docs
   that should link it.
 
 ```powershell
-Test-Path docs/office-agent-v1-demo.md
-git grep -n "office-agent-v1-demo"
+Test-Path office_agent/README.md
+git grep -n "office_agent/README.md"
 ```
 
 ## 6. Stale version-wording checks
@@ -84,7 +122,8 @@ Version map to enforce everywhere:
 ## 7. Safety / scope checks
 
 - [ ] **No secrets** — no API keys, tokens, or `.env` contents committed.
-- [ ] **No generated artifacts** — nothing under `evals/history/*.json` or other
+- [ ] **No generated artifacts** — nothing under `evals/enterprise_rag/history/*.json`
+  (or the gitignored `evals/office_agent/llm_assist/*_results.md`) or other
   ignored/generated paths force-added by accident.
 - [ ] **No accidental `enterprise_rag` changes** — graph logic, prompts, model
   names, state schema, corpus, and eval semantics unchanged unless the release is
@@ -100,11 +139,12 @@ git diff --name-only origin/main            # review every path in the diff
 ## 8. PR description checklist
 
 - [ ] Summary of what changed and why.
-- [ ] Scope statement (docs-only / behavior change / etc.).
+- [ ] Scope statement — one of: **docs only**, **deterministic Office Agent
+  behavior**, **optional Office Agent LLM assist**, or **Enterprise RAG behavior**.
 - [ ] Validation results pasted (tests, ruff, format check, mypy, demo).
 - [ ] Confirmation that `enterprise_rag`, tests, and mock data are unchanged (when
   applicable).
-- [ ] Links to the relevant docs (`docs/office-agent-v1-demo.md`, release notes).
+- [ ] Links to the relevant docs (`office_agent/README.md`, release notes).
 
 ## 9. Tag checklist (for a versioned release)
 

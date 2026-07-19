@@ -1,7 +1,7 @@
 [project]
-name = "agentic-rag-assistant"
+name = "enterprise-office-agent"
 version = "0.1.0"
-description = "Enterprise internal-document Q&A assistant built with LangGraph (Agentic RAG / CRAG pattern)."
+description = "A production-oriented Enterprise RAG engine with a deterministic Office Agent, local mock workflows, and optional bounded LLM assists."
 requires-python = ">=3.11"
 dependencies = [
     "langgraph",
@@ -15,7 +15,6 @@ dependencies = [
     "beautifulsoup4",
     "python-dotenv",
     "pydantic",
-    "langchain-tavily>=0.2.18",
 ]
 
 # This is an application, not a library to be packaged/installed; tell uv not to build the project itself as a package.
@@ -29,6 +28,7 @@ dev = [
     "mypy>=2.1.0",
     "pre-commit>=4.6.0",
     "pytest",
+    "pytest-cov",
     "ruff>=0.15.17",
 ]
 
@@ -56,19 +56,21 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"main.py" = ["F401", "E402"]                    # intentional re-exports after load_dotenv()
 "enterprise_rag/graph/graph.py" = ["E402"]      # imports after load_dotenv()
-"evals/run_eval.py" = ["E402"]                  # imports after sys.path insert
+"evals/enterprise_rag/run_eval.py" = ["E402"]   # imports after sys.path insert
 "tests/**" = ["E731"]                # monkeypatch lambdas are the house style
 
 [tool.mypy]
 python_version = "3.11"
 files = [
+    "enterprise_rag/cli.py",
     "enterprise_rag/graph/engine.py",
     "enterprise_rag/graph/config.py",
     "enterprise_rag/graph/formatting.py",
     "enterprise_rag/graph/state.py",
     "enterprise_rag/graph/consts.py",
+    "enterprise_rag/graph/nodes/",
+    "enterprise_rag/graph/chains/",
     "office_agent/",
 ]
 warn_unused_configs = true
@@ -77,11 +79,19 @@ warn_redundant_casts = true
 no_implicit_optional = true
 check_untyped_defs = true
 
+# graph.py and ingestion.py stay out of the type-checked scope; when in-scope
+# modules import them, follow the imports silently rather than reporting errors
+# from those (still unchecked) files. The graph nodes and chains are now checked
+# directly via the `files` list above, so they are intentionally NOT silenced.
 [[tool.mypy.overrides]]
 module = [
     "enterprise_rag.graph.graph",
-    "enterprise_rag.graph.nodes.*",
-    "enterprise_rag.graph.chains.*",
     "enterprise_rag.ingestion",
 ]
 follow_imports = "silent"
+
+# tavily-python ships no py.typed; ignore its missing stubs where the
+# web_search node imports TavilyClient directly.
+[[tool.mypy.overrides]]
+module = ["tavily.*"]
+ignore_missing_imports = true

@@ -3,8 +3,8 @@ engine.py
 
 Canonical programmatic entry point for the Agentic RAG system.
 
-`answer_question()` is the one function every caller — the CLI (main.py),
-the eval harness (evals/run_eval.py), tests, and future workflow automation —
+`answer_question()` is the one function every caller — the CLI (enterprise_rag/cli.py),
+the eval harness (evals/enterprise_rag/run_eval.py), tests, and future workflow automation —
 uses to run a question through the compiled graph. It owns the two pieces of
 logic that used to be duplicated per caller:
 
@@ -43,8 +43,10 @@ from typing import Any
 import enterprise_rag.graph.graph as graph_runtime
 from enterprise_rag.graph import config
 from enterprise_rag.graph.config import normalize_web_fallback_policy
+from enterprise_rag.graph.consts import STOP_REASON_OFFLINE_MODE
 from enterprise_rag.graph.formatting import source_lines
 from enterprise_rag.graph.state import GraphState
+from enterprise_rag.runtime_privacy import enforce_tracing_privacy
 
 
 @dataclass
@@ -129,13 +131,26 @@ def seed_state(
     Build the full initial GraphState for one run.
 
     The single source of truth for state seeding (formerly duplicated in
-    main.py, evals/run_eval.py, and test helpers). None means "resolve from
+    main.py, evals/enterprise_rag/run_eval.py, and test helpers). None means "resolve from
     the environment"; explicit values are used as-is (the policy is
     normalized, with invalid values falling back to conservative).
+
+    Input boundary: `seed_state()` does NOT redact secrets. Best-effort input
+    redaction happens in `answer_question()` *before* it calls this helper, so
+    calling `app.invoke(seed_state(question))` directly bypasses that redaction
+    guarantee. Supported application callers should go through
+    `answer_question()`.
     """
 
     if web_search_enabled is None:
         web_search_enabled = config.web_search_enabled()
+
+    # Runtime privacy modes are a hard floor: either PRIVACY_MODE or OFFLINE_MODE
+    # forces web search off for EVERY caller, overriding an explicit per-run
+    # web_search_enabled=True (e.g. an eval AnswerOptions). A mode can only
+    # restrict; it never re-enables an external service.
+    if config.privacy_restrictions_active():
+        web_search_enabled = False
 
     if web_fallback_policy is None:
         web_fallback_policy = config.web_fallback_policy()
@@ -202,23 +217,71 @@ def _run_graph_with_trace(
 # Maximum length of the redacted question preview stored in trace output.
 QUESTION_PREVIEW_MAX_CHARS = 80
 
-# Obvious secret-like values scrubbed from the question before it is previewed
-# in trace output. Each entry is (pattern, replacement). Prefix-style keys are
-# matched before the generic key=value form so e.g. `api_key=sk-...` is fully
-# redacted regardless of which rule fires first. This is best-effort hygiene for
-# debug artifacts, not a guarantee that every possible secret shape is caught.
+# Obvious secret-like values scrubbed from the question before it enters
+# GraphState (and thus before it reaches the retriever, router, graders,
+# generator, the outbound web-search query, or the trace preview). Each entry is
+# (pattern, replacement); patterns are applied in order. Prefix-style keys are
+# matched before the generic key=value / key:value forms so e.g. `api_key=sk-...`
+# is fully redacted regardless of which rule fires first. This is best-effort
+# hygiene, not a guarantee that every possible secret shape is caught; the
+# patterns are kept deliberately specific to avoid redacting ordinary prose,
+# UUIDs, plain URLs, or normal Base64 text.
+#
+# Covered: OpenAI (`sk-...`), Anthropic (`sk-ant-...`), GitHub PAT/classic
+# (`github_pat_...` / `ghp_...`), AWS access-key ids (`AKIA`/`ASIA` + 16 chars),
+# JWTs (three dot-separated base64url segments starting `eyJ`), Google/GCP API
+# keys (`AIza...`), Slack tokens (`xox[abprs]-...`), `Bearer <token>` values,
+# credentials embedded in common database connection-string URIs (password
+# only), and generic `key=value` / `key:value` secrets (api_key / apikey / token
+# / password / secret). None of the patterns cross a newline.
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"sk-ant-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # Anthropic-style keys
     (re.compile(r"sk-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # OpenAI-style keys
     (re.compile(r"github_pat_[A-Za-z0-9_]+"), "[REDACTED]"),  # GitHub fine-grained PAT
     (re.compile(r"ghp_[A-Za-z0-9]+"), "[REDACTED]"),  # GitHub classic token
-    # Generic key=value secrets (api_key / token / password / secret), case-insensitive.
+    # AWS access-key ids: AKIA (long-term) / ASIA (temporary STS) + 16 upper-alnum
+    # chars. Case-sensitive and bounded, so ordinary uppercase words are ignored.
+    (re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "[REDACTED]"),
+    # JWTs: three dot-separated base64url segments, header starting `eyJ`. The two
+    # required dots prevent matching an ordinary word or a 2-segment `eyJ...`.
+    (re.compile(r"\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), "[REDACTED]"),
+    # Google / GCP API keys: `AIza` + key chars (>= 20 to stay specific).
+    (re.compile(r"\bAIza[0-9A-Za-z_\-]{20,}"), "[REDACTED]"),
+    # Slack tokens: bot / app / user / refresh / session families
+    # (xoxb / xoxa / xoxp / xoxr / xoxs). Focused, not a broad `xox.*`.
+    (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]+"), "[REDACTED]"),
+    # Bearer tokens: redact the value, keep the `Bearer` label. The 8-char minimum
+    # avoids swallowing an ordinary word after the English word "bearer".
+    (re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._\-]{8,}"), r"\1 [REDACTED]"),
+    # Credentials in common DB connection-string URIs: redact ONLY the password
+    # (between `user:` and `@`), preserving scheme, user, host, and path. Explicit,
+    # security-focused scheme allowlist — not every possible URI scheme.
+    (
+        re.compile(
+            r"(?i)\b(postgresql|postgres|mysql|mongodb\+srv|mongodb|redis)"
+            r"://([^\s:/@]+):([^\s@]+)@"
+        ),
+        r"\1://\2:[REDACTED]@",
+    ),
+    # Generic key=value secrets (api_key / apikey / token / password / secret).
     (re.compile(r"(?i)\b(api_key|apikey|token|password|secret)\s*=\s*\S+"), r"\1=[REDACTED]"),
+    # Generic key:value secrets (colon form; complements the key=value rule).
+    # A non-empty value is required, so a bare "password:" is left untouched.
+    (
+        re.compile(r"(?i)\b(api_key|apikey|token|password|secret)(\s*:\s*)\S+"),
+        r"\1\2[REDACTED]",
+    ),
 )
 
 
 def _redact_secrets(text: str) -> str:
-    """Replace obvious secret-like substrings with `[REDACTED]`."""
+    """Replace obvious secret-like substrings with `[REDACTED]` (best-effort).
+
+    Deterministic and side-effect-free: applies each `_SECRET_PATTERNS` rule in
+    order and returns the scrubbed copy. The original text is never logged or
+    retained. See the `_SECRET_PATTERNS` comment for the covered formats and the
+    deliberate specificity that guards against over-redaction.
+    """
 
     redacted = text
     for pattern, replacement in _SECRET_PATTERNS:
@@ -315,12 +378,28 @@ def answer_question(
     inputs still correlate) and the `input_redacted` flag; it is never stored
     in the result, raw_state, or trace. Redaction does not change routing,
     privacy mode, or the fallback policy.
+
+    Exception contract: *expected* external-dependency failures (retriever,
+    web search, generation LLM, graders, query rewriter, router) are handled
+    at their component boundaries and normally produce degraded behavior
+    and/or a machine-readable `stop_reason`, so those cases still return an
+    AnswerResult. This is NOT a total guarantee: unexpected internal errors,
+    programmer errors, and any future unwrapped seam may still propagate to
+    the caller — `answer_question()` does not promise an AnswerResult for
+    every possible exception, and it adds no top-level catch-all. Callers that
+    require process isolation or an always-structured API response must add
+    their own exception handling at the integration boundary.
     """
 
     if options is None:
         options = AnswerOptions()
     elif isinstance(options, dict):
         options = AnswerOptions(**options)
+
+    # Per-run early initialization: neutralize tracing before any chain can run,
+    # for programmatic callers that never went through the CLI
+    # (enterprise_rag/cli.py). No-op unless a runtime privacy mode is active.
+    enforce_tracing_privacy()
 
     run_id = options.run_id if options.run_id else uuid.uuid4().hex
 
@@ -339,9 +418,20 @@ def answer_question(
         web_fallback_policy=options.web_fallback_policy,
     )
 
-    # Resolved via the module attribute so tests can monkeypatch enterprise_rag.graph.graph.app.
     started = time.perf_counter()
-    result, node_path, node_timings = _run_graph_with_trace(graph_runtime.app, initial_state)
+    if config.offline_mode():
+        # OFFLINE_MODE fails closed BEFORE the graph: answering requires the
+        # OpenAI service, so the graph is never invoked, no client is built, and
+        # no external request is attempted. The seeded state already carries the
+        # empty generation, empty documents, and zeroed counters, so the shared
+        # AnswerResult construction below yields a deterministic offline result.
+        result: dict[str, Any] = {**initial_state, "stop_reason": STOP_REASON_OFFLINE_MODE}
+        node_path: list[str] = []
+        node_timings: list[dict[str, Any]] = []
+    else:
+        # Resolved via the module attribute so tests can monkeypatch
+        # enterprise_rag.graph.graph.app.
+        result, node_path, node_timings = _run_graph_with_trace(graph_runtime.app, initial_state)
     total_duration_ms = round((time.perf_counter() - started) * 1000.0, 2)
 
     answer_result = AnswerResult(

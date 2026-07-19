@@ -1,7 +1,7 @@
 """
 office_agent.formatting — presentation for the Office Agent.
 
-Phase 1 keeps this deliberately small: the message shown for unsupported
+The Office Agent keeps this module deliberately small: the message shown for unsupported
 intents, and a thin renderer for the final response. The knowledge tool already
 returns fully-formatted content (enterprise_rag caveats + Sources preserved via
 `enterprise_rag.graph.formatting.format_answer`), so this module does NOT
