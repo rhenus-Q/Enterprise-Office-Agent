@@ -2,8 +2,9 @@
 Tests for explicit max-retries exhaustion handling.
 
 When the answer still fails a quality gate at the retry limit, the graph must
-end through a terminal notice node that records which gate failed, and main.py
-must append a clear warning instead of presenting the answer as successful.
+end through a terminal notice node that records which gate failed, and the CLI
+(enterprise_rag/cli.py) must append a clear warning instead of presenting the
+answer as successful.
 
 All external seams are mocked -- no API keys or network required.
 """

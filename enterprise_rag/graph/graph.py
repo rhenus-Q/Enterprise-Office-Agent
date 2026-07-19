@@ -5,7 +5,7 @@ Purpose:
 - Assemble the Agentic RAG workflow as a LangGraph StateGraph.
 - Wire the nodes (retrieve / grade_documents / generate / websearch) together
   with conditional edges driven by the router and the two graders.
-- Export the compiled `app`, which main.py invokes.
+- Export the compiled `app`, which the engine (enterprise_rag/graph/engine.py) invokes.
 
 Workflow (see structure.md):
 
@@ -48,8 +48,9 @@ with the grounded answer instead of searching the web.
 
 Failure surfacing: runs that cannot end with a passing answer (web search
 disabled, or MAX_RETRIES exhausted while a quality gate still fails) terminate
-through small notice nodes that record state["stop_reason"], so main.py can
-attach a user-facing caveat instead of presenting the answer as successful.
+through small notice nodes that record state["stop_reason"], so the CLI
+(enterprise_rag/cli.py) can attach a user-facing caveat instead of presenting
+the answer as successful.
 
 Insufficient-context bypass: when generation produced the deterministic
 insufficient-context answer (no usable documents; flagged by the generate node
@@ -279,7 +280,7 @@ def grade_generation(state: GraphState) -> str:
                                 with a more specific rewritten query).
     - "web_search_disabled": grounded but off-target with web search disabled
                              -> notice node recording a stop reason, then END
-                                (no way to add information; main.py shows a caveat).
+                                (no way to add information; the CLI shows a caveat).
     - "web_fallback_disabled": grounded but off-target on a local-only run with
                              WEB_FALLBACK_POLICY=disabled -> notice node
                              recording a stop reason, then END (the policy
@@ -309,7 +310,7 @@ def grade_generation(state: GraphState) -> str:
 
     # A failed generation must never be graded or presented as normal. The
     # generate node already recorded the stop reason and substituted a safe
-    # answer; end the run immediately (main.py attaches the caveat).
+    # answer; end the run immediately (the CLI attaches the caveat).
     if state.get("stop_reason") == STOP_REASON_GENERATION_ERROR:
         print("---GENERATION FAILED, STOP---")
         return "generation_error"
@@ -332,7 +333,7 @@ def grade_generation(state: GraphState) -> str:
 
     # Per-run cost budget: checked before invoking the graders so an exhausted
     # run spends nothing more. The final answer is returned unverified, and
-    # main.py attaches a caveat saying exactly that. (Grader calls themselves
+    # the CLI attaches a caveat saying exactly that. (Grader calls themselves
     # are not individually counted — they are bounded at two per generation,
     # so capping counted LLM calls transitively caps them.)
     if state.get("llm_call_count", 0) >= max_llm_calls_per_run():
@@ -487,13 +488,13 @@ workflow.add_conditional_edges(
         # grounded but off-target -> rewrite the search query, then web search
         "not_useful": REWRITE_QUERY,
         # off-target but privacy mode -> record the stop reason, then stop
-        # with the grounded answer (main.py attaches a user-facing caveat)
+        # with the grounded answer (the CLI attaches a user-facing caveat)
         "web_search_disabled": WEB_SEARCH_DISABLED_NOTICE,
         # off-target on a local-only run with WEB_FALLBACK_POLICY=disabled ->
         # record the stop reason, then stop with the grounded answer
         "web_fallback_disabled": WEB_FALLBACK_DISABLED_NOTICE,
         # retry limit reached with a still-failing answer -> record which
-        # quality gate failed, then stop (main.py attaches a warning)
+        # quality gate failed, then stop (the CLI attaches a warning)
         "max_retries_not_grounded": MAX_RETRIES_NOT_GROUNDED_NOTICE,
         "max_retries_not_useful": MAX_RETRIES_NOT_USEFUL_NOTICE,
         # per-run cost budget spent -> record the stop reason, then stop

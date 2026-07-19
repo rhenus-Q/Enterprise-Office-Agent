@@ -4,7 +4,8 @@ Tests for the per-run cost/latency budget mechanism.
 Counters (llm_call_count / web_search_count / web_result_grading_count) are
 incremented in nodes; budgets are checked as pure reads in grade_generation
 (plus a defensive guard inside web_search). An exhausted budget ends the run
-through the budget_exhausted notice node, and main.py appends a caveat.
+through the budget_exhausted notice node, and the CLI (enterprise_rag/cli.py)
+appends a caveat.
 
 All external seams are mocked -- no API keys or network required.
 """

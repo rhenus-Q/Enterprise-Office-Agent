@@ -12,7 +12,8 @@ The corpus under enterprise_rag/data/acmecorp_internal_docs/ is entirely fiction
 content (no real company data) — replace it with real internal documents in
 an actual deployment. Each document carries provenance metadata (source,
 title, source_type, document_category) that survives chunking and feeds the
-user-facing Sources section in main.py.
+user-facing Sources section rendered by enterprise_rag/graph/formatting.py
+(shown by the CLI, enterprise_rag/cli.py).
 """
 
 import sys

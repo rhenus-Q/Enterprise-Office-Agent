@@ -1,7 +1,7 @@
 """
 Tests for answer provenance (the "Sources:" section).
 
-format_sources / format_answer in main.py build a deterministic Sources
+format_sources / format_answer in enterprise_rag/graph/formatting.py build a deterministic Sources
 section from the final working documents' metadata after the graph finishes —
 no LLM is involved, no document content is exposed. Local corpus documents
 and the web supplement are distinguished by the shared WEB_SEARCH_SOURCE

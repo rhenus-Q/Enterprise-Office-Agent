@@ -6,7 +6,7 @@ def tool_error_notice(state: GraphState):
     """
     Terminal node: an internal tool call (hallucination or answer grader)
     failed, so the answer could not be fully verified. Records a
-    machine-readable stop reason so the caller (main.py) can warn the user
+    machine-readable stop reason so the caller (e.g. the CLI) can warn the user
     instead of presenting the answer as verified. The generation itself is
     left untouched.
     """

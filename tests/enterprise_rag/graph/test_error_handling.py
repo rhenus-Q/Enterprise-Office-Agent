@@ -4,7 +4,7 @@ Tests for graceful degradation when external dependencies fail.
 External failures (Chroma retriever, Tavily, the generation LLM, the graders,
 the query rewriter) must never crash the graph: nodes degrade or stop safely,
 record a stop_reason (retrieval_error / web_search_error / generation_error /
-tool_error), and main.py appends an honest user-facing caveat.
+tool_error), and the CLI (enterprise_rag/cli.py) appends an honest user-facing caveat.
 
 All external seams are mocked -- no API keys or network required.
 """

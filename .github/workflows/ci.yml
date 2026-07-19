@@ -20,9 +20,10 @@
 #
 # lint: runs ruff (lint + format check) and mypy. The mypy scope is the
 # [tool.mypy] `files` list in pyproject.toml (the single source of truth): the
-# enterprise_rag graph engine surface (engine/config/formatting/state/consts
-# plus nodes/ and chains/) and the office_agent package, including
-# office_agent/llm_assist/. A type regression in any of those fails this job.
+# enterprise_rag CLI (cli.py) and graph engine surface
+# (engine/config/formatting/state/consts plus nodes/ and chains/) and the
+# office_agent package, including office_agent/llm_assist/. A type regression
+# in any of those fails this job.
 # No API keys required. Runs in parallel with mocked-tests so test feedback
 # is never delayed by lint failures.
 

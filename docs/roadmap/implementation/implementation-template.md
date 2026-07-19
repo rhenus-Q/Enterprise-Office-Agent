@@ -65,15 +65,16 @@ Example:
 * `uv run ruff check .` — passed.
 * `uv run ruff format --check .` — passed.
 * `uv run mypy` — passed.
-* `uv run pytest tests/evals/ -q` — passed.
-* `uv run pytest tests/node/ tests/graph/ tests/evals/ -q` — passed.
-* `uv run python evals/run_eval.py --validate-only` — passed.
+* `uv run pytest tests/enterprise_rag/evals/ -q` — passed.
+* `uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ -q` — passed.
+* `uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -q` — passed.
+* `uv run python evals/enterprise_rag/run_eval.py --validate-only` — passed.
 
 If full eval was run, include:
 
 * command
 * result
-* whether `evals/results.md` changed
+* whether `evals/enterprise_rag/results.md` changed
 * final pass count
 
 If full eval was not run, say so clearly.
@@ -113,6 +114,6 @@ Confirm:
 * No `.env` or `.env.example` changes.
 * No graph behavior changes unless explicitly approved.
 * No full eval unless explicitly approved.
-* No `ingestion.py` run unless explicitly approved.
-* No `tests/chains/` run unless explicitly approved.
+* No `enterprise_rag/ingestion.py` run unless explicitly approved.
+* No `tests/enterprise_rag/chains/` or `tests/office_agent/integration/` run unless explicitly approved.
 * No commit was created automatically.

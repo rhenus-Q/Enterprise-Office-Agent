@@ -655,7 +655,7 @@ Future improvements (rough priority): structured logging and metrics-friendly ob
 GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every push and pull request — both keys-free:
 
 * **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` + `tests/office_agent/`, excluding the gated `tests/office_agent/integration/`); the key-gated `tests/enterprise_rag/chains/` suite and the full eval run are excluded.
-* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scope defined by the `[tool.mypy]` `files` list in `pyproject.toml`: the engine-API surface — `enterprise_rag/graph/engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py` — plus `enterprise_rag/graph/nodes/`, `enterprise_rag/graph/chains/`, and the `office_agent/` package, including the optional LLM-assist boundary `office_agent/llm_assist/`).
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scope defined by the `[tool.mypy]` `files` list in `pyproject.toml`: the standalone CLI `enterprise_rag/cli.py` and the engine-API surface — `enterprise_rag/graph/engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py` — plus `enterprise_rag/graph/nodes/`, `enterprise_rag/graph/chains/`, and the `office_agent/` package, including the optional LLM-assist boundary `office_agent/llm_assist/`).
 
 ## The Office Agent module
 

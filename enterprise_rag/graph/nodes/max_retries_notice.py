@@ -9,7 +9,7 @@ def max_retries_not_grounded_notice(state: GraphState):
     """
     Terminal node: the retry limit was reached and the latest answer still
     failed the grounding (anti-hallucination) check. Records a machine-readable
-    stop reason so the caller (main.py) can warn the user that the answer may
+    stop reason so the caller (e.g. the CLI) can warn the user that the answer may
     contain unsupported content. The generation itself is left untouched.
     """
 
@@ -22,7 +22,7 @@ def max_retries_not_useful_notice(state: GraphState):
     """
     Terminal node: the retry limit was reached and the latest answer is
     grounded but still failed the usefulness check. Records a machine-readable
-    stop reason so the caller (main.py) can warn the user that the answer may
+    stop reason so the caller (e.g. the CLI) can warn the user that the answer may
     not fully address the question. The generation itself is left untouched.
     """
 
