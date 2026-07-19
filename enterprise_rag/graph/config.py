@@ -5,7 +5,7 @@ Runtime configuration flags read from environment variables.
 
 Kept separate from the graph modules so that reading configuration stays
 side-effect-free and easy to test: no client construction, no .env loading
-(callers such as main.py load .env before invoking the graph).
+(callers such as enterprise_rag/cli.py load .env before invoking the graph).
 """
 
 import os

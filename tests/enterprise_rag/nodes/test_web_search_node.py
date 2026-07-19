@@ -118,7 +118,7 @@ def test_web_search_preserves_question(monkeypatch):
 
 
 def test_web_search_document_carries_provenance_metadata(monkeypatch):
-    # The web supplement records which query produced it, so main.py can show
+    # The web supplement records which query produced it, so the CLI can show
     # it in the user-facing Sources section.
     _patch_tool(monkeypatch, [{"content": "web"}])
     _patch_grader(monkeypatch)

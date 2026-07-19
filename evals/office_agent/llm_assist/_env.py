@@ -8,7 +8,7 @@ broad eval framework. It provides exactly what both need and nothing more:
 
 - `ensure_openai_api_key()` — full-mode-only precondition. Loads the repository
   `.env` using the existing python-dotenv convention (see `tests/conftest.py`,
-  `main.py`) *without* overriding an already-exported process variable (process
+  `enterprise_rag/cli.py`) *without* overriding an already-exported process variable (process
   env wins), then requires a non-blank `OPENAI_API_KEY`. Raises `ConfigError`
   otherwise. Never prints the key.
 - `is_infra_error()` / `infra_reason()` — classify an infrastructure/provider

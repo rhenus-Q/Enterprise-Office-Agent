@@ -162,7 +162,7 @@ See [`.env.example`](../.env.example) for the full template:
 | Variable                                                                            | Required                              | Used for                                                                                                                                                                       |
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_API_KEY`                                                                    | Yes                                   | Chat models (router, graders, generation) and embeddings                                                                                                                       |
-| `TAVILY_API_KEY`                                                                    | Yes                                   | Web-search fallback node                                                                                                                                                       |
+| `TAVILY_API_KEY`                                                                    | Yes (while web search is enabled — the default) | Web-search fallback node                                                                                                                                                       |
 | `PRIVACY_MODE`                                                                      | Optional (default off)                | Disables Tavily web search, LangSmith tracing, and both optional Office LLM assists; preserves the OpenAI RAG path (see below)                                                  |
 | `OFFLINE_MODE`                                                                      | Optional (default off)                | Everything `PRIVACY_MODE` disables, plus OpenAI and all other external services; Knowledge Q&A, ingestion, and real-model evals fail closed (see below)                          |
 | `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` to disable all external web search (privacy mode)                                                                                                               |
@@ -505,7 +505,8 @@ jobs on every push and pull request — both keys-free:
   Agent's `tests/office_agent/` excluding its gated `integration/`), which also
   doubles as a regression test that imports stay side-effect-free.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy`. The mypy scope is
-  the `[tool.mypy]` `files` list in `pyproject.toml`: the engine-API surface
+  the `[tool.mypy]` `files` list in `pyproject.toml`: the standalone CLI
+  (`enterprise_rag/cli.py`) and the engine-API surface
   (`engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py`) plus the
   graph `nodes/` and `chains/` packages, plus the whole `office_agent/` package.
 
@@ -535,6 +536,7 @@ uv run pre-commit run --all-files
 ```
 
 Mypy's scope is the `[tool.mypy]` `files` list in [`pyproject.toml`](../pyproject.toml):
+the standalone CLI (`enterprise_rag/cli.py`),
 the engine-API surface (`enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`,
 `enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`),
 the graph `enterprise_rag/graph/nodes/` and `enterprise_rag/graph/chains/` packages, and the whole

@@ -1,5 +1,5 @@
 """
-Demo: Office Agent v1 (deterministic, local-only).
+Demo: Office Agent (v1.6 — deterministic, local-only).
 
 Runs a few requests through `office_agent.engine.answer_office_request` and
 prints the selected intent and response for each. By default it exercises only

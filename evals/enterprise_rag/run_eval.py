@@ -32,7 +32,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Make project-root imports (enterprise_rag.*, main) work when invoked as
+# Make project-root imports (enterprise_rag.*) work when invoked as
 # `python evals/enterprise_rag/run_eval.py` from anywhere.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -837,7 +837,8 @@ def run_eval(
 
     # Imported here so --validate-only never touches the graph. State seeding
     # and per-run config resolution live in the engine (enterprise_rag/graph/engine.py) —
-    # the same entry point main.py uses — so the harness never mutates env.
+    # the same entry point the CLI (enterprise_rag/cli.py) uses — so the harness
+    # never mutates env.
     from enterprise_rag.graph.engine import AnswerOptions, answer_question
     from enterprise_rag.graph.formatting import format_answer
 

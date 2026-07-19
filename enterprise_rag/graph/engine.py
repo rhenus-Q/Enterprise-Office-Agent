@@ -3,7 +3,7 @@ engine.py
 
 Canonical programmatic entry point for the Agentic RAG system.
 
-`answer_question()` is the one function every caller — the CLI (main.py),
+`answer_question()` is the one function every caller — the CLI (enterprise_rag/cli.py),
 the eval harness (evals/enterprise_rag/run_eval.py), tests, and future workflow automation —
 uses to run a question through the compiled graph. It owns the two pieces of
 logic that used to be duplicated per caller:
@@ -397,8 +397,8 @@ def answer_question(
         options = AnswerOptions(**options)
 
     # Per-run early initialization: neutralize tracing before any chain can run,
-    # for programmatic callers that never went through main.py. No-op unless a
-    # runtime privacy mode is active.
+    # for programmatic callers that never went through the CLI
+    # (enterprise_rag/cli.py). No-op unless a runtime privacy mode is active.
     enforce_tracing_privacy()
 
     run_id = options.run_id if options.run_id else uuid.uuid4().hex
