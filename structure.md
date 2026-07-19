@@ -554,6 +554,15 @@ case the `MAX_RETRIES` loop can produce, so the budgets never bind unless
 explicitly tightened; invalid or non-positive env values fall back to the
 defaults so a budget can never be accidentally disabled.
 
+Two clarifications on how the budgets behave: **budgets are checked at loop
+boundaries** (the `grade_generation` checks and the defensive guards inside
+`websearch`), not after every counted call, so a run's final counters may
+finish slightly above the configured value — the overshoot is bounded by a
+single loop round. And **budget limits are read from the environment at check
+time**, rather than being fixed into per-run state at run start the way
+`web_search_enabled` and `web_fallback_policy` are; today's callers do not
+change the environment mid-run, so the effective limit is stable in practice.
+
 **No total wall-clock deadline (operational limitation).** The budgets above bound
 *counts*, and `LLM_REQUEST_TIMEOUT_SECONDS` bounds a *single* LLM request, but the
 engine imposes **no one total wall-clock deadline over the complete run**. This is
