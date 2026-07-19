@@ -11,7 +11,7 @@ allowed-tools:
   - Bash(git grep:*)
   - Bash(mkdir -p:*)
   - Bash(date:*)
-  - Bash(powershell.exe:*)
+  - Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 # Documentation Drift Review

@@ -1,7 +1,7 @@
 ---
 description: Review a Claude Code command file for correctness, safety, and project fit
 argument-hint: Command path or command name, for example .claude/commands/arch-review.md or /arch-review
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing a Claude Code command file for this Agentic RAG project.
