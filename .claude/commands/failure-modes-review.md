@@ -1,7 +1,7 @@
 ---
 description: Review failure handling, cost/budget controls, and production-readiness risks and write a timestamped failure-mode review report
 argument-hint: Optional review focus, for example "web search failures" or "budget limits"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing failure modes, failure handling, cost/budget controls, and production-readiness risks in this Agentic RAG project.

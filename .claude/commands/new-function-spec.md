@@ -1,7 +1,7 @@
 ---
 description: Create an implementation-ready function spec from a short feature description
 argument-hint: Short feature description
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are creating a single implementation-ready **function spec** for this Agentic RAG project.

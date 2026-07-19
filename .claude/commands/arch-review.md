@@ -1,7 +1,7 @@
 ---
 description: Review the project architecture and write a timestamped architecture review report
 argument-hint: Optional review focus, for example "eval harness" or "graph flow"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(date:*), Bash(powershell.exe:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing the architecture of this Agentic RAG project.
