@@ -32,6 +32,8 @@ interface CardOptions {
   onRetry?: () => void;
   isRefreshing?: boolean;
   onStop?: () => void;
+  disarmed?: boolean;
+  onRearm?: () => void;
   wasStopped?: boolean;
   revision?: number;
 }
@@ -46,6 +48,8 @@ function card(options: CardOptions = {}) {
       onRetry={options.onRetry ?? vi.fn()}
       isRefreshing={options.isRefreshing ?? false}
       onStop={options.onStop ?? vi.fn()}
+      disarmed={options.disarmed ?? false}
+      onRearm={options.onRearm ?? vi.fn()}
       wasStopped={options.wasStopped ?? false}
       revision={options.revision ?? 1}
     />

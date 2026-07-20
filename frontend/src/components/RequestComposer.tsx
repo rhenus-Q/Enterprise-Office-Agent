@@ -18,6 +18,17 @@ interface RequestComposerProps {
   canStop: boolean;
   /** Stops the browser waiting for the in-flight run. */
   onStop: () => void;
+  /**
+   * True immediately after this composer's Stop was pressed.
+   *
+   * Stop and Run deliberately share one position, which means the click that
+   * stops a run lands on an armed Run button a frame later. While disarmed the
+   * submit is inert, so a second click — the other half of a double-click, or an
+   * impatient "did that register?" — cannot restart the request.
+   */
+  disarmed: boolean;
+  /** Reports a deliberate new gesture, which re-arms the submit. */
+  onRearm: () => void;
 }
 
 /**
@@ -36,9 +47,11 @@ export function RequestComposer({
   isLoading,
   canStop,
   onStop,
+  disarmed,
+  onRearm,
 }: RequestComposerProps) {
   const trimmed = value.trim();
-  const canSubmit = trimmed.length > 0 && !isLoading;
+  const canSubmit = trimmed.length > 0 && !isLoading && !disarmed;
 
   function submit() {
     if (canSubmit) {
@@ -84,11 +97,21 @@ export function RequestComposer({
         value={value}
         maxLength={MAX_REQUEST_TEXT_LENGTH}
         placeholder="Ask anything — for example, summarize my unread emails"
-        onChange={(event) => onChange(event.target.value)}
+        // Editing or reaching for the field is unambiguous new intent.
+        onChange={(event) => {
+          onRearm();
+          onChange(event.target.value);
+        }}
+        onFocus={onRearm}
         onKeyDown={handleKeyDown}
       />
 
-      <div className="composer__footer">
+      {/* Moving the pointer away from the action area, or releasing the key
+          that pressed Stop, both mean the stopping gesture is over — so the
+          guard lifts on a real gesture rather than on a timer. The handlers sit
+          on the container because a disabled button dispatches no pointer
+          events of its own. */}
+      <div className="composer__footer" onPointerLeave={onRearm} onKeyUp={onRearm}>
         <p className="composer__hint">
           <kbd className="composer__kbd">
             <CornerDownLeft size={11} strokeWidth={2.25} aria-hidden="true" />

@@ -11,11 +11,15 @@ function Harness({
   isLoading = false,
   canStop = false,
   onStop = () => {},
+  disarmed = false,
+  onRearm = () => {},
 }: {
   onSubmit: (text: string) => void;
   isLoading?: boolean;
   canStop?: boolean;
   onStop?: () => void;
+  disarmed?: boolean;
+  onRearm?: () => void;
 }) {
   const [value, setValue] = useState('');
   return (
@@ -26,6 +30,8 @@ function Harness({
       isLoading={isLoading}
       canStop={canStop}
       onStop={onStop}
+      disarmed={disarmed}
+      onRearm={onRearm}
     />
   );
 }

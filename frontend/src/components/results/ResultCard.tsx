@@ -36,6 +36,14 @@ interface ResultCardProps {
   /** Stops the browser waiting for the retry that is refreshing this card. */
   onStop: () => void;
   /**
+   * True immediately after this card's Stop was pressed. Retry occupies the
+   * same position Stop just vacated, so it stays inert until a deliberate new
+   * gesture — otherwise a second click would restart the very run just stopped.
+   */
+  disarmed: boolean;
+  /** Reports a deliberate new gesture, which re-arms Retry. */
+  onRearm: () => void;
+  /**
    * True when the refresh ended because the user stopped it rather than because
    * it finished. The refreshing treatment ends at once with no completion
    * confirmation — nothing was updated, so nothing may claim it was.
@@ -114,6 +122,8 @@ export function ResultCard({
   onRetry,
   isRefreshing,
   onStop,
+  disarmed,
+  onRearm,
   wasStopped,
   revision,
 }: ResultCardProps) {
@@ -273,7 +283,10 @@ export function ResultCard({
           )}
         </div>
 
-        <div className="result__actions">
+        {/* Same guard as the composer: the pointer leaving this action row, or
+            the key that pressed Stop being released, lifts it. On the container
+            because a disabled button fires no pointer events. */}
+        <div className="result__actions" onPointerLeave={onRearm} onKeyUp={onRearm}>
           {/* One live region for every transient state, so each is announced. */}
           <span className="result__feedback" role="status" aria-live="polite">
             {justUpdated ? (
@@ -329,7 +342,7 @@ export function ResultCard({
               className={busy ? 'action-button is-busy' : 'action-button'}
               aria-label="Retry request"
               title="Retry request"
-              disabled={busy}
+              disabled={busy || disarmed}
               onClick={onRetry}
             >
               <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
