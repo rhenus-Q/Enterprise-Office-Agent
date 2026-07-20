@@ -13,6 +13,10 @@ __pycache__/
 *.so
 .Python
 
+# ---- Node / frontend ----
+# The Vite frontend is npm-managed; its build output is covered by `dist/` below.
+node_modules/
+
 # ---- Virtual environments ----
 .venv/
 venv/

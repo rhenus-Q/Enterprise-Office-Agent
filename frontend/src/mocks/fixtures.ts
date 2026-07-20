@@ -1,0 +1,301 @@
+/**
+ * Typed mock responses for the Phase 1 static UI.
+ *
+ * Every fixture is a real `AgentRunResponse`, so the components are exercised
+ * against the exact shape the Phase 2 adapter will return.
+ *
+ * Date semantics: all dates below are anchored to the repository's read-only
+ * mock data (which centres on 2026-07-01) and are written verbatim into the
+ * fixture text. Nothing in this file — or anywhere in the UI — derives "today"
+ * from the browser clock.
+ *
+ * Caveat wording is copied verbatim from `enterprise_rag/graph/formatting.py`
+ * (`STOP_REASON_NOTES`) and `office_agent/llm_assist/config.py`, so the demo
+ * never invents engine copy.
+ */
+
+import type { AgentRunResponse, HealthResponse } from '../types/api';
+
+/** Verbatim `WEB_SEARCH_DISABLED_NOTE` from enterprise_rag/graph/formatting.py. */
+const WEB_SEARCH_DISABLED_NOTE =
+  'Note: Web search is disabled, so I could only use the local knowledge base. ' +
+  'I may not have enough information to fully answer this question.';
+
+/** Verbatim `LLM_ASSIST_ERROR_NOTE` from office_agent/llm_assist/config.py. */
+const LLM_ASSIST_ERROR_NOTE =
+  'Note: the LLM-assisted digest was unavailable; showing the standard summary.';
+
+/** Verbatim `UNSUPPORTED_INTENT_NOTE` from office_agent/formatting.py. */
+const UNSUPPORTED_INTENT_NOTE =
+  "Sorry — the Office Agent can't handle that request. Right now it answers " +
+  'enterprise knowledge and policy questions from the internal knowledge base, ' +
+  'summarizes your inbox, looks up your calendar, helps with tickets and tasks, ' +
+  'gives you a daily briefing, prepares you for a meeting (meeting prep), and ' +
+  'handles approval workflows (workflow / approval agent). ' +
+  'Try rephrasing toward one of those.';
+
+export const knowledgeSuccess: AgentRunResponse = {
+  intent: 'knowledge_qa',
+  tool: 'knowledge_qa',
+  content: [
+    'Employees must connect through the AcmeCorp VPN whenever they access internal',
+    'systems from an untrusted network. Split-tunnelling is disabled by default, and',
+    'any exception requires security-team approval with a documented expiry date.',
+    '',
+    'Sources:',
+    '- AcmeCorp VPN Access Policy (acmecorp_vpn_policy.md)',
+    '- AcmeCorp Onboarding Guide (acmecorp_onboarding_guide.md)',
+  ].join('\n'),
+  stop_reason: '',
+  sources: [
+    'AcmeCorp VPN Access Policy (acmecorp_vpn_policy.md)',
+    'AcmeCorp Onboarding Guide (acmecorp_onboarding_guide.md)',
+  ],
+  run_id: '9f2c1a7b4e5d4c8fa1b2c3d4e5f60718',
+  duration_ms: 3861.2,
+  execution_mode: 'rag_llm',
+  observability: {
+    run_id: '9f2c1a7b4e5d4c8fa1b2c3d4e5f60718',
+    node_path: ['retrieve', 'grade_documents', 'generate'],
+    node_timings_ms: [
+      { node: 'retrieve', duration_ms: 412.87 },
+      { node: 'grade_documents', duration_ms: 1180.44 },
+      { node: 'generate', duration_ms: 2260.19 },
+    ],
+    total_duration_ms: 3853.5,
+    retries: 0,
+    tracked_llm_calls: 1,
+    web_search_count: 0,
+    web_result_grading_count: 0,
+    web_search_enabled: true,
+    web_fallback_policy: 'conservative',
+    caveat: '',
+  },
+};
+
+export const knowledgeWebSearchDisabled: AgentRunResponse = {
+  intent: 'knowledge_qa',
+  tool: 'knowledge_qa',
+  content: [
+    'The local knowledge base does not cover the third-party VPN vendor advisory',
+    'you asked about, so this answer is limited to AcmeCorp internal policy.',
+    '',
+    WEB_SEARCH_DISABLED_NOTE,
+    '',
+    'Sources:',
+    '- AcmeCorp VPN Access Policy (acmecorp_vpn_policy.md)',
+  ].join('\n'),
+  stop_reason: 'web_search_disabled',
+  sources: ['AcmeCorp VPN Access Policy (acmecorp_vpn_policy.md)'],
+  run_id: 'c41d8fe0a7b24f6b9d0e5a3c8b1f2d67',
+  duration_ms: 2140.9,
+  execution_mode: 'rag_llm',
+  observability: {
+    run_id: 'c41d8fe0a7b24f6b9d0e5a3c8b1f2d67',
+    node_path: ['retrieve', 'grade_documents', 'web_search_disabled_notice', 'generate'],
+    node_timings_ms: [
+      { node: 'retrieve', duration_ms: 389.12 },
+      { node: 'grade_documents', duration_ms: 902.55 },
+      { node: 'web_search_disabled_notice', duration_ms: 0.41 },
+      { node: 'generate', duration_ms: 842.63 },
+    ],
+    total_duration_ms: 2134.71,
+    retries: 1,
+    tracked_llm_calls: 2,
+    web_search_count: 0,
+    web_result_grading_count: 0,
+    web_search_enabled: false,
+    web_fallback_policy: 'conservative',
+    caveat: WEB_SEARCH_DISABLED_NOTE,
+  },
+};
+
+export const emailSuccess: AgentRunResponse = {
+  intent: 'email_summary',
+  tool: 'email_summary',
+  content: [
+    'Inbox summary — unread (2 messages)',
+    '',
+    '1. VPN rollout review needed',
+    '   From: manager@acmecorp.example',
+    '   Received: 2026-07-01T09:00:00 · high priority · response needed',
+    '',
+    '2. Action required: confirm on-call coverage for Sev-1 rotation',
+    '   From: security-team@acmecorp.example',
+    '   Received: 2026-07-01T08:15:00 · high priority · response needed',
+  ].join('\n'),
+  stop_reason: '',
+  sources: [],
+  run_id: null,
+  duration_ms: 6.4,
+  execution_mode: 'deterministic',
+  observability: null,
+};
+
+export const emailAssistFallback: AgentRunResponse = {
+  intent: 'email_summary',
+  tool: 'email_summary',
+  content: [emailSuccess.content, '', LLM_ASSIST_ERROR_NOTE].join('\n'),
+  stop_reason: 'llm_assist_error',
+  sources: [],
+  run_id: null,
+  duration_ms: 61240.8,
+  execution_mode: 'llm_assist_fallback',
+  observability: null,
+};
+
+export const calendarSuccess: AgentRunResponse = {
+  intent: 'calendar_lookup',
+  tool: 'calendar_lookup',
+  content: [
+    'Calendar — 2026-07-01 (3 events)',
+    '',
+    '09:30–10:00  VPN rollout review · Zoom · high',
+    '10:00–10:15  Team standup · Room A',
+    '11:00–12:00  Onboarding session for new hires · Room B',
+    '',
+    'No overlapping events detected.',
+  ].join('\n'),
+  stop_reason: '',
+  sources: [],
+  run_id: null,
+  duration_ms: 4.1,
+  execution_mode: 'deterministic',
+  observability: null,
+};
+
+export const ticketsSuccess: AgentRunResponse = {
+  intent: 'ticket_assistant',
+  tool: 'ticket_assistant',
+  content: [
+    'Open tickets (2)',
+    '',
+    'TICK-001  VPN split-tunnel exception for onboarding cohort',
+    '          Status: open · Priority: high · Updated 2026-07-01',
+    '',
+    'TICK-002  Expense reimbursement portal timeout',
+    '          Status: blocked · Priority: normal · Updated 2026-06-30',
+  ].join('\n'),
+  stop_reason: '',
+  sources: [],
+  run_id: null,
+  duration_ms: 5.2,
+  execution_mode: 'deterministic',
+  observability: null,
+};
+
+export const briefingSuccess: AgentRunResponse = {
+  intent: 'daily_briefing',
+  tool: 'daily_briefing',
+  content: [
+    'Daily briefing — 2026-07-01',
+    '',
+    'Inbox      2 unread, both high priority and awaiting a response.',
+    'Calendar   3 events, starting 09:30 with the VPN rollout review.',
+    'Tickets    2 open (1 blocked).',
+    'Approvals  2 pending, earliest due 2026-07-02T17:00:00.',
+  ].join('\n'),
+  stop_reason: '',
+  sources: [],
+  run_id: null,
+  duration_ms: 9.8,
+  execution_mode: 'deterministic',
+  observability: null,
+};
+
+export const meetingSuccess: AgentRunResponse = {
+  intent: 'meeting_agent',
+  tool: 'meeting_agent',
+  content: [
+    'Meeting prep — VPN rollout review',
+    'When: 2026-07-01T09:30:00 – 2026-07-01T10:00:00 · Zoom',
+    'Attendees: manager@acmecorp.example, security@acmecorp.example',
+    '',
+    'Context',
+    '- Ticket TICK-001 (VPN split-tunnel exception) is still open.',
+    '- Approval APR-001 is pending, due 2026-07-02T17:00:00.',
+    '',
+    'Suggested talking points',
+    '- Confirm the split-tunnel exception scope for the onboarding cohort.',
+    '- Agree an owner for the remaining rollout blockers.',
+  ].join('\n'),
+  stop_reason: '',
+  sources: [],
+  run_id: null,
+  duration_ms: 7.6,
+  execution_mode: 'deterministic',
+  observability: null,
+};
+
+export const approvalsSuccess: AgentRunResponse = {
+  intent: 'workflow_approval',
+  tool: 'workflow_approval',
+  content: [
+    'Pending approvals (2)',
+    '',
+    'APR-001  Approve VPN exception for onboarding cohort',
+    '         Type: access · Priority: high · Due 2026-07-02T17:00:00',
+    '         Requested by manager@acmecorp.example',
+    '',
+    'APR-002  Approve June expense reimbursement',
+    '         Type: expense · Priority: normal · Due 2026-07-03T17:00:00',
+    '',
+    'Approve / reject actions are simulated — nothing is written back.',
+  ].join('\n'),
+  stop_reason: '',
+  sources: [],
+  run_id: null,
+  duration_ms: 5.9,
+  execution_mode: 'deterministic',
+  observability: null,
+};
+
+export const unsupportedResponse: AgentRunResponse = {
+  intent: 'unknown',
+  tool: null,
+  content: UNSUPPORTED_INTENT_NOTE,
+  stop_reason: '',
+  sources: [],
+  run_id: null,
+  duration_ms: 0.3,
+  execution_mode: 'none',
+  observability: null,
+};
+
+export const mockHealth: HealthResponse = {
+  status: 'ok',
+  privacy_mode: false,
+  offline_mode: false,
+  office_llm_enabled: false,
+  web_search_effective: true,
+};
+
+/** Prompt that makes the mock client reject, so the error state is reachable. */
+export const ERROR_PROMPT = 'Demo: simulated API error';
+
+/**
+ * Exact-prompt demo lookup table.
+ *
+ * This is deliberately NOT intent detection: it is exact string equality over
+ * the canned prompts shipped in the sidebar. Real routing is the deterministic
+ * Python router's job and stays server-side (Phase 3). Anything not listed here
+ * falls back to the unsupported response.
+ */
+export const RESPONSES_BY_PROMPT: Record<string, AgentRunResponse> = {
+  'What is the VPN policy?': knowledgeSuccess,
+  'How do I escalate a Sev-1 incident?': knowledgeSuccess,
+  'Summarize my unread emails': emailSuccess,
+  'What meetings do I have today?': calendarSuccess,
+  'Do I have any scheduling conflicts?': calendarSuccess,
+  'Show my open tickets': ticketsSuccess,
+  'What tasks are blocked?': ticketsSuccess,
+  'Brief me on my day': briefingSuccess,
+  'What should I focus on today?': briefingSuccess,
+  'Prepare me for my next meeting': meetingSuccess,
+  'What should I bring up in the VPN review?': meetingSuccess,
+  'What approvals are pending?': approvalsSuccess,
+  'What is the status of APR-001?': approvalsSuccess,
+  'Demo: degraded email digest': emailAssistFallback,
+  'Demo: knowledge with web search disabled': knowledgeWebSearchDisabled,
+  'Demo: unsupported request': unsupportedResponse,
+};

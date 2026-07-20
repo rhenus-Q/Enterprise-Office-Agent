@@ -1,0 +1,2190 @@
+/*
+ * Enterprise Office Agent workspace styling.
+ *
+ * Visual language: an indigo/violet base with a restrained per-capability accent
+ * system, a compact dark navigation rail, light content surfaces with layered
+ * elevation, and a faint grid + radial wash for depth. Plain CSS; the only
+ * dependency is the icon set.
+ *
+ * Light and dark are both first-class via prefers-color-scheme. The navigation
+ * rail is intentionally dark in both themes.
+ */
+
+:root {
+  /* Content surfaces (theme-aware) */
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --surface-2: #f9fafb;
+  --surface-3: #f1f3f7;
+  --border: #e4e7ec;
+  --border-strong: #d3d8e0;
+  --text: #101828;
+  --text-2: #475467;
+  --text-3: #6b7484;
+
+  /* Navigation rail (fixed dark in both themes) */
+  --nav-bg: #0d1120;
+  --nav-surface: #161c2f;
+  --nav-border: #212842;
+  --nav-text: #e8ebf4;
+  --nav-text-2: #929cb6;
+  --nav-active: #1a2138;
+
+  /* Brand base */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef2ff;
+  --accent-text: #ffffff;
+  --accent-ring: rgba(79, 70, 229, 0.3);
+  --violet: #7c3aed;
+
+  /* Semantic */
+  --success: #067647;
+  --success-soft: #ecfdf3;
+  --warning: #b54708;
+  --warning-soft: #fffaeb;
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --info-soft: #eef2ff;
+
+  /* Depth */
+  --grid-line: rgba(16, 24, 40, 0.028);
+  --glow-1: rgba(79, 70, 229, 0.1);
+  --glow-2: rgba(124, 58, 237, 0.075);
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.07), 0 2px 4px rgba(16, 24, 40, 0.04);
+  --shadow-lg: 0 12px 30px rgba(16, 24, 40, 0.09), 0 3px 8px rgba(16, 24, 40, 0.05);
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --ease: cubic-bezier(0.2, 0, 0.13, 1);
+
+  color-scheme: light dark;
+}
+
+/* Per-capability accents. Restrained mid-tones, distinct in hue rather than
+   saturation, so seven marks stay legible without shouting. */
+.cap--knowledge_qa {
+  --cap: #7c3aed;
+  --cap-soft: rgba(124, 58, 237, 0.11);
+}
+.cap--email_summary {
+  --cap: #2563eb;
+  --cap-soft: rgba(37, 99, 235, 0.11);
+}
+.cap--calendar_lookup {
+  --cap: #0e7490;
+  --cap-soft: rgba(14, 116, 144, 0.11);
+}
+.cap--ticket_assistant {
+  --cap: #b45309;
+  --cap-soft: rgba(180, 83, 9, 0.11);
+}
+.cap--daily_briefing {
+  --cap: #047857;
+  --cap-soft: rgba(4, 120, 87, 0.11);
+}
+.cap--meeting_agent {
+  --cap: #4f46e5;
+  --cap-soft: rgba(79, 70, 229, 0.11);
+}
+.cap--workflow_approval {
+  --cap: #be123c;
+  --cap-soft: rgba(190, 18, 60, 0.11);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0d14;
+    --surface: #11151e;
+    --surface-2: #151a25;
+    --surface-3: #1a2130;
+    --border: #212836;
+    --border-strong: #2d3648;
+    --text: #e6eaf2;
+    --text-2: #9aa4b8;
+    --text-3: #7c8698;
+
+    --nav-bg: #080b12;
+    --nav-surface: #11151e;
+    --nav-border: #1b2231;
+    --nav-active: #192133;
+
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --accent-soft: #1b1f38;
+    --accent-ring: rgba(99, 102, 241, 0.35);
+    --violet: #a78bfa;
+
+    --success: #75e0a7;
+    --success-soft: #0b2a1d;
+    --warning: #fdb022;
+    --warning-soft: #2c1f08;
+    --danger: #fda29b;
+    --danger-soft: #2b1211;
+    --info-soft: #191d33;
+
+    --grid-line: rgba(255, 255, 255, 0.022);
+    --glow-1: rgba(99, 102, 241, 0.11);
+    --glow-2: rgba(167, 139, 250, 0.07);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.55);
+  }
+
+  .cap--knowledge_qa {
+    --cap: #a78bfa;
+    --cap-soft: rgba(167, 139, 250, 0.14);
+  }
+  .cap--email_summary {
+    --cap: #60a5fa;
+    --cap-soft: rgba(96, 165, 250, 0.14);
+  }
+  .cap--calendar_lookup {
+    --cap: #22d3ee;
+    --cap-soft: rgba(34, 211, 238, 0.13);
+  }
+  .cap--ticket_assistant {
+    --cap: #fbbf24;
+    --cap-soft: rgba(251, 191, 36, 0.13);
+  }
+  .cap--daily_briefing {
+    --cap: #34d399;
+    --cap-soft: rgba(52, 211, 153, 0.13);
+  }
+  .cap--meeting_agent {
+    --cap: #818cf8;
+    --cap-soft: rgba(129, 140, 248, 0.14);
+  }
+  .cap--workflow_approval {
+    --cap: #fb7185;
+    --cap-soft: rgba(251, 113, 133, 0.13);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Background depth: a very light grid plus two soft washes behind everything. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(58rem 30rem at 12% -8%, var(--glow-1), transparent 62%),
+    radial-gradient(46rem 26rem at 92% -4%, var(--glow-2), transparent 58%),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    32px 32px,
+    32px 32px;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.08em 0.34em;
+}
+
+svg {
+  display: block;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============ Shell ============ */
+
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 1.5rem;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.app__logo {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(140deg, var(--accent), var(--violet));
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: -0.02em;
+  box-shadow: 0 2px 8px var(--accent-ring);
+}
+
+.app__brand-heading {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/* The brand doubles as the reset control, so it is a real button. */
+.app__reset {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: -0.25rem -0.35rem;
+  padding: 0.25rem 0.35rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--ease),
+    box-shadow 180ms var(--ease);
+}
+
+.app__reset:hover {
+  background: var(--surface-3);
+}
+
+.app__reset:hover .app__logo {
+  box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.app__reset:hover .app__title {
+  color: var(--accent);
+}
+
+.app__brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app__title {
+  display: block;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  transition: color 180ms var(--ease);
+}
+
+.app__subtitle {
+  display: block;
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+.app__nav-toggle {
+  display: none;
+  align-items: center;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.65rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 130ms var(--ease), background-color 130ms var(--ease);
+}
+
+.app__nav-toggle:hover {
+  border-color: var(--border-strong);
+}
+
+.app__body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr) 21rem;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem 2.5rem;
+  align-items: start;
+}
+
+.app__sidebar,
+.app__main,
+.app__aside {
+  min-width: 0;
+}
+
+.app__main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ============ Navigation rail ============ */
+
+.app__sidebar {
+  position: sticky;
+  top: 4.4rem;
+  max-height: calc(100vh - 5.75rem);
+  overflow-y: auto;
+  background: var(--nav-bg);
+  border: 1px solid var(--nav-border);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem 0.65rem;
+  box-shadow: var(--shadow-md);
+}
+
+.nav__section-title {
+  margin: 0 0 0.55rem;
+  padding: 0 0.45rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--nav-text-2);
+}
+
+.nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav__item-heading {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.nav__item {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.5rem 0.45rem 0.55rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--nav-text-2);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 130ms var(--ease),
+    color 130ms var(--ease),
+    transform 90ms var(--ease);
+}
+
+/* Accent rail on the active item — a second, non-colour cue alongside tint. */
+.nav__item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 0;
+  border-radius: 0 2px 2px 0;
+  background: var(--cap, var(--accent));
+  transform: translateY(-50%);
+  transition: height 150ms var(--ease);
+}
+
+.nav__item:hover {
+  background: var(--nav-surface);
+  color: var(--nav-text);
+}
+
+.nav__item:active {
+  transform: translateY(0.5px);
+}
+
+.nav__item.is-active {
+  background: var(--nav-active);
+  color: var(--nav-text);
+  font-weight: 600;
+}
+
+.nav__item.is-active::before {
+  height: 60%;
+}
+
+.nav__icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  color: var(--cap, var(--nav-text-2));
+  background: transparent;
+  opacity: 0.75;
+  transition:
+    background-color 130ms var(--ease),
+    opacity 130ms var(--ease);
+}
+
+.nav__item:hover .nav__icon {
+  opacity: 1;
+}
+
+.nav__item.is-active .nav__icon {
+  opacity: 1;
+  background: color-mix(in srgb, var(--cap) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cap) 32%, transparent);
+}
+
+.nav__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav__footer {
+  margin: 0.9rem 0.45rem 0.1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--nav-border);
+  font-size: 0.69rem;
+  line-height: 1.45;
+  color: var(--nav-text-2);
+}
+
+/* ============ Runtime status indicators ============ */
+
+.status {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+
+/* Semantic tones. Each chip states a policy, so the tint is meaning, not
+   decoration — and the state value is always spelled out in text as well.
+   A disabled feature is still coloured by its own semantic hue: "off" is a
+   policy state, not an absence, so the chip never falls back to grey. */
+.status-chip--privacy {
+  --tone: #2563eb; /* blue */
+}
+.status-chip--slate {
+  --tone: #0e7490; /* cool cyan / slate-blue (class name kept for stability) */
+}
+.status-chip--assist {
+  --tone: #7c3aed; /* violet */
+}
+.status-chip--ok {
+  --tone: #047857; /* green */
+}
+.status-chip--mock {
+  --tone: #b45309; /* amber */
+}
+
+@media (prefers-color-scheme: dark) {
+  .status-chip--privacy {
+    --tone: #93c5fd;
+  }
+  .status-chip--slate {
+    --tone: #67e8f9;
+  }
+  .status-chip--assist {
+    --tone: #a78bfa;
+  }
+  .status-chip--ok {
+    --tone: #34d399;
+  }
+  .status-chip--mock {
+    --tone: #fbbf24;
+  }
+}
+
+/* Informational, never a control: default cursor, no click target.
+   Each part is styled separately — icon, label, separator, value, border, and
+   background — rather than dimming the whole chip. No chip-wide opacity or
+   grayscale filter is used anywhere. */
+.status-chip {
+  /* Readable text form of the tone: mixed toward the body colour so the value
+     stays legible on the pale tint in both themes. */
+  --tone-text: color-mix(in srgb, var(--tone) 82%, var(--text));
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.24rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--border)) 34%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, var(--surface-2)) 11%, var(--surface));
+  font-size: 0.71rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: default;
+  transition:
+    transform 160ms var(--ease),
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease),
+    box-shadow 160ms var(--ease);
+}
+
+/* Lifts only the hovered chip; siblings are never referenced. */
+.status-chip:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tone, var(--border)) 52%, var(--border));
+  background: color-mix(in srgb, var(--tone, var(--surface-2)) 17%, var(--surface));
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--tone, transparent) 24%, transparent);
+}
+
+/* Privacy, Offline restrictions, and LLM assist carry a stronger tint and border
+   than the shared base, so blue / cyan / violet are distinguishable at a glance.
+   Placed after the base and hover rules because specificity is equal — order
+   decides. Web search and Mock environment keep the shared treatment, and all
+   five keep identical dimensions, padding, and spacing. */
+.status-chip--privacy,
+.status-chip--slate,
+.status-chip--assist {
+  border-color: color-mix(in srgb, var(--tone) 46%, var(--border));
+  background: color-mix(in srgb, var(--tone) 15%, var(--surface));
+}
+
+.status-chip--privacy:hover,
+.status-chip--slate:hover,
+.status-chip--assist:hover {
+  border-color: color-mix(in srgb, var(--tone) 64%, var(--border));
+  background: color-mix(in srgb, var(--tone) 22%, var(--surface));
+}
+
+/* The icon carries the semantic hue at full strength — never dimmed. */
+.status-chip__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--tone, var(--text-3));
+  border-radius: 50%;
+  transition:
+    color 160ms var(--ease),
+    filter 160ms var(--ease),
+    transform 160ms var(--ease),
+    box-shadow 160ms var(--ease);
+}
+
+/* The category label stays moderately muted, but tinted rather than pure grey. */
+.status-chip__label {
+  color: color-mix(in srgb, var(--tone) 26%, var(--text-3));
+}
+
+.status-chip__sep {
+  color: color-mix(in srgb, var(--tone) 40%, var(--text-3));
+}
+
+/* The state value carries the semantic colour at full weight. */
+.status-chip__value {
+  font-weight: 650;
+  color: var(--tone-text);
+  transition: color 160ms var(--ease);
+}
+
+.status-chip:hover .status-chip__value {
+  color: color-mix(in srgb, var(--tone) 94%, var(--text));
+}
+
+/* Per-status icon emphasis — hover only, never idle. */
+.status-chip--privacy:hover .status-chip__icon {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--tone) 60%, transparent));
+}
+
+.status-chip--slate:hover .status-chip__icon {
+  transform: translateY(-1px);
+}
+
+.status-chip--assist:hover .status-chip__icon {
+  animation: chip-sparkle 620ms var(--ease) 1;
+}
+
+.status-chip--ok:hover .status-chip__icon {
+  animation: chip-ring 700ms var(--ease) 1;
+}
+
+.status-chip--mock:hover .status-chip__icon {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--tone) 55%, transparent));
+}
+
+@keyframes chip-sparkle {
+  40% {
+    transform: scale(1.16) rotate(9deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes chip-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tone) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* Separates the environment chip from the runtime-policy chips. */
+.status__divider {
+  width: 1px;
+  height: 1.1rem;
+  margin: 0 0.15rem;
+  background: var(--border);
+  border-radius: 1px;
+}
+
+/* ============ Composer ============ */
+
+.composer {
+  position: relative;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 55%, transparent), transparent 40%),
+    var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.15rem 0.85rem;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  transition:
+    transform 180ms var(--ease),
+    border-color 180ms var(--ease),
+    background 180ms var(--ease),
+    box-shadow 180ms var(--ease);
+}
+
+/* Hover, but only while nothing inside is focused. Every hover rule below is
+   gated on `:not(:focus-within)`, so focus always wins without needing a more
+   specific override — the card simply stops matching the hover selector the
+   moment the textarea takes focus.
+   The outer card gets movement, border, and shadow only; no background change,
+   so no tint spreads across the card or its input area. */
+.composer:hover:not(:focus-within) {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+/* Focus: neutral card, no lift, plus the restrained focus ring. The base
+   `--shadow-md` elevation is kept so nothing about the card reads as "raised". */
+.composer:focus-within {
+  transform: none;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: var(--shadow-md), 0 0 0 4px var(--accent-ring);
+}
+
+/* ---- Header-only decorative treatment ----
+   The colour response is confined to the header: icon, title, and description.
+   The textarea, divider, hints, counter, and button are never restyled by the
+   parent card's hover state. */
+
+.composer__badge,
+.composer__title,
+.composer__lede {
+  transition:
+    color 180ms var(--ease),
+    box-shadow 180ms var(--ease);
+}
+
+/* Header overlay — the same technique the Execution Details cards use: a
+   gradient wash clipped to the card's own rounded edges, fading to transparent
+   before it reaches the textarea. Because its edges coincide with the card and
+   it dissolves downward, there is no frame, ring, or boxed panel anywhere. */
+.composer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 10%, transparent),
+    transparent 32%
+  );
+  transition: opacity 180ms var(--ease);
+}
+
+.composer:hover:not(:focus-within)::before {
+  opacity: 1;
+}
+
+.composer:hover:not(:focus-within) .composer__badge {
+  box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.composer:hover:not(:focus-within) .composer__title {
+  color: color-mix(in srgb, var(--accent) 72%, var(--text));
+}
+
+.composer:hover:not(:focus-within) .composer__lede {
+  color: var(--text-2);
+}
+
+.composer__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.composer__badge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 8px;
+  background: linear-gradient(140deg, var(--accent), var(--violet));
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-ring);
+}
+
+.composer__title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  line-height: 1.25;
+}
+
+.composer__lede {
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+
+.composer__input {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  /* Deliberately neutral: the card's hover treatment never tints this surface. */
+  padding: 0;
+  outline: none;
+}
+
+.composer__input::placeholder {
+  color: var(--text-3);
+}
+
+.composer__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 0.7rem;
+}
+
+.composer__hint {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.73rem;
+  color: var(--text-3);
+}
+
+.composer__kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 0.08rem 0.32rem;
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.composer__count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  padding-left: 0.15rem;
+}
+
+.button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.85rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 130ms var(--ease),
+    border-color 130ms var(--ease),
+    box-shadow 130ms var(--ease),
+    transform 90ms var(--ease);
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.button--primary {
+  background: linear-gradient(180deg, var(--accent), var(--accent-hover));
+  border-color: transparent;
+  color: var(--accent-text);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12), 0 2px 10px var(--accent-ring);
+  padding: 0.5rem 1.1rem;
+}
+
+.button--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent-hover));
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14), 0 4px 14px var(--accent-ring);
+}
+
+.button--primary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14);
+}
+
+.button--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.75rem;
+  padding: 0.22rem 0.45rem;
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ============ Example prompts ============ */
+
+.examples {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1.05rem 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.examples__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.15rem;
+}
+
+.examples__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-3);
+}
+
+.examples__title-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--cap, var(--accent));
+  background: var(--cap-soft, var(--accent-soft));
+}
+
+.examples__hint {
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+
+.examples__desc {
+  margin: 0.35rem 0 0.7rem;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.examples__grid {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.examples__grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.prompt-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 160ms var(--ease),
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease),
+    box-shadow 160ms var(--ease);
+}
+
+.prompt-card::after {
+  content: "";
+  display: block;
+  height: 2px;
+  width: 1.6rem;
+  margin-top: 0.15rem;
+  border-radius: 2px;
+  background: var(--cap, var(--accent));
+  opacity: 0.35;
+  transition: width 160ms var(--ease), opacity 140ms var(--ease);
+}
+
+.prompt-card:hover {
+  border-color: color-mix(in srgb, var(--cap, var(--accent)) 38%, var(--border));
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.prompt-card:hover::after {
+  width: 2.6rem;
+  opacity: 0.9;
+}
+
+.prompt-card:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.prompt-card--compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.prompt-card--compact::after {
+  display: none;
+}
+
+.prompt-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.prompt-card__icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  color: var(--cap, var(--accent));
+  background: var(--cap-soft, var(--accent-soft));
+}
+
+.prompt-card__title {
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+
+.prompt-card__desc {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.examples__demo {
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px dashed var(--border);
+}
+
+.examples__demo-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-3);
+}
+
+.examples__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 130ms var(--ease),
+    color 130ms var(--ease),
+    background-color 130ms var(--ease);
+}
+
+.chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip--demo {
+  border-style: dashed;
+  color: var(--text-3);
+}
+
+/* ============ Results ============ */
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem 0.95rem 0.95rem;
+  box-shadow: var(--shadow);
+}
+
+/* ---- Result header ---- */
+
+.result__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.result__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.result__icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 7px;
+  color: var(--cap, var(--accent));
+  background: var(--cap-soft, var(--accent-soft));
+}
+
+.result__label {
+  margin: 0;
+  font-size: 0.83rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Separates the content actions from the collapse toggle, which acts on the
+   card rather than on the answer. */
+.result__divider {
+  width: 1px;
+  height: 1.1rem;
+  margin: 0 0.15rem;
+  background: var(--border);
+  border-radius: 1px;
+}
+
+.result__feedback {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  min-width: 0;
+  white-space: nowrap;
+  padding-right: 0.15rem;
+}
+
+/* Success confirmation, styled to match the Success status pill. */
+.result__updated {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border));
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 0.71rem;
+  font-weight: 650;
+  animation: result-updated-in 240ms var(--ease) 1;
+}
+
+@keyframes result-updated-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Ghost icon buttons: uniform box, quiet until hovered or focused. */
+.action-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color 160ms var(--ease),
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease);
+}
+
+.action-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: var(--accent-soft);
+}
+
+.action-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.action-button.is-busy svg {
+  animation: spin 0.9s linear infinite;
+}
+
+/* ---- Transcript surface ---- */
+
+/* Remounted on every completed run (keyed by the run counter), so the entry
+   animation replays even when the response is byte-identical to the previous. */
+.result__surface {
+  position: relative;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cap, var(--accent));
+  background-color: var(--surface-2);
+  padding: 0.9rem 1.05rem;
+  overflow: hidden;
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+/* A first result, or a fresh request. The frame only slides; the fade belongs to
+   the content layer, so the container never appears to leave. */
+.result__surface[data-entry='new'] {
+  animation: result-surface-enter 300ms var(--ease) 1;
+}
+
+.result__surface[data-entry='new'] .result__content {
+  animation: result-content-in 300ms var(--ease) 1;
+}
+
+@keyframes result-surface-enter {
+  from {
+    transform: translateY(4px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes result-content-in {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* A completed retry: the surface tints and the full-height rail brightens, then
+   both settle. No translation — the answer must not appear to fly in. */
+/* Completion is split across the two layers: the surface carries the tint pulse
+   and the rail highlight, the content carries the opacity restore. The transcript
+   is remounted at this point, so both are animations rather than transitions. */
+.result__surface[data-entry='updated'] {
+  animation: result-surface-updated 480ms var(--ease) 1;
+}
+
+.result__surface[data-entry='updated'] .result__content {
+  animation: result-content-restore 480ms var(--ease) 1;
+}
+
+@keyframes result-surface-updated {
+  0% {
+    background-color: color-mix(in srgb, var(--cap, var(--accent)) 14%, var(--surface-2));
+    border-left-color: color-mix(in srgb, white 45%, var(--cap, var(--accent)));
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--cap, var(--accent)) 55%, transparent);
+  }
+  100% {
+    background-color: var(--surface-2);
+    border-left-color: var(--cap, var(--accent));
+    box-shadow: inset 3px 0 0 transparent;
+  }
+}
+
+@keyframes result-content-restore {
+  from {
+    opacity: 0.15;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Refresh in flight: stale-while-revalidate. Only the answer text fades to a
+   faint ghost — the frame, accent rail, and progress bar all stay at full
+   strength, so the container stays anchored and the progress indicator stays
+   legible. Nothing is hidden, unmounted, or resized. */
+.result__surface.is-refreshing .result__content {
+  opacity: 0.15;
+  transition: opacity 280ms var(--ease);
+}
+
+/* Indeterminate progress along the top edge of the transcript. */
+.result__progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 40%;
+  border-radius: 0 0 2px 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--cap, var(--accent)),
+    color-mix(in srgb, var(--cap, var(--accent)) 40%, transparent)
+  );
+  animation: result-progress 1.1s var(--ease) infinite;
+}
+
+@keyframes result-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+
+.result__content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  /* The slower half of an asymmetric pair: restoring from the dimmed state. */
+  transition: opacity 480ms var(--ease);
+}
+
+/* Space-aligned output (tickets, approvals, calendar, briefing) only survives in
+   a monospace face, so structured intents keep one. */
+.result__content--mono {
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.75;
+}
+
+/* Prose output reads better in the UI stack, with a measure that stops lines
+   running the full width of the workspace. */
+.result__content--prose {
+  font-family: var(--font-sans);
+  font-size: 0.94rem;
+  line-height: 1.7;
+  max-width: 74ch;
+}
+
+.state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.9rem 1.5rem;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.state__title {
+  margin: 0 0 0.35rem;
+  font-size: 0.98rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.state__body {
+  margin: 0 auto;
+  max-width: 48ch;
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+
+.state__hint {
+  margin: 1.1rem auto 0;
+  max-width: 52ch;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+/* ---- Agent execution flow illustration ---- */
+
+.flow {
+  list-style: none;
+  margin: 1.4rem 0 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.flow__step {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.flow__node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 7.5rem;
+  padding: 0.65rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.flow__icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.flow__step:last-child .flow__icon {
+  color: var(--success);
+  background: var(--success-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.flow__label {
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.flow__caption {
+  font-size: 0.66rem;
+  color: var(--text-3);
+}
+
+.flow__arrow {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  opacity: 0.6;
+}
+
+.spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.notice {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  padding: 0.7rem 0.95rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.notice__title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.notice__body {
+  margin: 0.3rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+.notice--degraded {
+  border-left-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.notice--unsupported {
+  border-left-color: var(--accent);
+  background: var(--info-soft);
+}
+
+.notice--error {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+  text-align: left;
+}
+
+.notice--error .state__title,
+.notice--error .state__body {
+  justify-content: flex-start;
+  margin-left: 0;
+}
+
+/* ============ Execution panel ============ */
+
+.app__aside {
+  position: sticky;
+  top: 4.4rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+}
+
+.panel__status {
+  margin: -0.15rem 0 0.1rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.8rem 0.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.card--preview {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.card__title {
+  margin: 0 0 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.77rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.card__icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 6px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.fields {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 7.4rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.field dt {
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.field dd {
+  margin: 0;
+  font-size: 0.79rem;
+  word-break: break-word;
+}
+
+.field__note {
+  display: block;
+  font-size: 0.67rem;
+  color: var(--text-3);
+  font-style: italic;
+  margin-top: 0.05rem;
+}
+
+.placeholder {
+  color: var(--text-3);
+  opacity: 0.7;
+}
+
+.sources {
+  margin: 0;
+  padding-left: 1.05rem;
+  font-size: 0.77rem;
+  color: var(--text-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.empty-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.71rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.pill--success {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+}
+
+.pill--degraded {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+}
+
+.pill--unsupported {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+
+.pill--error {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+}
+
+/* ============ Timeline ============ */
+
+.timeline {
+  margin-top: 0.8rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.timeline__title {
+  margin: 0 0 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-3);
+}
+
+.timeline__list {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.timeline__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.timeline__node {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.timeline__index {
+  font-size: 0.66rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 0.9rem;
+}
+
+.timeline__duration {
+  font-size: 0.71rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timeline__bar {
+  height: 3px;
+  margin-top: 0.3rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.timeline__bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--violet));
+}
+
+.timeline__caveat {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-2);
+  background: var(--warning-soft);
+  border-left: 3px solid var(--warning);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 0.45rem 0.6rem;
+}
+
+/* ============ Motion preferences ============ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .prompt-card:hover {
+    transform: none;
+  }
+}
+
+/* ============ Responsive ============ */
+
+@media (max-width: 1180px) {
+  .app__body {
+    grid-template-columns: 13.5rem minmax(0, 1fr);
+  }
+
+  .app__aside {
+    grid-column: 2;
+    position: static;
+  }
+
+  .app__sidebar {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .app__header {
+    padding: 0.65rem 1rem;
+  }
+
+  .app__nav-toggle {
+    display: inline-flex;
+  }
+
+  .app__body {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1rem 1rem 2rem;
+  }
+
+  .app__sidebar {
+    display: none;
+  }
+
+  .app__sidebar.is-open {
+    display: block;
+  }
+
+  .app__aside {
+    grid-column: auto;
+  }
+
+  .examples__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .flow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .flow__step {
+    flex-direction: column;
+  }
+
+  .flow__node {
+    width: 100%;
+  }
+
+  .flow__arrow {
+    transform: rotate(90deg);
+  }
+}
+
+@media (max-width: 520px) {
+  .app__header {
+    align-items: flex-start;
+  }
+
+  .state {
+    padding: 1.4rem 1rem;
+  }
+}
+
+/* ============ Execution card micro-interactions ============ */
+
+/* Section accents. These cards are informational — no cursor change, no click
+   target, and no tabindex is added purely to drive an effect. */
+.card--routing {
+  --sec: #4f46e5;
+}
+.card--runtime {
+  --sec: #0284c7;
+}
+.card--privacy {
+  --sec: #0d9488;
+}
+.card--observability {
+  --sec: #7c3aed;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card--routing {
+    --sec: #818cf8;
+  }
+  .card--runtime {
+    --sec: #38bdf8;
+  }
+  .card--privacy {
+    --sec: #2dd4bf;
+  }
+  .card--observability {
+    --sec: #a78bfa;
+  }
+}
+
+.card {
+  position: relative;
+  transition:
+    transform 160ms var(--ease),
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease),
+    box-shadow 160ms var(--ease);
+}
+
+/* Section-specific edge highlight, revealed on hover only. */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--sec, var(--accent)) 9%, transparent),
+    transparent 58%
+  );
+  transition: opacity 190ms var(--ease);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--sec, var(--accent)) 34%, var(--border));
+  box-shadow:
+    0 6px 18px color-mix(in srgb, var(--sec, var(--accent)) 15%, transparent),
+    var(--shadow);
+}
+
+.card:hover::after {
+  opacity: 1;
+}
+
+.card__title,
+.card .placeholder {
+  transition:
+    color 190ms var(--ease),
+    opacity 190ms var(--ease);
+}
+
+.card:hover .card__title {
+  color: var(--sec, var(--accent));
+}
+
+.card:hover .placeholder {
+  color: var(--text-2);
+  opacity: 1;
+}
+
+.card__icon {
+  color: var(--sec, var(--accent));
+  background: color-mix(in srgb, var(--sec, var(--accent)) 12%, transparent);
+}
+
+.card__icon svg {
+  transition:
+    transform 190ms var(--ease),
+    filter 190ms var(--ease);
+}
+
+.card--routing:hover .card__icon svg {
+  transform: translateX(1.5px);
+}
+
+.card--runtime:hover .card__icon svg {
+  transform: rotate(-12deg);
+}
+
+.card--privacy:hover .card__icon svg {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--sec) 62%, transparent));
+}
+
+.card--observability:hover .card__icon svg {
+  animation: icon-wave 700ms var(--ease) 1;
+}
+
+@keyframes icon-wave {
+  35% {
+    transform: scaleY(1.28);
+  }
+  70% {
+    transform: scaleY(0.9);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+/* ============ Flow micro-interactions ============ */
+
+.flow__step--request {
+  --node: #4f46e5;
+}
+.flow__step--router {
+  --node: #7c3aed;
+}
+.flow__step--tool {
+  --node: #0284c7;
+}
+.flow__step--result {
+  --node: #047857;
+}
+
+@media (prefers-color-scheme: dark) {
+  .flow__step--request {
+    --node: #818cf8;
+  }
+  .flow__step--router {
+    --node: #a78bfa;
+  }
+  .flow__step--tool {
+    --node: #38bdf8;
+  }
+  .flow__step--result {
+    --node: #34d399;
+  }
+}
+
+/* Informational nodes: default cursor, no click target.
+   Hover lifts the node with a `transform`, which is a paint-only operation — it
+   never reflows, so neighbouring nodes and the arrows between them cannot move.
+   Layout-affecting properties (width, height, padding, margin, gap, border-width,
+   font-size) stay fixed in every state; the 1px border is reserved up front and
+   only ever changes colour. */
+.flow__node {
+  cursor: default;
+  transition:
+    transform 160ms var(--ease),
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease),
+    box-shadow 160ms var(--ease);
+}
+
+.flow__icon {
+  color: var(--node, var(--accent));
+  background: color-mix(in srgb, var(--node, var(--accent)) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--node, var(--accent)) 20%, transparent);
+  transition:
+    background-color 190ms var(--ease),
+    box-shadow 190ms var(--ease);
+}
+
+.flow__label {
+  transition: color 190ms var(--ease);
+}
+
+/* A local lift: 2px up, a deeper shadow, and a capability-coloured ring. The
+   ring is drawn with box-shadow (not border or outline-width), so it occupies no
+   layout space, and the transform paints without reflowing. Scoped to this node
+   only — no sibling, arrow, or container is referenced. */
+.flow__node:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--node) 42%, var(--border));
+  background: color-mix(in srgb, var(--node) 7%, var(--surface-2));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--node) 14%, transparent),
+    0 8px 20px color-mix(in srgb, var(--node) 20%, transparent);
+}
+
+.flow__node:hover .flow__icon {
+  background: color-mix(in srgb, var(--node) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--node) 36%, transparent);
+}
+
+.flow__node:hover .flow__label {
+  color: var(--node);
+}
+
+/* Arrows are inert connectors: no transition, no hover rule, no animation, and
+   no selector anywhere targets them from a node's hover state. They render
+   identically whether or not a node is hovered.
+   Every rule above is scoped to `.flow__node:hover` and its own descendants —
+   there is no container-hover, sibling (`+` / `~`), `:has()`, or data-attribute
+   selector that could let one node affect another. */
+
+/* ============ Motion preferences (final overrides) ============ */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Reduced motion keeps every hover state, minus the movement: colour, tint,
+     border, and shadow still respond; only the lift is dropped. */
+  .status-chip:hover,
+  .card:hover,
+  .prompt-card:hover,
+  .flow__node:hover,
+  .composer:hover:not(:focus-within),
+  .button--primary:active:not(:disabled),
+  .nav__item:active {
+    transform: none;
+  }
+
+  /* No entry movement, no completion pulse, no spinning icon, and a static
+     progress bar. The dimming, the minimum visible window, the progress
+     indication, and the "Updated" chip all remain, so the feedback still lands. */
+  .result__surface,
+  .result__surface[data-entry='new'],
+  .result__surface[data-entry='updated'],
+  .result__surface[data-entry='new'] .result__content,
+  .result__surface[data-entry='updated'] .result__content,
+  .result__updated {
+    animation: none;
+    transform: none;
+  }
+
+  .result__progress {
+    animation: none;
+    width: 100%;
+    opacity: 0.7;
+  }
+
+  .action-button.is-busy svg {
+    animation: none;
+  }
+
+  .status-chip__icon,
+  .status-chip--slate:hover .status-chip__icon,
+  .card__icon svg {
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
