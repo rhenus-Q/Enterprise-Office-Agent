@@ -999,6 +999,49 @@ svg {
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14);
 }
 
+/* Stop is a restrained danger state, not an alarm: it is an ordinary,
+   frequently-used control, so it borrows the danger hue for its text, border,
+   and glyph while keeping the neutral surface and the exact metrics of the
+   primary button it replaces — the footer must not shift when a run starts. */
+.button--stop {
+  --stop-tone: #b42318;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.1rem;
+  border-color: color-mix(in srgb, var(--stop-tone) 38%, var(--border));
+  background: color-mix(in srgb, var(--stop-tone) 7%, var(--surface));
+  color: var(--stop-tone);
+}
+
+.button--stop:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--stop-tone) 55%, var(--border));
+  background: color-mix(in srgb, var(--stop-tone) 13%, var(--surface));
+}
+
+.button--stop:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.action-button--stop {
+  --stop-tone: #b42318;
+  border-color: color-mix(in srgb, var(--stop-tone) 38%, var(--border));
+  background: color-mix(in srgb, var(--stop-tone) 8%, var(--surface));
+  color: var(--stop-tone);
+}
+
+.action-button--stop:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--stop-tone) 55%, var(--border));
+  background: color-mix(in srgb, var(--stop-tone) 14%, var(--surface));
+}
+
+@media (prefers-color-scheme: dark) {
+  .button--stop,
+  .action-button--stop {
+    --stop-tone: #fca5a5;
+  }
+}
+
 .button--ghost {
   border-color: transparent;
   background: transparent;
@@ -1532,8 +1575,15 @@ svg {
   font-size: 0.85rem;
 }
 
-/* The submitted request, echoed while a run is in flight. Quoted and muted so
-   it reads as "what you asked", never as an answer. */
+/* A stopped run is an ordinary outcome the user chose, so the card stays
+   neutral — no error tint, no alarm. */
+.state--stopped .state__title {
+  color: var(--text-2);
+}
+
+/* The submitted request, echoed while a run is in flight or after it was
+   stopped. Quoted and muted so it reads as "what you asked", never as an
+   answer. */
 .state__request {
   margin: 0 auto 0.5rem;
   max-width: 52ch;

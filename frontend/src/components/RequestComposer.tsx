@@ -1,4 +1,4 @@
-import { CornerDownLeft, Sparkles } from 'lucide-react';
+import { CornerDownLeft, Sparkles, Square } from 'lucide-react';
 import type { FormEvent, KeyboardEvent } from 'react';
 
 import { MAX_REQUEST_TEXT_LENGTH } from '../types/api';
@@ -8,6 +8,16 @@ interface RequestComposerProps {
   onChange: (value: string) => void;
   onSubmit: (text: string) => void;
   isLoading: boolean;
+  /**
+   * Whether this composer owns the in-flight run.
+   *
+   * False during a retry: that run is owned by the result card it is
+   * refreshing, and its Stop control lives there. Exactly one Stop button is on
+   * screen at a time, next to the thing it will stop.
+   */
+  canStop: boolean;
+  /** Stops the browser waiting for the in-flight run. */
+  onStop: () => void;
 }
 
 /**
@@ -19,7 +29,14 @@ interface RequestComposerProps {
  * name. The `maxLength` mirrors the API's exact `max_length=4000` bound, so the
  * UI cannot submit input the adapter would reject with a 422.
  */
-export function RequestComposer({ value, onChange, onSubmit, isLoading }: RequestComposerProps) {
+export function RequestComposer({
+  value,
+  onChange,
+  onSubmit,
+  isLoading,
+  canStop,
+  onStop,
+}: RequestComposerProps) {
   const trimmed = value.trim();
   const canSubmit = trimmed.length > 0 && !isLoading;
 
@@ -84,9 +101,26 @@ export function RequestComposer({ value, onChange, onSubmit, isLoading }: Reques
             {value.length} / {MAX_REQUEST_TEXT_LENGTH}
           </span>
         </p>
-        <button type="submit" className="button button--primary" disabled={!canSubmit}>
-          {isLoading ? 'Running…' : 'Run request'}
-        </button>
+        {/* Start and stop share one position, so the control you reach for is
+            always the one that applies. The label is deliberately "Stop
+            waiting": it ends the browser's wait, and does not terminate work
+            already running on the server. */}
+        {isLoading && canStop ? (
+          <button
+            type="button"
+            className="button button--stop"
+            aria-label="Stop waiting for this request"
+            title="Stop waiting — work already started on the server will still finish"
+            onClick={onStop}
+          >
+            <Square size={11} strokeWidth={3} fill="currentColor" aria-hidden="true" />
+            Stop
+          </button>
+        ) : (
+          <button type="submit" className="button button--primary" disabled={!canSubmit}>
+            Run request
+          </button>
+        )}
       </div>
     </form>
   );

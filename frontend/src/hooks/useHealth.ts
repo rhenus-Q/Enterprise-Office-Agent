@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { AgentClient } from '../api/client';
+import { isCancellation, isTimeout, type AgentClient } from '../api/client';
 import type { HealthResponse } from '../types/api';
 
 export type HealthPhase = 'loading' | 'ready' | 'unreachable';
@@ -23,17 +23,34 @@ export interface HealthState {
   health: HealthResponse | null;
   /** A manual refresh is running on top of an already-resolved phase. */
   isRefreshing: boolean;
+  /**
+   * True when the probe ran out of time rather than being refused. Both mean
+   * "no runtime status", but a stalled adapter and an absent one are different
+   * situations, so the banner is allowed to say which happened.
+   */
+  timedOut: boolean;
 }
 
-const INITIAL_STATE: HealthState = { phase: 'loading', health: null, isRefreshing: false };
+const INITIAL_STATE: HealthState = {
+  phase: 'loading',
+  health: null,
+  isRefreshing: false,
+  timedOut: false,
+};
 
 export function useHealth(client: AgentClient) {
   const [state, setState] = useState<HealthState>(INITIAL_STATE);
   // Guards against a slow earlier check overwriting a newer one.
   const latestCheckRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
 
   const load = useCallback(
     async (isRefresh: boolean) => {
+      // A replacement check supersedes any probe still in flight.
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+
       const checkId = latestCheckRef.current + 1;
       latestCheckRef.current = checkId;
       // A refresh keeps the current phase on screen while it runs; the first
@@ -41,13 +58,25 @@ export function useHealth(client: AgentClient) {
       setState((current) => ({ ...current, isRefreshing: isRefresh }));
 
       try {
-        const health = await client.health();
+        const health = await client.health({ signal: controller.signal });
         if (latestCheckRef.current === checkId) {
-          setState({ phase: 'ready', health, isRefreshing: false });
+          setState({ phase: 'ready', health, isRefreshing: false, timedOut: false });
         }
-      } catch {
-        if (latestCheckRef.current === checkId) {
-          setState({ phase: 'unreachable', health: null, isRefreshing: false });
+      } catch (error) {
+        // A probe we abandoned says nothing about the adapter, so it must not
+        // be reported as a failed check.
+        if (latestCheckRef.current !== checkId || isCancellation(error)) {
+          return;
+        }
+        setState({
+          phase: 'unreachable',
+          health: null,
+          isRefreshing: false,
+          timedOut: isTimeout(error),
+        });
+      } finally {
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
         }
       }
     },
@@ -57,6 +86,11 @@ export function useHealth(client: AgentClient) {
   useEffect(() => {
     setState(INITIAL_STATE);
     void load(false);
+
+    return () => {
+      controllerRef.current?.abort();
+      controllerRef.current = null;
+    };
   }, [load]);
 
   const refresh = useCallback(() => {

@@ -9,9 +9,13 @@ import { MAX_REQUEST_TEXT_LENGTH } from '../types/api';
 function Harness({
   onSubmit,
   isLoading = false,
+  canStop = false,
+  onStop = () => {},
 }: {
   onSubmit: (text: string) => void;
   isLoading?: boolean;
+  canStop?: boolean;
+  onStop?: () => void;
 }) {
   const [value, setValue] = useState('');
   return (
@@ -20,6 +24,8 @@ function Harness({
       onChange={setValue}
       onSubmit={onSubmit}
       isLoading={isLoading}
+      canStop={canStop}
+      onStop={onStop}
     />
   );
 }
@@ -75,8 +81,31 @@ describe('RequestComposer', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a running label and blocks submit while loading', () => {
-    render(<Harness onSubmit={vi.fn()} isLoading />);
-    expect(screen.getByRole('button', { name: 'Running…' })).toBeDisabled();
+  it('offers Stop in place of Run while it owns the in-flight request', async () => {
+    const user = userEvent.setup();
+    const onStop = vi.fn();
+    render(<Harness onSubmit={vi.fn()} isLoading canStop onStop={onStop} />);
+
+    const stop = screen.getByRole('button', { name: 'Stop waiting for this request' });
+    // The label is honest about its reach — it stops waiting, not the server.
+    expect(stop).toHaveAttribute(
+      'title',
+      'Stop waiting — work already started on the server will still finish',
+    );
+    expect(screen.queryByRole('button', { name: 'Run request' })).not.toBeInTheDocument();
+
+    await user.click(stop);
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks submit without offering Stop when a retry owns the request', () => {
+    // The retry's Stop lives on the result card, so the composer must not add a
+    // second one competing for the same run.
+    render(<Harness onSubmit={vi.fn()} isLoading canStop={false} />);
+
+    expect(screen.getByRole('button', { name: 'Run request' })).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: 'Stop waiting for this request' }),
+    ).not.toBeInTheDocument();
   });
 });

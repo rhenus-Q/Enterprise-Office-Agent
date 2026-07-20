@@ -17,6 +17,8 @@ import type { HealthResponse } from '../types/api';
 interface StatusBannerProps {
   health: HealthResponse | null;
   phase: HealthPhase;
+  /** The probe ran out of time rather than being refused. */
+  timedOut: boolean;
   apiMode: ApiMode;
   isRefreshing: boolean;
   onRefresh: () => void;
@@ -105,6 +107,7 @@ function EnvironmentChip({ apiMode }: { apiMode: ApiMode }) {
 export function StatusBanner({
   health,
   phase,
+  timedOut,
   apiMode,
   isRefreshing,
   onRefresh,
@@ -127,8 +130,14 @@ export function StatusBanner({
             icon={Unplug}
             tone="warn"
             label="Office Agent API"
-            value="Unreachable"
-            explanation={`The API did not respond, so no runtime status is available. Start it with: ${START_API_COMMAND} — or run the frontend with VITE_API_MODE=mock to use the typed mock fixtures instead.`}
+            // A stalled adapter and an absent one both leave the status blank,
+            // but they are different problems, so the chip says which occurred.
+            value={timedOut ? 'Timed out' : 'Unreachable'}
+            explanation={
+              timedOut
+                ? `The API accepted the connection but did not answer the health check in time, so no runtime status is available. It may be starting up or stalled. Use Refresh to re-check, or run the frontend with VITE_API_MODE=mock to use the typed mock fixtures instead.`
+                : `The API did not respond, so no runtime status is available. Start it with: ${START_API_COMMAND} — or run the frontend with VITE_API_MODE=mock to use the typed mock fixtures instead.`
+            }
           />
         ) : null}
 

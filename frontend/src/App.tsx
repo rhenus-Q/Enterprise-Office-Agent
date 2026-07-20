@@ -13,6 +13,7 @@ import { DegradedNotice } from './components/states/DegradedNotice';
 import { EmptyState } from './components/states/EmptyState';
 import { ErrorState } from './components/states/ErrorState';
 import { LoadingState } from './components/states/LoadingState';
+import { StoppedState } from './components/states/StoppedState';
 import { UnsupportedNotice } from './components/states/UnsupportedNotice';
 import { useAgentRun } from './hooks/useAgentRun';
 import { useHealth } from './hooks/useHealth';
@@ -47,11 +48,12 @@ function scrollToTop() {
 
 export function App({ client }: AppProps) {
   const agentClient = useMemo(() => client ?? createClientFromEnv(), [client]);
-  const { state, run, reset, completedRuns } = useAgentRun(agentClient);
+  const { state, run, stop, reset, completedRuns } = useAgentRun(agentClient);
   const {
     phase: healthPhase,
     health,
     isRefreshing: healthRefreshing,
+    timedOut: healthTimedOut,
     refresh: refreshHealth,
   } = useHealth(agentClient);
   const [text, setText] = useState('');
@@ -97,17 +99,16 @@ export function App({ client }: AppProps) {
     // reports where it went, it does not navigate the panel for the user.
   }, [state]);
 
-  const status = state.phase === 'success' ? classifyRunStatus(state.response) : null;
-
   // The result stays on screen while a retry is in flight, so the card is driven
   // by "the result currently being shown" rather than strictly by the phase.
   // `previous` is non-null only for a retry, so a card that survives into the
   // loading phase is by construction being re-run — never displaced by an
   // unrelated new request.
+  // A stopped retry keeps the same held result, so the card simply stays put.
   const shownResult =
     state.phase === 'success'
       ? state.response
-      : state.phase === 'loading'
+      : state.phase === 'loading' || state.phase === 'stopped'
         ? state.previous
         : null;
   const shownStatus = shownResult ? classifyRunStatus(shownResult) : null;
@@ -116,7 +117,10 @@ export function App({ client }: AppProps) {
   // phase — a collapsed result frees the column, so the discovery view returns.
   const resultContentVisible = shownResult !== null && resultExpanded;
   const denseExamples =
-    resultContentVisible || state.phase === 'loading' || state.phase === 'error';
+    resultContentVisible ||
+    state.phase === 'loading' ||
+    state.phase === 'error' ||
+    state.phase === 'stopped';
 
   /** Every new run reveals its answer, so a collapsed result expands first. */
   function handleRun(text: string) {
@@ -185,6 +189,9 @@ export function App({ client }: AppProps) {
         onChange={setText}
         onSubmit={handleRun}
         isLoading={state.phase === 'loading'}
+        // A retry is owned by its result card, which carries its own Stop.
+        canStop={state.phase === 'loading' && state.previous === null}
+        onStop={stop}
       />
 
       {showExamples ? (
@@ -211,6 +218,11 @@ export function App({ client }: AppProps) {
         {state.phase === 'loading' && state.previous === null ? (
           <LoadingState requestText={state.text} />
         ) : null}
+        {/* Only a stopped run with nothing held gets its own card; a stopped
+            retry falls through to the result it was refreshing. */}
+        {state.phase === 'stopped' && state.previous === null ? (
+          <StoppedState requestText={state.text} onRetry={handleRetry} />
+        ) : null}
         {state.phase === 'error' ? (
           <ErrorState errorType={state.errorType} onRetry={handleRetry} />
         ) : null}
@@ -231,6 +243,8 @@ export function App({ client }: AppProps) {
               // A mounted card during the loading phase can only be a retry of
               // this very result, so one flag says everything the card needs.
               isRefreshing={state.phase === 'loading'}
+              onStop={stop}
+              wasStopped={state.phase === 'stopped'}
               onRetry={handleRetry}
               revision={completedRuns}
             />
@@ -244,9 +258,15 @@ export function App({ client }: AppProps) {
   const previewPhase =
     state.phase === 'loading' ? 'loading' : state.phase === 'error' ? 'error' : 'idle';
 
+  // Details describe a settled result, so they follow the card that is on
+  // screen — including the one restored after a stopped retry — but stay as
+  // placeholders while a run is actually in flight.
+  const detailResult = state.phase === 'loading' ? null : shownResult;
+  const detailStatus = detailResult ? classifyRunStatus(detailResult) : null;
+
   const aside =
-    state.phase === 'success' && status ? (
-      <ExecutionPanel response={state.response} status={status} />
+    detailResult && detailStatus ? (
+      <ExecutionPanel response={detailResult} status={detailStatus} />
     ) : (
       <ExecutionPreview phase={previewPhase} />
     );
@@ -257,6 +277,7 @@ export function App({ client }: AppProps) {
         <StatusBanner
           health={health}
           phase={healthPhase}
+          timedOut={healthTimedOut}
           apiMode={agentClient.mode}
           isRefreshing={healthRefreshing}
           onRefresh={refreshHealth}
