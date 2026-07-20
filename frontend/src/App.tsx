@@ -70,6 +70,11 @@ export function App({ client }: AppProps) {
   // Controls only whether the transcript is shown. The response, the execution
   // details, and every navigation concern above are untouched by it.
   const [resultExpanded, setResultExpanded] = useState(true);
+  // Which control was showing Stop when the run was stopped. Stop and the
+  // control it replaced share one position, so that control's replacement stays
+  // disarmed until a deliberate new gesture. Only the control that actually
+  // swapped is guarded — the other one never moved under the pointer.
+  const [disarmed, setDisarmed] = useState<'composer' | 'result' | null>(null);
 
   /**
    * After a run, the routed capability takes focus.
@@ -125,6 +130,7 @@ export function App({ client }: AppProps) {
   /** Every new run reveals its answer, so a collapsed result expands first. */
   function handleRun(text: string) {
     setResultExpanded(true);
+    setDisarmed(null);
     void run(text);
   }
 
@@ -134,7 +140,27 @@ export function App({ client }: AppProps) {
       return;
     }
     setResultExpanded(true);
+    setDisarmed(null);
     void run(state.text, { isRetry: true });
+  }
+
+  /**
+   * Stop the in-flight run and disarm the control that was showing Stop.
+   *
+   * Which control that is follows the same rule as everything else here: a run
+   * holding a previous result is a retry owned by the card, anything else is
+   * owned by the composer.
+   */
+  function handleStop() {
+    if (state.phase === 'loading') {
+      setDisarmed(state.previous === null ? 'composer' : 'result');
+    }
+    stop();
+  }
+
+  /** A deliberate new gesture — pointer moved away, key released, field touched. */
+  function handleRearm() {
+    setDisarmed(null);
   }
 
   /**
@@ -150,6 +176,7 @@ export function App({ client }: AppProps) {
     setPanelView('all');
     setPanelOpen(true);
     setResultExpanded(true);
+    setDisarmed(null);
     reset();
     scrollToTop();
   }
@@ -191,7 +218,9 @@ export function App({ client }: AppProps) {
         isLoading={state.phase === 'loading'}
         // A retry is owned by its result card, which carries its own Stop.
         canStop={state.phase === 'loading' && state.previous === null}
-        onStop={stop}
+        onStop={handleStop}
+        disarmed={disarmed === 'composer'}
+        onRearm={handleRearm}
       />
 
       {showExamples ? (
@@ -243,7 +272,9 @@ export function App({ client }: AppProps) {
               // A mounted card during the loading phase can only be a retry of
               // this very result, so one flag says everything the card needs.
               isRefreshing={state.phase === 'loading'}
-              onStop={stop}
+              onStop={handleStop}
+              disarmed={disarmed === 'result'}
+              onRearm={handleRearm}
               wasStopped={state.phase === 'stopped'}
               onRetry={handleRetry}
               revision={completedRuns}

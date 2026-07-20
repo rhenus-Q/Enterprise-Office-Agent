@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -713,8 +713,104 @@ describe('run states', () => {
     expect(screen.queryByText('Updated')).not.toBeInTheDocument();
     expect(document.querySelector('.result__surface')).not.toHaveClass('is-refreshing');
     expect(resultsRegion().getByText('Success')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retry request' })).toBeEnabled();
+    // Retry has reclaimed the slot Stop just vacated, so it is disarmed until a
+    // deliberate new gesture (covered by its own test below).
+    expect(screen.getByRole('button', { name: 'Retry request' })).toBeDisabled();
     expect(executionDetails().getByText('Success')).toBeInTheDocument();
+  });
+
+  it('does not restart the run when Stop is clicked twice in the same spot', async () => {
+    // The bug this guards: Stop and Run share one position, so the frame after
+    // Stop is pressed an armed Run sits under the pointer. A second click there
+    // used to cancel-and-restart, which read on screen as "Stop does nothing"
+    // while the network showed a cancelled request followed by a fresh one.
+    const user = userEvent.setup();
+    const run = vi.fn(() => new Promise<AgentRunResponse>(() => {}));
+    render(<App client={{ mode: 'mock', run, health: async () => mockHealth }} />);
+
+    await user.type(screen.getByLabelText('Request'), 'What is the VPN policy?');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    await user.click(await screen.findByRole('button', { name: 'Stop waiting for this request' }));
+
+    // The replacement occupies the same slot but is inert.
+    const replacement = screen.getByRole('button', { name: 'Run request' });
+    expect(replacement).toBeDisabled();
+
+    await user.click(replacement);
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { name: 'Stopped waiting' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Running…' })).not.toBeInTheDocument();
+  });
+
+  it('re-arms the composer as soon as the request text is touched', async () => {
+    const user = userEvent.setup();
+    const run = vi.fn(() => new Promise<AgentRunResponse>(() => {}));
+    render(<App client={{ mode: 'mock', run, health: async () => mockHealth }} />);
+
+    await user.type(screen.getByLabelText('Request'), 'What is the VPN policy?');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    await user.click(await screen.findByRole('button', { name: 'Stop waiting for this request' }));
+    expect(screen.getByRole('button', { name: 'Run request' })).toBeDisabled();
+
+    // Deliberate new intent — no timer involved.
+    await user.type(screen.getByLabelText('Request'), '?');
+
+    expect(screen.getByRole('button', { name: 'Run request' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves the stopped card its own armed way to run the request again', async () => {
+    const user = userEvent.setup();
+    const run = vi.fn(() => new Promise<AgentRunResponse>(() => {}));
+    render(<App client={{ mode: 'mock', run, health: async () => mockHealth }} />);
+
+    await user.type(screen.getByLabelText('Request'), 'What is the VPN policy?');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    await user.click(await screen.findByRole('button', { name: 'Stop waiting for this request' }));
+
+    // A different position entirely, so it is safe to arm immediately.
+    await user.click(screen.getByRole('button', { name: 'Run it again' }));
+
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole('heading', { name: 'Running…' })).toBeInTheDocument();
+  });
+
+  it('does not restart a retry when the card Stop is clicked twice', async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    const run = vi.fn(() => {
+      calls += 1;
+      return calls === 1
+        ? Promise.resolve(ticketsSuccess)
+        : new Promise<AgentRunResponse>(() => {});
+    });
+    render(<App client={{ mode: 'mock', run, health: async () => mockHealth }} />);
+
+    await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    expect(await screen.findByText(/Open tickets \(2\)/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry request' }));
+    await user.click(screen.getByRole('button', { name: 'Stop waiting for this request' }));
+
+    // Retry reclaims the slot Stop vacated, so it is disarmed too.
+    const retry = screen.getByRole('button', { name: 'Retry request' });
+    expect(retry).toBeDisabled();
+
+    await user.click(retry);
+
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Open tickets \(2\)/)).toBeInTheDocument();
+
+    // Moving the pointer off the action row is the deliberate gesture that
+    // re-arms it — no timer, so it cannot be out-raced by a fast second click.
+    fireEvent.pointerLeave(document.querySelector('.result__actions') as Element);
+
+    expect(screen.getByRole('button', { name: 'Retry request' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Retry request' }));
+    expect(run).toHaveBeenCalledTimes(3);
   });
 
   it('ignores a response that arrives after the run was stopped', async () => {
