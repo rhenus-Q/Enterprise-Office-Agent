@@ -21,10 +21,17 @@ interface ResultCardProps {
   onToggleExpanded: () => void;
   /** Re-runs the request that produced this result, via the shared run machinery. */
   onRetry: () => void;
-  /** True while any request is in flight, so the actions cannot be double-fired. */
-  isRunning: boolean;
-  /** True when the in-flight run is a retry, which gets the minimum-hold treatment. */
-  isRetry: boolean;
+  /**
+   * True while *this* result is being re-run.
+   *
+   * The card is only mounted during the loading phase when the run is a retry of
+   * the result it shows (see `useAgentRun`'s `previous`), so this single flag
+   * covers both "a request is in flight" — actions are locked — and "the run
+   * targets me" — the refreshing treatment applies. A new request unmounts the
+   * card instead, which is why there is no longer a separate retry flag to
+   * disagree with.
+   */
+  isRefreshing: boolean;
   /**
    * Completed-run counter. Used purely as a remount key for the transcript so
    * the entry animation replays on every finished run — including when the
@@ -38,7 +45,7 @@ const FEEDBACK_DURATION_MS = 2000;
 /** How long the "Updated" success chip stays on screen after a retry. */
 const UPDATED_DURATION_MS = 1500;
 /**
- * Minimum time the refreshing state stays visible on a retry.
+ * Minimum time the refreshing state stays visible.
  *
  * Purely a UI floor: a mock response can return in single-digit milliseconds,
  * which would flash the whole feedback cycle past before it can be read. It
@@ -96,8 +103,7 @@ export function ResultCard({
   expanded,
   onToggleExpanded,
   onRetry,
-  isRunning,
-  isRetry,
+  isRefreshing,
   revision,
 }: ResultCardProps) {
   const [feedback, setFeedback] = useState('');
@@ -112,8 +118,7 @@ export function ResultCard({
   const holdTimerRef = useRef<number | null>(null);
   const updatedTimerRef = useRef<number | null>(null);
   const startedAtRef = useRef(0);
-  const wasRunningRef = useRef(false);
-  const wasRetryRef = useRef(false);
+  const wasRefreshingRef = useRef(false);
   // A refresh cycle owns the transcript transition until it finishes.
   const holdingRef = useRef(false);
   const revisionRef = useRef(revision);
@@ -142,47 +147,41 @@ export function ResultCard({
     }, duration);
   }
 
-  // Drives the refreshing visual, including the minimum-visible floor on retries.
+  // Drives the refreshing visual, including the minimum-visible floor. Every
+  // cycle this effect sees is a retry of this result — a new request unmounts
+  // the card rather than refreshing it — so there is no non-retry branch.
   useEffect(() => {
     function finish() {
       holdTimerRef.current = null;
       holdingRef.current = false;
       setRefreshing(false);
-      setView({
-        revision: revisionRef.current,
-        entry: wasRetryRef.current ? 'updated' : 'new',
-      });
+      setView({ revision: revisionRef.current, entry: 'updated' });
 
-      if (wasRetryRef.current) {
-        // A finished run is otherwise invisible when the response is identical,
-        // so completion is confirmed explicitly rather than by content changing.
-        setJustUpdated(true);
-        if (updatedTimerRef.current !== null) {
-          window.clearTimeout(updatedTimerRef.current);
-        }
-        updatedTimerRef.current = window.setTimeout(() => {
-          setJustUpdated(false);
-          updatedTimerRef.current = null;
-        }, UPDATED_DURATION_MS);
+      // A finished run is otherwise invisible when the response is identical,
+      // so completion is confirmed explicitly rather than by content changing.
+      setJustUpdated(true);
+      if (updatedTimerRef.current !== null) {
+        window.clearTimeout(updatedTimerRef.current);
       }
+      updatedTimerRef.current = window.setTimeout(() => {
+        setJustUpdated(false);
+        updatedTimerRef.current = null;
+      }, UPDATED_DURATION_MS);
     }
 
-    if (isRunning && !wasRunningRef.current) {
+    if (isRefreshing && !wasRefreshingRef.current) {
       startedAtRef.current = Date.now();
-      wasRetryRef.current = isRetry;
       holdingRef.current = true;
       setJustUpdated(false);
       setRefreshing(true);
-    } else if (!isRunning && wasRunningRef.current) {
+    } else if (!isRefreshing && wasRefreshingRef.current) {
       const elapsed = Date.now() - startedAtRef.current;
-      const remaining = wasRetryRef.current
-        ? Math.max(0, MIN_REFRESH_VISIBLE_MS - elapsed)
-        : 0;
+      const remaining = Math.max(0, MIN_REFRESH_VISIBLE_MS - elapsed);
       holdTimerRef.current = window.setTimeout(finish, remaining);
     }
 
-    wasRunningRef.current = isRunning;
-  }, [isRunning, isRetry]);
+    wasRefreshingRef.current = isRefreshing;
+  }, [isRefreshing]);
 
   // A revision that arrives outside a refresh cycle is simply a new result.
   useEffect(() => {
@@ -237,7 +236,7 @@ export function ResultCard({
   const label = isUnknown ? 'Unsupported request' : (capability?.label ?? response.intent);
   const typography = CONTENT_TYPOGRAPHY[response.intent];
   const ToggleIcon = expanded ? ChevronUp : ChevronDown;
-  const busy = isRunning || refreshing;
+  const busy = isRefreshing || refreshing;
 
   return (
     <article className={`result cap--${response.intent}`}>
@@ -247,7 +246,13 @@ export function ResultCard({
             <Icon size={15} strokeWidth={2} />
           </span>
           <h3 className="result__label">{label}</h3>
-          <span className={`pill pill--${status}`}>{RUN_STATUS_LABELS[status]}</span>
+          {/* The pill describes the outcome of the run that produced this
+              transcript. While a retry is in flight that outcome is being
+              superseded, so it is withheld rather than left asserting a stale
+              verdict; the live region says "Refreshing…" in its place. */}
+          {refreshing ? null : (
+            <span className={`pill pill--${status}`}>{RUN_STATUS_LABELS[status]}</span>
+          )}
         </div>
 
         <div className="result__actions">

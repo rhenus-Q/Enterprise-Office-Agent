@@ -1532,6 +1532,21 @@ svg {
   font-size: 0.85rem;
 }
 
+/* The submitted request, echoed while a run is in flight. Quoted and muted so
+   it reads as "what you asked", never as an answer. */
+.state__request {
+  margin: 0 auto 0.5rem;
+  max-width: 52ch;
+  padding: 0.4rem 0.75rem;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-2, transparent));
+  color: var(--text-2);
+  font-size: 0.85rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
 .state__hint {
   margin: 1.1rem auto 0;
   max-width: 52ch;

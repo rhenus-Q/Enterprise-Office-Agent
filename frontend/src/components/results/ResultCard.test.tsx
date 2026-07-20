@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,8 +30,7 @@ interface CardOptions {
   expanded?: boolean;
   onToggleExpanded?: () => void;
   onRetry?: () => void;
-  isRunning?: boolean;
-  isRetry?: boolean;
+  isRefreshing?: boolean;
   revision?: number;
 }
 
@@ -43,8 +42,7 @@ function card(options: CardOptions = {}) {
       expanded={options.expanded ?? true}
       onToggleExpanded={options.onToggleExpanded ?? vi.fn()}
       onRetry={options.onRetry ?? vi.fn()}
-      isRunning={options.isRunning ?? false}
-      isRetry={options.isRetry ?? false}
+      isRefreshing={options.isRefreshing ?? false}
       revision={options.revision ?? 1}
     />
   );
@@ -250,7 +248,7 @@ describe('collapse and expand', () => {
 
 describe('refresh feedback', () => {
   it('dims the transcript, shows progress, and announces it while running', () => {
-    render(card({ isRunning: true, isRetry: true }));
+    render(card({ isRefreshing: true }));
 
     expect(surface()).toHaveClass('is-refreshing');
     expect(document.querySelector('.result__progress')).toBeInTheDocument();
@@ -261,10 +259,10 @@ describe('refresh feedback', () => {
   });
 
   it('dims the same transcript node rather than hiding or replacing it', () => {
-    const { rerender } = render(card({ isRunning: false, revision: 1 }));
+    const { rerender } = render(card({ isRefreshing: false, revision: 1 }));
     const before = surface();
 
-    rerender(card({ isRunning: true, isRetry: true, revision: 1 }));
+    rerender(card({ isRefreshing: true, revision: 1 }));
 
     // Stale-while-revalidate: the node, its size, and its text all persist; only
     // the dimming class changes.
@@ -275,10 +273,10 @@ describe('refresh feedback', () => {
   });
 
   it('holds the refreshing state after a retry resolves instantly', () => {
-    const { rerender } = render(card({ isRunning: true, isRetry: true, revision: 1 }));
+    const { rerender } = render(card({ isRefreshing: true, revision: 1 }));
 
     // The request is already done, but the minimum visible window is not.
-    rerender(card({ isRunning: false, isRetry: true, revision: 2 }));
+    rerender(card({ isRefreshing: false, revision: 2 }));
 
     expect(surface()).toHaveClass('is-refreshing');
     expect(screen.getByRole('status')).toHaveTextContent('Refreshing');
@@ -286,8 +284,8 @@ describe('refresh feedback', () => {
   });
 
   it('ends with an Updated chip and a completion pulse', async () => {
-    const { rerender } = render(card({ isRunning: true, isRetry: true, revision: 1 }));
-    rerender(card({ isRunning: false, isRetry: true, revision: 2 }));
+    const { rerender } = render(card({ isRefreshing: true, revision: 1 }));
+    rerender(card({ isRefreshing: false, revision: 2 }));
 
     const chip = await screen.findByText('Updated', {}, { timeout: 2000 });
 
@@ -300,14 +298,29 @@ describe('refresh feedback', () => {
     expect(surface()).toHaveAttribute('data-revision', '2');
   });
 
-  it('does not hold or confirm for a fresh request', async () => {
-    const { rerender } = render(card({ isRunning: true, isRetry: false, revision: 1 }));
-    rerender(card({ isRunning: false, isRetry: false, revision: 2 }));
+  // There is no "fresh request" case here any more: a new request unmounts the
+  // card instead of refreshing it, so every cycle this component sees is a
+  // retry. The App-level tests cover the unmounting.
 
-    await waitFor(() => expect(surface()).not.toHaveClass('is-refreshing'));
+  it('withholds the status pill while the result is being re-run', () => {
+    const { rerender } = render(card({ isRefreshing: false }));
+    expect(screen.getByText('Success')).toBeInTheDocument();
 
-    expect(screen.queryByText('Updated')).not.toBeInTheDocument();
-    expect(surface()).toHaveAttribute('data-entry', 'new');
+    rerender(card({ isRefreshing: true }));
+
+    // The old verdict is being superseded, so it is not left asserting itself.
+    expect(screen.queryByText('Success')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Refreshing');
+  });
+
+  it('restores the status pill once the retry completes', async () => {
+    const { rerender } = render(card({ isRefreshing: true, revision: 1 }));
+    expect(screen.queryByText('Success')).not.toBeInTheDocument();
+
+    rerender(card({ isRefreshing: false, revision: 2 }));
+    await screen.findByText('Updated', {}, { timeout: 2000 });
+
+    expect(screen.getByText('Success')).toBeInTheDocument();
   });
 
   it('remounts the transcript when the run counter advances', () => {
@@ -336,7 +349,7 @@ describe('reduced motion', () => {
   });
 
   it('keeps the feedback that reduced motion must not remove', () => {
-    render(card({ isRunning: true, isRetry: true }));
+    render(card({ isRefreshing: true }));
 
     // Dimming, progress indication, and the announcement are all non-decorative.
     expect(surface()).toHaveClass('is-refreshing');
@@ -356,7 +369,7 @@ describe('retry', () => {
   });
 
   it('disables every content action while a request is running', () => {
-    render(card({ isRunning: true, isRetry: true }));
+    render(card({ isRefreshing: true }));
 
     expect(screen.getByRole('button', { name: 'Retry request' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Copy result' })).toBeDisabled();

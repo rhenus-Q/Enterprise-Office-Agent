@@ -359,10 +359,52 @@ describe('run states', () => {
     await user.type(screen.getByLabelText('Request'), 'Summarize my unread emails');
     await user.click(screen.getByRole('button', { name: 'Run request' }));
 
-    expect(await screen.findByRole('heading', { name: /Running request/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Running…' })).toBeInTheDocument();
+    // The loading card echoes the request but never guesses where it routed.
+    expect(resultsRegion().getByText('Summarize my unread emails')).toBeInTheDocument();
 
     resolveRun(emailSuccess);
 
+    expect(await screen.findByText(/Inbox summary/)).toBeInTheDocument();
+  });
+
+  it('replaces the previous result with the neutral loading state for a new request', async () => {
+    const user = userEvent.setup();
+    let resolveSecond!: (response: AgentRunResponse) => void;
+    let calls = 0;
+    const client: AgentClient = {
+      mode: 'mock',
+      run: () => {
+        calls += 1;
+        if (calls === 1) {
+          return Promise.resolve(ticketsSuccess);
+        }
+        return new Promise<AgentRunResponse>((resolve) => {
+          resolveSecond = resolve;
+        });
+      },
+      health: async () => mockHealth,
+    };
+
+    render(<App client={client} />);
+    await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    expect(await screen.findByText(/Open tickets \(2\)/)).toBeInTheDocument();
+
+    // A different question — not a retry of the ticket result.
+    await user.clear(screen.getByLabelText('Request'));
+    await user.type(screen.getByLabelText('Request'), 'Summarize my unread emails');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+
+    // The stale card is gone rather than being relabelled as refreshing.
+    expect(screen.queryByText(/Open tickets \(2\)/)).not.toBeInTheDocument();
+    expect(resultsRegion().queryByRole('heading', { name: 'Ticket Assistant' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Refreshing…')).not.toBeInTheDocument();
+    // ...replaced by the capability-neutral loading card echoing the new request.
+    expect(screen.getByRole('heading', { name: 'Running…' })).toBeInTheDocument();
+    expect(resultsRegion().getByText('Summarize my unread emails')).toBeInTheDocument();
+
+    resolveSecond(emailSuccess);
     expect(await screen.findByText(/Inbox summary/)).toBeInTheDocument();
   });
 
@@ -575,15 +617,35 @@ describe('run states', () => {
     // the actions are locked so the request cannot be fired twice.
     expect(screen.getByText(/Open tickets \(2\)/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry request' })).toBeDisabled();
-    expect(screen.queryByRole('heading', { name: /Running request/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Running…' })).not.toBeInTheDocument();
     // Visibly in progress: the old answer is dimmed and progress is announced.
     expect(document.querySelector('.result__surface')).toHaveClass('is-refreshing');
     expect(screen.getByRole('status')).toHaveTextContent('Refreshing…');
+    // The previous verdict is withheld while it is being superseded.
+    expect(resultsRegion().queryByText('Success')).not.toBeInTheDocument();
 
     resolveRetry(ticketsSuccess);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Retry request' })).toBeEnabled(),
     );
+  });
+
+  it('confirms completion and restores the status pill after a retry', async () => {
+    const user = userEvent.setup();
+    const run = vi.fn().mockResolvedValue(ticketsSuccess);
+    render(<App client={{ mode: 'mock', run, health: async () => mockHealth }} />);
+
+    await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    expect(await screen.findByText(/Open tickets \(2\)/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry request' }));
+
+    // An identical response is otherwise invisible, so completion is confirmed.
+    expect(await screen.findByText('Updated', {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(document.querySelector('.result__surface')).not.toHaveClass('is-refreshing');
+    expect(resultsRegion().getByText('Success')).toBeInTheDocument();
+    expect(screen.getByText(/Open tickets \(2\)/)).toBeInTheDocument();
   });
 
   it('shows the error state with the error type only', async () => {
