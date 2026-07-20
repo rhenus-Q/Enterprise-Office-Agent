@@ -1,13 +1,29 @@
-import { FlaskConical, Globe, Shield, Sparkles, WifiOff, type LucideIcon } from 'lucide-react';
+import {
+  FlaskConical,
+  Globe,
+  RefreshCw,
+  Server,
+  Shield,
+  Sparkles,
+  Unplug,
+  WifiOff,
+  type LucideIcon,
+} from 'lucide-react';
 
+import type { ApiMode } from '../api/client';
+import type { HealthPhase } from '../hooks/useHealth';
 import type { HealthResponse } from '../types/api';
 
 interface StatusBannerProps {
   health: HealthResponse | null;
+  phase: HealthPhase;
+  apiMode: ApiMode;
+  isRefreshing: boolean;
+  onRefresh: () => void;
 }
 
 /** Semantic tone for a status chip — drives tint, border, and icon colour. */
-type StatusTone = 'privacy' | 'slate' | 'assist' | 'ok' | 'mock';
+type StatusTone = 'privacy' | 'slate' | 'assist' | 'ok' | 'mock' | 'warn';
 
 interface StatusChipProps {
   icon: LucideIcon;
@@ -40,6 +56,41 @@ function StatusChip({ icon: Icon, label, value, tone, explanation }: StatusChipP
   );
 }
 
+/** The exact command that starts the adapter, shown when it is not answering. */
+const START_API_COMMAND =
+  'uv run uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000';
+
+/**
+ * Where the workspace's data comes from.
+ *
+ * Kept separate from the runtime-policy chips because it describes the
+ * transport, not a policy the engine applied — and because a demo must never
+ * be able to pass fixtures off as live engine output.
+ */
+function EnvironmentChip({ apiMode }: { apiMode: ApiMode }) {
+  if (apiMode === 'mock') {
+    return (
+      <StatusChip
+        icon={FlaskConical}
+        tone="mock"
+        label="Mock environment"
+        value="Fixtures"
+        explanation="Responses come from typed mock fixtures; the Python backend is not connected."
+      />
+    );
+  }
+
+  return (
+    <StatusChip
+      icon={Server}
+      tone="ok"
+      label="Data source"
+      value="Live API"
+      explanation="Responses come from the local Office Agent API via POST /api/agent/run."
+    />
+  );
+}
+
 /**
  * Compact runtime status indicators in the product header.
  *
@@ -48,80 +99,106 @@ function StatusChip({ icon: Icon, label, value, tone, explanation }: StatusChipP
  * PRIVACY_MODE and OFFLINE_MODE. The wording here is presentation only; no API
  * field name or value changes.
  *
- * The mock-environment chip is deliberately set apart from the runtime-policy
- * chips: it describes where the data came from, not a policy the engine applied.
+ * The refresh control sits outside the list on purpose: the chips themselves
+ * stay strictly informational, never controls.
  */
-export function StatusBanner({ health }: StatusBannerProps) {
-  if (!health) {
-    return (
-      <ul className="status" aria-label="Runtime status" aria-live="polite">
-        <li className="status-chip status-chip--slate">
-          <span className="status-chip__label">Runtime status</span>
-          <span className="status-chip__sep" aria-hidden="true">
-            ·
-          </span>
-          <span className="status-chip__value">Loading…</span>
-        </li>
-      </ul>
-    );
-  }
-
+export function StatusBanner({
+  health,
+  phase,
+  apiMode,
+  isRefreshing,
+  onRefresh,
+}: StatusBannerProps) {
   return (
-    <ul className="status" aria-label="Runtime status" aria-live="polite">
-      <StatusChip
-        icon={Shield}
-        tone="privacy"
-        label="Privacy"
-        value={health.privacy_mode ? 'Restricted' : 'Standard'}
-        explanation={
-          health.privacy_mode
-            ? 'PRIVACY_MODE is active: external services other than OpenAI are blocked.'
-            : 'PRIVACY_MODE is off: the standard external-service policy applies.'
-        }
-      />
-      <StatusChip
-        icon={WifiOff}
-        tone="slate"
-        label="Offline restrictions"
-        value={health.offline_mode ? 'On' : 'Off'}
-        explanation={
-          health.offline_mode
-            ? 'OFFLINE_MODE is active: every external service, including OpenAI, is disabled.'
-            : 'OFFLINE_MODE is off: external services are reachable subject to other policies.'
-        }
-      />
-      <StatusChip
-        icon={Sparkles}
-        tone="assist"
-        label="LLM assist"
-        value={health.office_llm_enabled ? 'On' : 'Off'}
-        explanation={
-          health.office_llm_enabled
-            ? 'Optional LLM assists are enabled for the email digest and daily briefing.'
-            : 'Optional LLM assists are off, so those tools stay fully deterministic.'
-        }
-      />
-      <StatusChip
-        icon={Globe}
-        tone={health.web_search_effective ? 'ok' : 'slate'}
-        label="Web search"
-        value={health.web_search_effective ? 'Available' : 'Blocked'}
-        explanation={
-          health.web_search_effective
-            ? 'Effective web-search state: web fallback is available to the RAG engine.'
-            : 'Effective web-search state: web fallback is blocked for this runtime.'
-        }
-      />
+    <div className="status-bar">
+      <ul className="status" aria-label="Runtime status" aria-live="polite">
+        {phase === 'loading' ? (
+          <li className="status-chip status-chip--slate">
+            <span className="status-chip__label">Runtime status</span>
+            <span className="status-chip__sep" aria-hidden="true">
+              ·
+            </span>
+            <span className="status-chip__value">Loading…</span>
+          </li>
+        ) : null}
 
-      <li className="status__divider" aria-hidden="true" />
+        {phase === 'unreachable' ? (
+          <StatusChip
+            icon={Unplug}
+            tone="warn"
+            label="Office Agent API"
+            value="Unreachable"
+            explanation={`The API did not respond, so no runtime status is available. Start it with: ${START_API_COMMAND} — or run the frontend with VITE_API_MODE=mock to use the typed mock fixtures instead.`}
+          />
+        ) : null}
 
-      <StatusChip
-        icon={FlaskConical}
-        tone="mock"
-        label="Mock environment"
-        value="Phase 1"
-        explanation="Responses come from typed mock fixtures; the Python backend is not connected yet."
-      />
-    </ul>
+        {phase === 'ready' && health ? (
+          <>
+            <StatusChip
+              icon={Shield}
+              tone="privacy"
+              label="Privacy"
+              value={health.privacy_mode ? 'Restricted' : 'Standard'}
+              explanation={
+                health.privacy_mode
+                  ? 'PRIVACY_MODE is active: external services other than OpenAI are blocked.'
+                  : 'PRIVACY_MODE is off: the standard external-service policy applies.'
+              }
+            />
+            <StatusChip
+              icon={WifiOff}
+              tone="slate"
+              label="Offline restrictions"
+              value={health.offline_mode ? 'On' : 'Off'}
+              explanation={
+                health.offline_mode
+                  ? 'OFFLINE_MODE is active: every external service, including OpenAI, is disabled.'
+                  : 'OFFLINE_MODE is off: external services are reachable subject to other policies.'
+              }
+            />
+            <StatusChip
+              icon={Sparkles}
+              tone="assist"
+              label="LLM assist"
+              value={health.office_llm_enabled ? 'On' : 'Off'}
+              explanation={
+                health.office_llm_enabled
+                  ? 'Optional LLM assists are enabled for the email digest and daily briefing.'
+                  : 'Optional LLM assists are off, so those tools stay fully deterministic.'
+              }
+            />
+            <StatusChip
+              icon={Globe}
+              tone={health.web_search_effective ? 'ok' : 'slate'}
+              label="Web search"
+              value={health.web_search_effective ? 'Available' : 'Blocked'}
+              explanation={
+                health.web_search_effective
+                  ? 'Effective web-search state: web fallback is available to the RAG engine.'
+                  : 'Effective web-search state: web fallback is blocked for this runtime.'
+              }
+            />
+          </>
+        ) : null}
+
+        <li className="status__divider" aria-hidden="true" />
+
+        <EnvironmentChip apiMode={apiMode} />
+      </ul>
+
+      <button
+        type="button"
+        className="status__refresh"
+        onClick={onRefresh}
+        disabled={isRefreshing || phase === 'loading'}
+        aria-label="Refresh runtime status"
+        title="Re-check the Office Agent API and its runtime flags"
+      >
+        <span className={isRefreshing ? 'status__refresh-icon is-spinning' : 'status__refresh-icon'} aria-hidden="true">
+          <RefreshCw size={13} strokeWidth={2.25} />
+        </span>
+        <span className="status__refresh-text">{isRefreshing ? 'Checking…' : 'Refresh'}</span>
+      </button>
+    </div>
   );
 }

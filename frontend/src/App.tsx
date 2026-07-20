@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { createMockClient, type AgentClient } from './api/client';
+import { createClientFromEnv, type AgentClient } from './api/client';
 import { AppShell } from './components/AppShell';
 import { CapabilitySidebar } from './components/CapabilitySidebar';
 import { ExamplePrompts, type PanelView } from './components/ExamplePrompts';
@@ -15,11 +15,15 @@ import { ErrorState } from './components/states/ErrorState';
 import { LoadingState } from './components/states/LoadingState';
 import { UnsupportedNotice } from './components/states/UnsupportedNotice';
 import { useAgentRun } from './hooks/useAgentRun';
+import { useHealth } from './hooks/useHealth';
 import { classifyRunStatus } from './lib/status';
-import type { CapabilityIntent, HealthResponse } from './types/api';
+import type { CapabilityIntent } from './types/api';
 
 interface AppProps {
-  /** Injectable for tests; defaults to the Phase 1 typed mock client. */
+  /**
+   * Injectable for tests; defaults to the environment-selected client, which is
+   * the live HTTP adapter unless `VITE_API_MODE=mock` is set.
+   */
   client?: AgentClient;
 }
 
@@ -42,10 +46,15 @@ function scrollToTop() {
 }
 
 export function App({ client }: AppProps) {
-  const agentClient = useMemo(() => client ?? createMockClient(), [client]);
+  const agentClient = useMemo(() => client ?? createClientFromEnv(), [client]);
   const { state, run, reset, completedRuns } = useAgentRun(agentClient);
+  const {
+    phase: healthPhase,
+    health,
+    isRefreshing: healthRefreshing,
+    refresh: refreshHealth,
+  } = useHealth(agentClient);
   const [text, setText] = useState('');
-  const [health, setHealth] = useState<HealthResponse | null>(null);
   // Three independent concerns, deliberately not inferred from one another:
   //   selectedIntent — the capability in focus (rail highlight); after a run
   //                    this is whatever the backend router returned.
@@ -62,27 +71,6 @@ export function App({ client }: AppProps) {
   // Distinguishes a retry from a fresh request: only a retry gets the minimum
   // visible refreshing window and the "Updated" confirmation.
   const [isRetryRun, setIsRetryRun] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    agentClient.health().then(
-      (result) => {
-        if (!cancelled) {
-          setHealth(result);
-        }
-      },
-      () => {
-        if (!cancelled) {
-          setHealth(null);
-        }
-      },
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [agentClient]);
 
   /**
    * After a run, the routed capability takes focus.
@@ -262,7 +250,15 @@ export function App({ client }: AppProps) {
 
   return (
     <AppShell
-      banner={<StatusBanner health={health} />}
+      banner={
+        <StatusBanner
+          health={health}
+          phase={healthPhase}
+          apiMode={agentClient.mode}
+          isRefreshing={healthRefreshing}
+          onRefresh={refreshHealth}
+        />
+      }
       sidebar={
         <CapabilitySidebar
           selectedIntent={selectedIntent}

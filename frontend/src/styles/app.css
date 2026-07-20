@@ -521,6 +521,16 @@ svg {
 
 /* ============ Runtime status indicators ============ */
 
+/* Chips plus the manual re-check control. The button lives outside the list so
+   the chips themselves stay purely informational. */
+.status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  min-width: 0;
+}
+
 .status {
   list-style: none;
   margin: 0;
@@ -530,6 +540,59 @@ svg {
   align-items: center;
   gap: 0.35rem;
   max-width: 100%;
+}
+
+.status__refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.24rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.71rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease),
+    color 160ms var(--ease);
+}
+
+.status__refresh:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--text);
+}
+
+.status__refresh:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.status__refresh-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.status__refresh-icon.is-spinning {
+  animation: status-refresh-spin 900ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status__refresh-icon.is-spinning {
+    animation: none;
+  }
+}
+
+@keyframes status-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Semantic tones. Each chip states a policy, so the tint is meaning, not
@@ -551,6 +614,9 @@ svg {
 .status-chip--mock {
   --tone: #b45309; /* amber */
 }
+.status-chip--warn {
+  --tone: #b91c1c; /* red — the API is not answering at all */
+}
 
 @media (prefers-color-scheme: dark) {
   .status-chip--privacy {
@@ -567,6 +633,9 @@ svg {
   }
   .status-chip--mock {
     --tone: #fbbf24;
+  }
+  .status-chip--warn {
+    --tone: #fca5a5;
   }
 }
 

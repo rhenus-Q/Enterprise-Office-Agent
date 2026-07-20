@@ -15,6 +15,7 @@ function testClient(): AgentClient {
 /** A client that returns one fixed response regardless of the request text. */
 function fixedClient(response: AgentRunResponse): AgentClient {
   return {
+    mode: 'mock',
     run: async () => response,
     health: async () => mockHealth,
   };
@@ -346,6 +347,7 @@ describe('run states', () => {
     const user = userEvent.setup();
     let resolveRun!: (response: AgentRunResponse) => void;
     const pendingClient: AgentClient = {
+      mode: 'mock',
       run: () =>
         new Promise<AgentRunResponse>((resolve) => {
           resolveRun = resolve;
@@ -445,7 +447,7 @@ describe('run states', () => {
   it('restores the cached result on expand without a new request', async () => {
     const user = userEvent.setup();
     const run = vi.fn().mockResolvedValue(ticketsSuccess);
-    render(<App client={{ run, health: async () => mockHealth }} />);
+    render(<App client={{ mode: 'mock', run, health: async () => mockHealth }} />);
 
     await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
     await user.click(screen.getByRole('button', { name: 'Run request' }));
@@ -531,7 +533,7 @@ describe('run states', () => {
   it('retries the original request text through the shared run machinery', async () => {
     const user = userEvent.setup();
     const run = vi.fn().mockResolvedValue(ticketsSuccess);
-    render(<App client={{ run, health: async () => mockHealth }} />);
+    render(<App client={{ mode: 'mock', run, health: async () => mockHealth }} />);
 
     await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
     await user.click(screen.getByRole('button', { name: 'Run request' }));
@@ -549,6 +551,7 @@ describe('run states', () => {
     let resolveRetry!: (response: AgentRunResponse) => void;
     let calls = 0;
     const client: AgentClient = {
+      mode: 'mock',
       run: () => {
         calls += 1;
         if (calls === 1) {
