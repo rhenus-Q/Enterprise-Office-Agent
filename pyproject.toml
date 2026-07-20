@@ -31,6 +31,13 @@ dev = [
     "pytest-cov",
     "ruff>=0.15.17",
 ]
+# Thin FastAPI adapter (api/) and its mocked tests. httpx is required by
+# Starlette's TestClient. Install with `uv sync --group dev --group api`.
+api = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+]
 
 # Let pytest import the graph package from the project root (pythonpath="."),
 # and only collect tests under the tests directory.
@@ -72,6 +79,7 @@ files = [
     "enterprise_rag/graph/nodes/",
     "enterprise_rag/graph/chains/",
     "office_agent/",
+    "api/",
 ]
 warn_unused_configs = true
 warn_unused_ignores = true
