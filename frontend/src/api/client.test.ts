@@ -11,8 +11,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AgentApiError,
   API_UNREACHABLE_ERROR,
+  REQUEST_CANCELLED_ERROR,
+  REQUEST_TIMEOUT_ERROR,
   createHttpClient,
   createMockClient,
+  isCancellation,
+  isTimeout,
   resolveApiMode,
 } from './client';
 import type { AgentRunResponse, HealthResponse } from '../types/api';
@@ -86,7 +90,11 @@ describe('createHttpClient', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(createHttpClient().health()).resolves.toEqual(healthPayload);
-    expect(fetchMock).toHaveBeenCalledWith('/api/health', undefined);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/health',
+      // Every call carries an abort signal, so it can be stopped or time out.
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('POSTs the request text as JSON and returns the response verbatim', async () => {
@@ -100,6 +108,7 @@ describe('createHttpClient', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: 'Show my open tickets' }),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -109,7 +118,10 @@ describe('createHttpClient', () => {
 
     await createHttpClient({ baseUrl: 'http://127.0.0.1:8000' }).health();
 
-    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8000/api/health', undefined);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8000/api/health',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it("surfaces the adapter's 500 body as the exception type only", async () => {
@@ -162,5 +174,98 @@ describe('createHttpClient', () => {
     await expect(createHttpClient().run({ text: 'anything' })).rejects.toMatchObject({
       errorType: 'InvalidJsonResponse',
     });
+  });
+});
+
+describe('cancellation and timeout', () => {
+  /**
+   * A `fetch` that never settles on its own and rejects the way a real one does
+   * when its signal aborts — so the client's own signal wiring is what is under
+   * test, not a stubbed shortcut.
+   */
+  function stallingFetch() {
+    return vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      // Real `fetch` rejects straight away for a signal that is already
+      // aborted, rather than waiting for an event that has been and gone.
+      if (init?.signal?.aborted) {
+        return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      });
+    });
+  }
+
+  it('reports a stopped run as a cancellation, never as an unreachable API', async () => {
+    vi.stubGlobal('fetch', stallingFetch());
+    const controller = new AbortController();
+
+    const pending = createHttpClient().run({ text: 'anything' }, { signal: controller.signal });
+    controller.abort();
+
+    const error = await pending.catch((caught: unknown) => caught);
+
+    expect((error as AgentApiError).errorType).toBe(REQUEST_CANCELLED_ERROR);
+    expect((error as AgentApiError).errorType).not.toBe(API_UNREACHABLE_ERROR);
+    expect(isCancellation(error)).toBe(true);
+    expect(isTimeout(error)).toBe(false);
+  });
+
+  it('reports an already-aborted signal as a cancellation', async () => {
+    vi.stubGlobal('fetch', stallingFetch());
+
+    await expect(
+      createHttpClient().run({ text: 'anything' }, { signal: AbortSignal.abort() }),
+    ).rejects.toMatchObject({ errorType: REQUEST_CANCELLED_ERROR });
+  });
+
+  it('times out a stalled agent run without calling it unreachable', async () => {
+    vi.stubGlobal('fetch', stallingFetch());
+
+    const error = await createHttpClient({ runTimeoutMs: 10 })
+      .run({ text: 'anything' })
+      .catch((caught: unknown) => caught);
+
+    expect((error as AgentApiError).errorType).toBe(REQUEST_TIMEOUT_ERROR);
+    expect((error as AgentApiError).errorType).not.toBe(API_UNREACHABLE_ERROR);
+    expect(isTimeout(error)).toBe(true);
+    expect(isCancellation(error)).toBe(false);
+  });
+
+  it('times out a stalled health check without calling it unreachable', async () => {
+    vi.stubGlobal('fetch', stallingFetch());
+
+    const error = await createHttpClient({ healthTimeoutMs: 10 })
+      .health()
+      .catch((caught: unknown) => caught);
+
+    expect((error as AgentApiError).errorType).toBe(REQUEST_TIMEOUT_ERROR);
+    expect((error as AgentApiError).errorType).not.toBe(API_UNREACHABLE_ERROR);
+  });
+
+  it('still reports a genuine network failure as an unreachable API', async () => {
+    // No abort involved: the distinction must survive alongside the new cases.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    const error = await createHttpClient({ runTimeoutMs: 10_000 })
+      .run({ text: 'anything' })
+      .catch((caught: unknown) => caught);
+
+    expect((error as AgentApiError).errorType).toBe(API_UNREACHABLE_ERROR);
+    expect(isCancellation(error)).toBe(false);
+    expect(isTimeout(error)).toBe(false);
+  });
+
+  it('lets the mock client be stopped too, so the offline demo behaves the same', async () => {
+    const controller = new AbortController();
+    const pending = createMockClient({ latencyMs: 50 }).run(
+      { text: 'Show my open tickets' },
+      { signal: controller.signal },
+    );
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ errorType: REQUEST_CANCELLED_ERROR });
   });
 });

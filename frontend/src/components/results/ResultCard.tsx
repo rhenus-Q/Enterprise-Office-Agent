@@ -6,6 +6,7 @@ import {
   Download,
   MessageSquare,
   RefreshCw,
+  Square,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -32,6 +33,14 @@ interface ResultCardProps {
    * disagree with.
    */
   isRefreshing: boolean;
+  /** Stops the browser waiting for the retry that is refreshing this card. */
+  onStop: () => void;
+  /**
+   * True when the refresh ended because the user stopped it rather than because
+   * it finished. The refreshing treatment ends at once with no completion
+   * confirmation — nothing was updated, so nothing may claim it was.
+   */
+  wasStopped: boolean;
   /**
    * Completed-run counter. Used purely as a remount key for the transcript so
    * the entry animation replays on every finished run — including when the
@@ -104,6 +113,8 @@ export function ResultCard({
   onToggleExpanded,
   onRetry,
   isRefreshing,
+  onStop,
+  wasStopped,
   revision,
 }: ResultCardProps) {
   const [feedback, setFeedback] = useState('');
@@ -175,13 +186,20 @@ export function ResultCard({
       setJustUpdated(false);
       setRefreshing(true);
     } else if (!isRefreshing && wasRefreshingRef.current) {
-      const elapsed = Date.now() - startedAtRef.current;
-      const remaining = Math.max(0, MIN_REFRESH_VISIBLE_MS - elapsed);
-      holdTimerRef.current = window.setTimeout(finish, remaining);
+      if (wasStopped) {
+        // Nothing arrived, so there is nothing to hold for and nothing to
+        // confirm: drop straight back to the result as it already stood.
+        holdingRef.current = false;
+        setRefreshing(false);
+      } else {
+        const elapsed = Date.now() - startedAtRef.current;
+        const remaining = Math.max(0, MIN_REFRESH_VISIBLE_MS - elapsed);
+        holdTimerRef.current = window.setTimeout(finish, remaining);
+      }
     }
 
     wasRefreshingRef.current = isRefreshing;
-  }, [isRefreshing]);
+  }, [isRefreshing, wasStopped]);
 
   // A revision that arrives outside a refresh cycle is simply a new result.
   useEffect(() => {
@@ -292,16 +310,31 @@ export function ResultCard({
             <Download size={14} strokeWidth={2} aria-hidden="true" />
           </button>
 
-          <button
-            type="button"
-            className={busy ? 'action-button is-busy' : 'action-button'}
-            aria-label="Retry request"
-            title="Retry request"
-            disabled={busy}
-            onClick={onRetry}
-          >
-            <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
-          </button>
+          {/* Only this card's retry control becomes Stop, and only while the
+              retry is actually in flight — during the settle window afterwards
+              there is nothing left to stop, so Retry returns (disabled). */}
+          {isRefreshing ? (
+            <button
+              type="button"
+              className="action-button action-button--stop"
+              aria-label="Stop waiting for this request"
+              title="Stop waiting — work already started on the server will still finish"
+              onClick={onStop}
+            >
+              <Square size={12} strokeWidth={3} fill="currentColor" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={busy ? 'action-button is-busy' : 'action-button'}
+              aria-label="Retry request"
+              title="Retry request"
+              disabled={busy}
+              onClick={onRetry}
+            >
+              <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
+            </button>
+          )}
 
           <span className="result__divider" aria-hidden="true" />
 

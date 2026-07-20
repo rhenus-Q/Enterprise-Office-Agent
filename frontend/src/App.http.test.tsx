@@ -205,6 +205,53 @@ describe('live API mode', () => {
     expect(statusList().queryByText('Privacy')).not.toBeInTheDocument();
   });
 
+  it('reports a stalled health check as a timeout rather than as unreachable', async () => {
+    // A connection that is accepted but never answered — the case a plain
+    // rejected fetch cannot represent.
+    const fetchMock = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App client={createHttpClient({ healthTimeoutMs: 20 })} />);
+
+    expect(await screen.findByText('Timed out')).toBeInTheDocument();
+    expect(statusList().queryByText('Unreachable')).not.toBeInTheDocument();
+    expect(statusList().getByText(/did not answer the health check in time/)).toBeInTheDocument();
+    // Still no invented flags while the adapter is silent.
+    expect(statusList().queryByText('Privacy')).not.toBeInTheDocument();
+  });
+
+  it('times out a stalled agent run and reports it as a timeout, not a failure to reach', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/health')) {
+        return Promise.resolve(jsonResponse(HEALTH_OK));
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App client={createHttpClient({ runTimeoutMs: 20 })} />);
+    await screen.findByText('Available');
+
+    await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText('RequestTimeoutError')).toBeInTheDocument();
+    expect(screen.queryByText('ApiUnreachableError')).not.toBeInTheDocument();
+  });
+
   it('re-checks health when the refresh control is used', async () => {
     const user = userEvent.setup();
     stubApi({

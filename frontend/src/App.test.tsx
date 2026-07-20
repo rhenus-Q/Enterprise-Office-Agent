@@ -585,7 +585,11 @@ describe('run states', () => {
 
     await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
     // The original request text, not anything read back out of the content.
-    expect(run).toHaveBeenNthCalledWith(2, { text: 'Show my open tickets' });
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      { text: 'Show my open tickets' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('keeps the previous result on screen while a retry is in flight', async () => {
@@ -616,7 +620,9 @@ describe('run states', () => {
     // The result stays put instead of collapsing to an empty loading card, and
     // the actions are locked so the request cannot be fired twice.
     expect(screen.getByText(/Open tickets \(2\)/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retry request' })).toBeDisabled();
+    // Retry has become this card's Stop; the composer does not add a second one.
+    expect(screen.getByRole('button', { name: 'Stop waiting for this request' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Retry request' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Running…' })).not.toBeInTheDocument();
     // Visibly in progress: the old answer is dimmed and progress is announced.
     expect(document.querySelector('.result__surface')).toHaveClass('is-refreshing');
@@ -646,6 +652,132 @@ describe('run states', () => {
     expect(document.querySelector('.result__surface')).not.toHaveClass('is-refreshing');
     expect(resultsRegion().getByText('Success')).toBeInTheDocument();
     expect(screen.getByText(/Open tickets \(2\)/)).toBeInTheDocument();
+  });
+
+  it('stops a new request and lands on the neutral stopped state', async () => {
+    const user = userEvent.setup();
+    const client: AgentClient = {
+      mode: 'mock',
+      // Never settles on its own: only Stop can end this run.
+      run: () => new Promise<AgentRunResponse>(() => {}),
+      health: async () => mockHealth,
+    };
+
+    render(<App client={client} />);
+    await user.type(screen.getByLabelText('Request'), 'Summarize my unread emails');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    expect(await screen.findByRole('heading', { name: 'Running…' })).toBeInTheDocument();
+
+    // Stop replaces Run in the same position.
+    expect(screen.queryByRole('button', { name: 'Run request' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Stop waiting for this request' }));
+
+    expect(await screen.findByRole('heading', { name: 'Stopped waiting' })).toBeInTheDocument();
+    expect(resultsRegion().getByText('Summarize my unread emails')).toBeInTheDocument();
+    // Honest about its reach: the browser stopped waiting, the server did not stop.
+    expect(screen.getByText(/Work that had already started on the server/)).toBeInTheDocument();
+    // The run is over, so the composer is usable again.
+    expect(screen.getByRole('button', { name: 'Run request' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Running…' })).not.toBeInTheDocument();
+  });
+
+  it('stops a retry and restores the result it was refreshing', async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    const client: AgentClient = {
+      mode: 'mock',
+      run: () => {
+        calls += 1;
+        if (calls === 1) {
+          return Promise.resolve(ticketsSuccess);
+        }
+        return new Promise<AgentRunResponse>(() => {});
+      },
+      health: async () => mockHealth,
+    };
+
+    render(<App client={client} />);
+    await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    expect(await screen.findByText(/Open tickets \(2\)/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry request' }));
+    expect(document.querySelector('.result__surface')).toHaveClass('is-refreshing');
+
+    await user.click(screen.getByRole('button', { name: 'Stop waiting for this request' }));
+
+    // Back to exactly the result it started from — no stopped card, and no
+    // "Updated" confirmation, because nothing was updated.
+    expect(screen.getByText(/Open tickets \(2\)/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Stopped waiting' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Updated')).not.toBeInTheDocument();
+    expect(document.querySelector('.result__surface')).not.toHaveClass('is-refreshing');
+    expect(resultsRegion().getByText('Success')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry request' })).toBeEnabled();
+    expect(executionDetails().getByText('Success')).toBeInTheDocument();
+  });
+
+  it('ignores a response that arrives after the run was stopped', async () => {
+    const user = userEvent.setup();
+    let resolveRun!: (response: AgentRunResponse) => void;
+    const client: AgentClient = {
+      mode: 'mock',
+      run: () =>
+        new Promise<AgentRunResponse>((resolve) => {
+          resolveRun = resolve;
+        }),
+      health: async () => mockHealth,
+    };
+
+    render(<App client={client} />);
+    await user.type(screen.getByLabelText('Request'), 'Summarize my unread emails');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    await user.click(await screen.findByRole('button', { name: 'Stop waiting for this request' }));
+    expect(await screen.findByRole('heading', { name: 'Stopped waiting' })).toBeInTheDocument();
+
+    // A client that ignores its abort signal still must not repaint the UI.
+    resolveRun(emailSuccess);
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Stopped waiting' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Inbox summary/)).not.toBeInTheDocument();
+  });
+
+  it('aborts the previous request when a replacement is started', async () => {
+    const user = userEvent.setup();
+    const signals: AbortSignal[] = [];
+    let resolveSecond!: (response: AgentRunResponse) => void;
+    const client: AgentClient = {
+      mode: 'mock',
+      run: (_request, options) => {
+        if (options?.signal) {
+          signals.push(options.signal);
+        }
+        if (signals.length === 1) {
+          return new Promise<AgentRunResponse>(() => {});
+        }
+        return new Promise<AgentRunResponse>((resolve) => {
+          resolveSecond = resolve;
+        });
+      },
+      health: async () => mockHealth,
+    };
+
+    render(<App client={client} />);
+    await user.type(screen.getByLabelText('Request'), 'Show my open tickets');
+    await user.click(screen.getByRole('button', { name: 'Run request' }));
+    await screen.findByRole('button', { name: 'Stop waiting for this request' });
+
+    await user.click(screen.getByRole('button', { name: 'Stop waiting for this request' }));
+    await user.click(screen.getByRole('button', { name: 'Run it again' }));
+
+    expect(signals).toHaveLength(2);
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+
+    resolveSecond(ticketsSuccess);
+    expect(await screen.findByText(/Open tickets \(2\)/)).toBeInTheDocument();
   });
 
   it('shows the error state with the error type only', async () => {

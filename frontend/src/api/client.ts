@@ -20,14 +20,27 @@ import type { AgentRunRequest, AgentRunResponse, HealthResponse } from '../types
 /** Which client backs the workspace. Surfaced in the runtime status bar. */
 export type ApiMode = 'mock' | 'http';
 
+/** Per-call transport controls. */
+export interface RequestOptions {
+  /**
+   * Aborts the browser's wait for this call.
+   *
+   * This stops the *client* only. The adapter's `POST /api/agent/run` handler is
+   * a sync FastAPI endpoint running in a threadpool, so a disconnect does not
+   * interrupt `answer_office_request()` — work already started on the server
+   * runs to completion. Nothing in this layer may claim otherwise.
+   */
+  signal?: AbortSignal;
+}
+
 export interface AgentClient {
   /**
    * Where this client's data comes from. The status bar reports it, so the demo
    * can never silently claim fixtures are live data (or the reverse).
    */
   readonly mode: ApiMode;
-  run(request: AgentRunRequest): Promise<AgentRunResponse>;
-  health(): Promise<HealthResponse>;
+  run(request: AgentRunRequest, options?: RequestOptions): Promise<AgentRunResponse>;
+  health(options?: RequestOptions): Promise<HealthResponse>;
 }
 
 /**
@@ -45,8 +58,35 @@ export class AgentApiError extends Error {
   }
 }
 
+/**
+ * The three ways a call can fail without the adapter having answered. They are
+ * kept distinct because they mean different things to the user: one was their
+ * own doing, one is a stalled request, and only the third says anything about
+ * whether the API is up.
+ */
 /** The adapter is not answering at all: not started, wrong port, proxy down. */
 export const API_UNREACHABLE_ERROR = 'ApiUnreachableError';
+/** The user pressed Stop. */
+export const REQUEST_CANCELLED_ERROR = 'RequestCancelledError';
+/** No response within the client-side budget. */
+export const REQUEST_TIMEOUT_ERROR = 'RequestTimeoutError';
+
+/** Health is a cheap liveness probe, so it fails fast. */
+export const DEFAULT_HEALTH_TIMEOUT_MS = 10_000;
+/**
+ * A Knowledge Q&A run can legitimately take a long time — retrieval, grading,
+ * generation, and up to `MAX_RETRIES` regeneration loops — so the run budget is
+ * generous. It exists to end a genuinely stalled request, not to bound normal work.
+ */
+export const DEFAULT_RUN_TIMEOUT_MS = 120_000;
+
+export function isCancellation(error: unknown): boolean {
+  return error instanceof AgentApiError && error.errorType === REQUEST_CANCELLED_ERROR;
+}
+
+export function isTimeout(error: unknown): boolean {
+  return error instanceof AgentApiError && error.errorType === REQUEST_TIMEOUT_ERROR;
+}
 
 export interface MockClientOptions {
   /** Simulated latency in ms, so loading states are visible in the demo. */
@@ -55,12 +95,26 @@ export interface MockClientOptions {
 
 const DEFAULT_LATENCY_MS = 300;
 
-function delay(ms: number): Promise<void> {
+/** Sleeps, but gives up as soon as the caller aborts. */
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new AgentApiError(REQUEST_CANCELLED_ERROR));
+  }
   if (ms <= 0) {
     return Promise.resolve();
   }
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+  return new Promise((resolve, reject) => {
+    function onAbort() {
+      window.clearTimeout(timer);
+      reject(new AgentApiError(REQUEST_CANCELLED_ERROR));
+    }
+
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
@@ -79,8 +133,9 @@ export function createMockClient(options: MockClientOptions = {}): AgentClient {
   return {
     mode: 'mock',
 
-    async run(request: AgentRunRequest): Promise<AgentRunResponse> {
-      await delay(latencyMs);
+    async run(request: AgentRunRequest, options?: RequestOptions): Promise<AgentRunResponse> {
+      // Honors the signal so Stop works in the offline demo too.
+      await delay(latencyMs, options?.signal);
 
       const prompt = request.text.trim();
 
@@ -91,8 +146,8 @@ export function createMockClient(options: MockClientOptions = {}): AgentClient {
       return RESPONSES_BY_PROMPT[prompt] ?? unsupportedResponse;
     },
 
-    async health(): Promise<HealthResponse> {
-      await delay(0);
+    async health(options?: RequestOptions): Promise<HealthResponse> {
+      await delay(0, options?.signal);
       return mockHealth;
     },
   };
@@ -108,6 +163,71 @@ export interface HttpClientOptions {
    * same-origin and the Vite dev proxy forwards `/api` to the adapter.
    */
   baseUrl?: string;
+  /** Overrides the health-check budget. Exposed mainly so tests need no fake timers. */
+  healthTimeoutMs?: number;
+  /** Overrides the agent-run budget. Exposed mainly so tests need no fake timers. */
+  runTimeoutMs?: number;
+}
+
+/** Why an in-flight call was aborted, when it was aborted by us. */
+type AbortCause = 'cancelled' | 'timeout';
+
+interface AbortPlan {
+  signal: AbortSignal;
+  /** The cause, or `null` when the failure came from the network itself. */
+  cause: () => AbortCause | null;
+  release: () => void;
+}
+
+/**
+ * Combine the caller's abort signal with a timeout into one signal, while
+ * remembering *why* it fired.
+ *
+ * Hand-rolled rather than using `AbortSignal.any` + `AbortSignal.timeout`
+ * because the cause has to survive into the catch block: `fetch` rejects with an
+ * opaque `AbortError` either way, and reporting a timeout as a cancellation (or
+ * either one as "API unreachable") would misdescribe what happened.
+ */
+function planAbort(external: AbortSignal | undefined, timeoutMs: number): AbortPlan {
+  const controller = new AbortController();
+  let cause: AbortCause | null = null;
+
+  function onExternalAbort() {
+    cause = 'cancelled';
+    controller.abort();
+  }
+
+  const timer = window.setTimeout(() => {
+    cause = 'timeout';
+    controller.abort();
+  }, timeoutMs);
+
+  if (external?.aborted) {
+    onExternalAbort();
+  } else {
+    external?.addEventListener('abort', onExternalAbort, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    cause: () => cause,
+    release() {
+      window.clearTimeout(timer);
+      external?.removeEventListener('abort', onExternalAbort);
+    },
+  };
+}
+
+/** The typed failure for an abort we caused, or `null` if the network failed. */
+function abortFailure(plan: AbortPlan): AgentApiError | null {
+  const cause = plan.cause();
+  if (cause === 'cancelled') {
+    return new AgentApiError(REQUEST_CANCELLED_ERROR);
+  }
+  if (cause === 'timeout') {
+    return new AgentApiError(REQUEST_TIMEOUT_ERROR);
+  }
+  return null;
 }
 
 function isErrorBody(value: unknown): value is { error: string } {
@@ -153,40 +273,55 @@ async function errorFromResponse(response: Response): Promise<AgentApiError> {
  */
 export function createHttpClient(options: HttpClientOptions = {}): AgentClient {
   const baseUrl = options.baseUrl ?? '';
+  const healthTimeoutMs = options.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS;
+  const runTimeoutMs = options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
 
-  async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-    let response: Response;
-    try {
-      // Looked up at call time so a test can install its own `fetch`.
-      response = await fetch(`${baseUrl}${path}`, init);
-    } catch {
-      throw new AgentApiError(API_UNREACHABLE_ERROR);
-    }
-
-    if (!response.ok) {
-      throw await errorFromResponse(response);
-    }
+  async function requestJson<T>(
+    path: string,
+    timeoutMs: number,
+    signal: AbortSignal | undefined,
+    init?: RequestInit,
+  ): Promise<T> {
+    const plan = planAbort(signal, timeoutMs);
 
     try {
-      return (await response.json()) as T;
-    } catch {
-      throw new AgentApiError('InvalidJsonResponse');
+      let response: Response;
+      try {
+        // Looked up at call time so a test can install its own `fetch`.
+        response = await fetch(`${baseUrl}${path}`, { ...init, signal: plan.signal });
+      } catch {
+        // An abort we caused is not evidence about the API's health.
+        throw abortFailure(plan) ?? new AgentApiError(API_UNREACHABLE_ERROR);
+      }
+
+      if (!response.ok) {
+        throw await errorFromResponse(response);
+      }
+
+      try {
+        return (await response.json()) as T;
+      } catch {
+        // The body can also be cut short by a stop or a timeout.
+        throw abortFailure(plan) ?? new AgentApiError('InvalidJsonResponse');
+      }
+    } finally {
+      plan.release();
     }
   }
 
   return {
     mode: 'http',
 
-    run(request: AgentRunRequest): Promise<AgentRunResponse> {
-      return requestJson<AgentRunResponse>(RUN_PATH, {
+    run(request: AgentRunRequest, options?: RequestOptions): Promise<AgentRunResponse> {
+      return requestJson<AgentRunResponse>(RUN_PATH, runTimeoutMs, options?.signal, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       });
     },
 
-    health(): Promise<HealthResponse> {
-      return requestJson<HealthResponse>(HEALTH_PATH);
+    health(options?: RequestOptions): Promise<HealthResponse> {
+      return requestJson<HealthResponse>(HEALTH_PATH, healthTimeoutMs, options?.signal);
     },
   };
 }

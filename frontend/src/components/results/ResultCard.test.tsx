@@ -31,6 +31,8 @@ interface CardOptions {
   onToggleExpanded?: () => void;
   onRetry?: () => void;
   isRefreshing?: boolean;
+  onStop?: () => void;
+  wasStopped?: boolean;
   revision?: number;
 }
 
@@ -43,6 +45,8 @@ function card(options: CardOptions = {}) {
       onToggleExpanded={options.onToggleExpanded ?? vi.fn()}
       onRetry={options.onRetry ?? vi.fn()}
       isRefreshing={options.isRefreshing ?? false}
+      onStop={options.onStop ?? vi.fn()}
+      wasStopped={options.wasStopped ?? false}
       revision={options.revision ?? 1}
     />
   );
@@ -255,7 +259,11 @@ describe('refresh feedback', () => {
     // The old answer is still readable, not cleared.
     expect(document.querySelector('.result__content')?.textContent).toBe(ticketsSuccess.content);
     expect(screen.getByRole('status')).toHaveTextContent('Refreshing');
-    expect(screen.getByRole('button', { name: 'Retry request' })).toBeDisabled();
+    // Retry has become Stop for the duration of the refresh.
+    expect(
+      screen.getByRole('button', { name: 'Stop waiting for this request' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry request' })).not.toBeInTheDocument();
   });
 
   it('dims the same transcript node rather than hiding or replacing it', () => {
@@ -371,7 +379,8 @@ describe('retry', () => {
   it('disables every content action while a request is running', () => {
     render(card({ isRefreshing: true }));
 
-    expect(screen.getByRole('button', { name: 'Retry request' })).toBeDisabled();
+    // Stop stays operable — it is the one control that must work while busy.
+    expect(screen.getByRole('button', { name: 'Stop waiting for this request' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Copy result' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Download result' })).toBeDisabled();
   });
