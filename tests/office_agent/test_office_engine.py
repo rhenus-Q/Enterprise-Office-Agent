@@ -17,6 +17,8 @@ from office_agent.schemas import (
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     INTENT_WORKFLOW_APPROVAL,
+    KnowledgeObservability,
+    NodeTiming,
     ToolResult,
 )
 from office_agent.tools import (
@@ -222,3 +224,69 @@ def test_unknown_request_returns_unsupported_message_without_calling_any_tool(mo
     assert response.intent == INTENT_UNKNOWN
     assert response.tool is None
     assert response.content == UNSUPPORTED_INTENT_NOTE
+
+
+# --- observability carry-through (Phase 4, additive) ------------------------
+
+
+def _observability():
+    return KnowledgeObservability(
+        run_id="run-xyz",
+        node_path=["retrieve", "generate"],
+        node_timings_ms=[NodeTiming(node="retrieve", duration_ms=9.5)],
+        total_duration_ms=900.0,
+        retries=0,
+        tracked_llm_calls=3,
+        web_fallback_policy="conservative",
+    )
+
+
+def test_knowledge_response_carries_the_tool_observability(monkeypatch):
+    """The engine transports the adapter's structure; it builds nothing itself."""
+
+    observability = _observability()
+    monkeypatch.setattr(
+        knowledge,
+        "run_knowledge_qa",
+        lambda _question: ToolResult(
+            tool=INTENT_KNOWLEDGE_QA,
+            content="FORMATTED ANSWER",
+            observability=observability,
+        ),
+    )
+
+    response = engine.answer_office_request("What is the VPN access policy?")
+
+    assert response.observability is observability
+
+
+def test_non_knowledge_capabilities_have_no_observability(monkeypatch):
+    """Deterministic tools never set it, so the response keeps the None default."""
+
+    monkeypatch.setattr(
+        email,
+        "summarize_emails",
+        lambda _text: ToolResult(tool=INTENT_EMAIL_SUMMARY, content="INBOX SUMMARY"),
+    )
+    monkeypatch.setattr(
+        calendar,
+        "lookup_calendar",
+        lambda _text: ToolResult(tool=INTENT_CALENDAR_LOOKUP, content="CALENDAR"),
+    )
+
+    assert engine.answer_office_request("summarize my unread emails").observability is None
+    assert engine.answer_office_request("what meetings do I have today?").observability is None
+
+
+def test_unknown_response_has_no_observability(monkeypatch):
+    monkeypatch.setattr(knowledge, "run_knowledge_qa", _guard("knowledge"))
+
+    assert engine.answer_office_request("order lunch for the team").observability is None
+
+
+def test_tool_result_without_observability_still_constructs():
+    """The new field is optional: pre-Phase-4 constructions keep working."""
+
+    result = ToolResult(tool=INTENT_EMAIL_SUMMARY, content="INBOX SUMMARY")
+
+    assert result.observability is None

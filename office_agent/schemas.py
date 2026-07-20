@@ -50,6 +50,47 @@ class RoutedIntent:
 
 
 @dataclass
+class NodeTiming:
+    """One enterprise_rag graph step's wall-clock timing.
+
+    The typed form of an `AnswerResult.node_timings_ms` entry (the engine emits
+    plain dicts); the knowledge adapter does the conversion.
+    """
+
+    node: str
+    duration_ms: float
+
+
+@dataclass
+class KnowledgeObservability:
+    """Knowledge Q&A execution metadata carried through from `AnswerResult`.
+
+    Every field mirrors one the enterprise_rag engine already produces — this
+    is a transport structure, not a new observability signal. `caveat` is the
+    existing `STOP_REASON_NOTES` text for the run's stop reason, reused rather
+    than re-written.
+
+    `tracked_llm_calls` is the budgeted operational counter, NOT total LLM
+    usage, so any presentation of it must say "tracked".
+
+    Only the knowledge adapter populates this; every other tool leaves it
+    `None`.
+    """
+
+    run_id: str | None = None
+    node_path: list[str] = field(default_factory=list)
+    node_timings_ms: list[NodeTiming] = field(default_factory=list)
+    total_duration_ms: float = 0.0
+    retries: int = 0
+    tracked_llm_calls: int = 0
+    web_search_count: int = 0
+    web_result_grading_count: int = 0
+    web_search_enabled: bool = False
+    web_fallback_policy: str = ""
+    caveat: str = ""
+
+
+@dataclass
 class ToolResult:
     """The outcome of running one Office Agent tool.
 
@@ -57,6 +98,9 @@ class ToolResult:
     tool the enterprise_rag caveats and Sources section are preserved).
     `stop_reason`, `sources`, and `run_id` are carried through for
     observability and tests.
+
+    `observability` is optional and additive: only the Knowledge Q&A adapter
+    sets it, so the local mock tools keep their exact previous shape.
     """
 
     tool: str
@@ -64,6 +108,7 @@ class ToolResult:
     stop_reason: str = ""
     sources: list[str] = field(default_factory=list)
     run_id: str | None = None
+    observability: KnowledgeObservability | None = None
 
 
 @dataclass
@@ -80,3 +125,4 @@ class OfficeAgentResponse:
     stop_reason: str = ""
     sources: list[str] = field(default_factory=list)
     run_id: str | None = None
+    observability: KnowledgeObservability | None = None
