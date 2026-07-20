@@ -16,6 +16,11 @@ export type RunState =
   /**
    * `previous` carries the result that was on screen when the run started, so a
    * retry can keep showing it instead of blanking the results area.
+   *
+   * It is populated for retries **only**. A new request produces a result with a
+   * different identity — potentially a different capability entirely, which the
+   * frontend cannot predict because routing belongs to the backend — so holding
+   * the old card in place would misreport what is being run.
    */
   | { phase: 'loading'; text: string; previous: AgentRunResponse | null }
   | { phase: 'success'; text: string; response: AgentRunResponse }
@@ -43,14 +48,21 @@ export function useAgentRun(client: AgentClient) {
   // Guards against an earlier slow request overwriting a newer one.
   const latestRequestRef = useRef(0);
 
+  /**
+   * Start a run.
+   *
+   * `isRetry` is the single source of truth for "this run targets the result
+   * already on screen". It is passed explicitly rather than inferred, because
+   * only the caller knows whether the user pressed Run or Retry.
+   */
   const run = useCallback(
-    async (text: string) => {
+    async (text: string, { isRetry = false }: { isRetry?: boolean } = {}) => {
       const requestId = latestRequestRef.current + 1;
       latestRequestRef.current = requestId;
       setState((current) => ({
         phase: 'loading',
         text,
-        previous: current.phase === 'success' ? current.response : null,
+        previous: isRetry && current.phase === 'success' ? current.response : null,
       }));
 
       try {

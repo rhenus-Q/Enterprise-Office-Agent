@@ -68,9 +68,6 @@ export function App({ client }: AppProps) {
   // Controls only whether the transcript is shown. The response, the execution
   // details, and every navigation concern above are untouched by it.
   const [resultExpanded, setResultExpanded] = useState(true);
-  // Distinguishes a retry from a fresh request: only a retry gets the minimum
-  // visible refreshing window and the "Updated" confirmation.
-  const [isRetryRun, setIsRetryRun] = useState(false);
 
   /**
    * After a run, the routed capability takes focus.
@@ -104,6 +101,9 @@ export function App({ client }: AppProps) {
 
   // The result stays on screen while a retry is in flight, so the card is driven
   // by "the result currently being shown" rather than strictly by the phase.
+  // `previous` is non-null only for a retry, so a card that survives into the
+  // loading phase is by construction being re-run — never displaced by an
+  // unrelated new request.
   const shownResult =
     state.phase === 'success'
       ? state.response
@@ -121,7 +121,6 @@ export function App({ client }: AppProps) {
   /** Every new run reveals its answer, so a collapsed result expands first. */
   function handleRun(text: string) {
     setResultExpanded(true);
-    setIsRetryRun(false);
     void run(text);
   }
 
@@ -131,8 +130,7 @@ export function App({ client }: AppProps) {
       return;
     }
     setResultExpanded(true);
-    setIsRetryRun(true);
-    void run(state.text);
+    void run(state.text, { isRetry: true });
   }
 
   /**
@@ -206,9 +204,13 @@ export function App({ client }: AppProps) {
         aria-label="Result"
       >
         {state.phase === 'idle' ? <EmptyState /> : null}
-        {/* A retry keeps the previous result on screen, so the full loading card
-            is only for a run that has nothing to preserve. */}
-        {state.phase === 'loading' && state.previous === null ? <LoadingState /> : null}
+        {/* A retry keeps the previous result on screen, so the neutral loading
+            card covers every run that has nothing to preserve — a first run and
+            a new request alike, which is exactly the set whose capability is not
+            yet known. */}
+        {state.phase === 'loading' && state.previous === null ? (
+          <LoadingState requestText={state.text} />
+        ) : null}
         {state.phase === 'error' ? (
           <ErrorState errorType={state.errorType} onRetry={handleRetry} />
         ) : null}
@@ -226,8 +228,9 @@ export function App({ client }: AppProps) {
               status={shownStatus}
               expanded={resultExpanded}
               onToggleExpanded={() => setResultExpanded((open) => !open)}
-              isRunning={state.phase === 'loading'}
-              isRetry={isRetryRun}
+              // A mounted card during the loading phase can only be a retry of
+              // this very result, so one flag says everything the card needs.
+              isRefreshing={state.phase === 'loading'}
               onRetry={handleRetry}
               revision={completedRuns}
             />
