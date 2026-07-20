@@ -35,6 +35,8 @@ from api.schemas import (
     ErrorResponse,
     ExecutionMode,
     HealthResponse,
+    KnowledgeObservabilityModel,
+    NodeTimingModel,
 )
 from enterprise_rag.graph.config import web_search_enabled
 from enterprise_rag.graph.consts import STOP_REASON_OFFLINE_MODE
@@ -55,6 +57,7 @@ from office_agent.schemas import (
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     INTENT_WORKFLOW_APPROVAL,
+    KnowledgeObservability,
 )
 
 # Capabilities that are always deterministic: local mock tools with no LLM path.
@@ -105,6 +108,36 @@ def derive_execution_mode(intent: str, stop_reason: str) -> ExecutionMode:
     # Unreachable for the eight routed intents; keeps the return type total
     # without inventing a classification for an intent this adapter cannot know.
     return "none"
+
+
+def _observability_model(
+    observability: KnowledgeObservability | None,
+) -> KnowledgeObservabilityModel | None:
+    """Transport the office-agent observability structure onto the wire.
+
+    A field-for-field copy: `None` stays `None` (every capability except
+    Knowledge Q&A), and nothing is defaulted, rounded, or invented.
+    """
+
+    if observability is None:
+        return None
+
+    return KnowledgeObservabilityModel(
+        run_id=observability.run_id,
+        node_path=list(observability.node_path),
+        node_timings_ms=[
+            NodeTimingModel(node=timing.node, duration_ms=timing.duration_ms)
+            for timing in observability.node_timings_ms
+        ],
+        total_duration_ms=observability.total_duration_ms,
+        retries=observability.retries,
+        tracked_llm_calls=observability.tracked_llm_calls,
+        web_search_count=observability.web_search_count,
+        web_result_grading_count=observability.web_result_grading_count,
+        web_search_enabled=observability.web_search_enabled,
+        web_fallback_policy=observability.web_fallback_policy,
+        caveat=observability.caveat,
+    )
 
 
 def create_app() -> FastAPI:
@@ -168,9 +201,9 @@ def create_app() -> FastAPI:
             run_id=result.run_id,
             duration_ms=duration_ms,
             execution_mode=derive_execution_mode(result.intent, result.stop_reason),
-            # Phase 4 carries real observability through office_agent; until
-            # then this stays null rather than fabricated.
-            observability=None,
+            # Real engine metadata when the Knowledge Q&A adapter produced it;
+            # null for every other capability rather than fabricated.
+            observability=_observability_model(result.observability),
         )
 
     return app

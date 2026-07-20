@@ -143,6 +143,17 @@ def test_knowledge_adapter_passes_through_offline_stop_reason(monkeypatch):
         stop_reason = STOP_REASON_OFFLINE_MODE
         sources: list[str] = []
         run_id = "run-offline"
+        # The engine short-circuits before the graph, so it still returns a
+        # complete AnswerResult — with an empty node path and zeroed counters.
+        node_path: list[str] = []
+        node_timings_ms: list[dict[str, object]] = []
+        total_duration_ms = 0.0
+        retries = 0
+        tracked_llm_calls = 0
+        web_search_count = 0
+        web_result_grading_count = 0
+        web_search_enabled = False
+        web_fallback_policy = "conservative"
 
     monkeypatch.setattr(knowledge, "answer_question", lambda question: _OfflineResult())
 
@@ -151,3 +162,10 @@ def test_knowledge_adapter_passes_through_offline_stop_reason(monkeypatch):
     assert result.stop_reason == STOP_REASON_OFFLINE_MODE
     assert OFFLINE_MODE_NOTE in result.content
     assert result.sources == []
+    # No graph ran, so the carried-through metadata is genuinely empty — and the
+    # caveat is still the engine's own offline note.
+    assert result.observability is not None
+    assert result.observability.node_path == []
+    assert result.observability.node_timings_ms == []
+    assert result.observability.tracked_llm_calls == 0
+    assert result.observability.caveat == OFFLINE_MODE_NOTE

@@ -25,6 +25,8 @@ from office_agent.schemas import (
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     INTENT_WORKFLOW_APPROVAL,
+    KnowledgeObservability,
+    NodeTiming,
     OfficeAgentResponse,
 )
 
@@ -118,14 +120,91 @@ def test_duration_ms_is_non_negative(monkeypatch):
     assert _run(client).json()["duration_ms"] >= 0
 
 
-def test_observability_is_null_in_phase_2(monkeypatch):
-    """Phase 4 adds the office-agent carry-through; until then, never fabricated."""
+# --- observability pass-through (Phase 4) -----------------------------------
+
+
+def _knowledge_observability():
+    return KnowledgeObservability(
+        run_id="run-123",
+        node_path=["retrieve", "grade_documents", "generate"],
+        node_timings_ms=[
+            NodeTiming(node="retrieve", duration_ms=12.5),
+            NodeTiming(node="grade_documents", duration_ms=340.0),
+            NodeTiming(node="generate", duration_ms=1180.75),
+        ],
+        total_duration_ms=1533.25,
+        retries=1,
+        tracked_llm_calls=4,
+        web_search_count=2,
+        web_result_grading_count=6,
+        web_search_enabled=True,
+        web_fallback_policy="conservative",
+        caveat="Web search was disabled for this run.",
+    )
+
+
+def test_knowledge_observability_is_passed_through_field_for_field(monkeypatch):
+    client = _client(
+        monkeypatch,
+        OfficeAgentResponse(
+            intent=INTENT_KNOWLEDGE_QA,
+            content="A",
+            tool="knowledge_qa",
+            run_id="run-123",
+            observability=_knowledge_observability(),
+        ),
+    )
+
+    observability = _run(client).json()["observability"]
+
+    assert observability == {
+        "run_id": "run-123",
+        "node_path": ["retrieve", "grade_documents", "generate"],
+        "node_timings_ms": [
+            {"node": "retrieve", "duration_ms": 12.5},
+            {"node": "grade_documents", "duration_ms": 340.0},
+            {"node": "generate", "duration_ms": 1180.75},
+        ],
+        "total_duration_ms": 1533.25,
+        "retries": 1,
+        "tracked_llm_calls": 4,
+        "web_search_count": 2,
+        "web_result_grading_count": 6,
+        "web_search_enabled": True,
+        "web_fallback_policy": "conservative",
+        "caveat": "Web search was disabled for this run.",
+    }
+
+
+def test_observability_is_null_when_the_engine_reports_none(monkeypatch):
+    """Not fabricated: a knowledge response without metadata stays null."""
 
     client = _client(
         monkeypatch,
         OfficeAgentResponse(
             intent=INTENT_KNOWLEDGE_QA, content="A", tool="knowledge_qa", run_id="r1"
         ),
+    )
+
+    assert _run(client).json()["observability"] is None
+
+
+@pytest.mark.parametrize(
+    "intent",
+    [
+        INTENT_EMAIL_SUMMARY,
+        INTENT_CALENDAR_LOOKUP,
+        INTENT_TICKET_ASSISTANT,
+        INTENT_DAILY_BRIEFING,
+        INTENT_MEETING_AGENT,
+        INTENT_WORKFLOW_APPROVAL,
+        INTENT_UNKNOWN,
+    ],
+)
+def test_non_knowledge_intents_report_null_observability(monkeypatch, intent):
+    client = _client(
+        monkeypatch,
+        OfficeAgentResponse(intent=intent, content="X", tool=None),
     )
 
     assert _run(client).json()["observability"] is None

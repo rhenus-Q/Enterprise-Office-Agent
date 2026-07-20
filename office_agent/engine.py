@@ -86,4 +86,7 @@ def answer_office_request(user_input: str) -> OfficeAgentResponse:
         stop_reason=result.stop_reason,
         sources=list(result.sources),
         run_id=result.run_id,
+        # Only the Knowledge Q&A adapter sets this; for every other tool it
+        # stays the `None` default rather than being fabricated.
+        observability=result.observability,
     )
