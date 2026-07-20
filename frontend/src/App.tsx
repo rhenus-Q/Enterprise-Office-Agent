@@ -1,0 +1,277 @@
+import { useEffect, useMemo, useState } from 'react';
+
+import { createMockClient, type AgentClient } from './api/client';
+import { AppShell } from './components/AppShell';
+import { CapabilitySidebar } from './components/CapabilitySidebar';
+import { ExamplePrompts, type PanelView } from './components/ExamplePrompts';
+import { ExecutionPanel } from './components/ExecutionPanel';
+import { ExecutionPreview } from './components/ExecutionPreview';
+import { RequestComposer } from './components/RequestComposer';
+import { StatusBanner } from './components/StatusBanner';
+import { ResultCard } from './components/results/ResultCard';
+import { DegradedNotice } from './components/states/DegradedNotice';
+import { EmptyState } from './components/states/EmptyState';
+import { ErrorState } from './components/states/ErrorState';
+import { LoadingState } from './components/states/LoadingState';
+import { UnsupportedNotice } from './components/states/UnsupportedNotice';
+import { useAgentRun } from './hooks/useAgentRun';
+import { classifyRunStatus } from './lib/status';
+import type { CapabilityIntent, HealthResponse } from './types/api';
+
+interface AppProps {
+  /** Injectable for tests; defaults to the Phase 1 typed mock client. */
+  client?: AgentClient;
+}
+
+/**
+ * Return to the top of the page after a reset.
+ *
+ * Skipped when already at the top, which also keeps it inert under jsdom. Honors
+ * `prefers-reduced-motion` by jumping instead of animating.
+ */
+function scrollToTop() {
+  if (typeof window === 'undefined' || window.scrollY === 0) {
+    return;
+  }
+
+  const prefersReducedMotion =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+}
+
+export function App({ client }: AppProps) {
+  const agentClient = useMemo(() => client ?? createMockClient(), [client]);
+  const { state, run, reset, completedRuns } = useAgentRun(agentClient);
+  const [text, setText] = useState('');
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  // Three independent concerns, deliberately not inferred from one another:
+  //   selectedIntent — the capability in focus (rail highlight); after a run
+  //                    this is whatever the backend router returned.
+  //   panelView      — which prompts are being browsed. User-controlled: a run
+  //                    never changes it, so the panel's identity stays put.
+  //   panelOpen      — whether the panel is shown at all. Dismissing is sticky;
+  //                    a run must not reopen it.
+  const [selectedIntent, setSelectedIntent] = useState<CapabilityIntent | null>(null);
+  const [panelView, setPanelView] = useState<PanelView>('all');
+  const [panelOpen, setPanelOpen] = useState(true);
+  // Controls only whether the transcript is shown. The response, the execution
+  // details, and every navigation concern above are untouched by it.
+  const [resultExpanded, setResultExpanded] = useState(true);
+  // Distinguishes a retry from a fresh request: only a retry gets the minimum
+  // visible refreshing window and the "Updated" confirmation.
+  const [isRetryRun, setIsRetryRun] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    agentClient.health().then(
+      (result) => {
+        if (!cancelled) {
+          setHealth(result);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setHealth(null);
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [agentClient]);
+
+  /**
+   * After a run, the routed capability takes focus.
+   *
+   * `selectedIntent` represents the capability currently in focus, not just a
+   * filter the user picked — so a completed run deliberately overwrites any
+   * prior selection. The response is the single source of truth: the active
+   * capability is never derived from the clicked prompt card, the previous
+   * selection, or the frontend's own prompt metadata, because only the backend
+   * router decides where a request goes.
+   */
+  useEffect(() => {
+    if (state.phase !== 'success') {
+      return;
+    }
+
+    const routed = state.response.intent === 'unknown' ? null : state.response.intent;
+
+    setSelectedIntent(routed);
+
+    // Nothing was routed, so there is no capability to browse.
+    if (routed === null) {
+      setPanelOpen(false);
+    }
+
+    // `panelView` and an open panel are left untouched on purpose: the run
+    // reports where it went, it does not navigate the panel for the user.
+  }, [state]);
+
+  const status = state.phase === 'success' ? classifyRunStatus(state.response) : null;
+
+  // The result stays on screen while a retry is in flight, so the card is driven
+  // by "the result currently being shown" rather than strictly by the phase.
+  const shownResult =
+    state.phase === 'success'
+      ? state.response
+      : state.phase === 'loading'
+        ? state.previous
+        : null;
+  const shownStatus = shownResult ? classifyRunStatus(shownResult) : null;
+
+  // Density follows whether the transcript actually occupies space, not the run
+  // phase — a collapsed result frees the column, so the discovery view returns.
+  const resultContentVisible = shownResult !== null && resultExpanded;
+  const denseExamples =
+    resultContentVisible || state.phase === 'loading' || state.phase === 'error';
+
+  /** Every new run reveals its answer, so a collapsed result expands first. */
+  function handleRun(text: string) {
+    setResultExpanded(true);
+    setIsRetryRun(false);
+    void run(text);
+  }
+
+  /** Re-runs the request behind the visible result through the shared machinery. */
+  function handleRetry() {
+    if (state.phase === 'loading' || state.phase === 'idle') {
+      return;
+    }
+    setResultExpanded(true);
+    setIsRetryRun(true);
+    void run(state.text);
+  }
+
+  /**
+   * Return the workspace to its initial state: empty composer, no result, no
+   * error, no capability filter, execution details back to placeholders.
+   *
+   * Runtime status is deliberately preserved — it describes the environment, not
+   * the request, so a reset must not discard it.
+   */
+  function handleReset() {
+    setText('');
+    setSelectedIntent(null);
+    setPanelView('all');
+    setPanelOpen(true);
+    setResultExpanded(true);
+    reset();
+    scrollToTop();
+  }
+
+  /**
+   * Clicking a rail capability focuses it. Clicking the one already being
+   * browsed dismisses the panel — the toggle applies to the view you are in, so
+   * a capability merely highlighted by the last run still focuses on first click.
+   */
+  function handleSelectCapability(intent: CapabilityIntent) {
+    const alreadyBrowsing = panelOpen && panelView === 'capability' && selectedIntent === intent;
+
+    if (alreadyBrowsing) {
+      setPanelOpen(false);
+      return;
+    }
+
+    setSelectedIntent(intent);
+    setPanelView('capability');
+    setPanelOpen(true);
+  }
+
+  /** "Show all" changes the browsing mode only; the rail highlight stays put. */
+  function handleShowAllExamples() {
+    setPanelView('all');
+    setPanelOpen(true);
+  }
+
+  // Visibility is now explicit state rather than something inferred from the
+  // phase or the selection.
+  const showExamples = panelOpen;
+
+  const main = (
+    <>
+      <RequestComposer
+        value={text}
+        onChange={setText}
+        onSubmit={handleRun}
+        isLoading={state.phase === 'loading'}
+      />
+
+      {showExamples ? (
+        <ExamplePrompts
+          view={panelView}
+          selectedIntent={selectedIntent}
+          dense={denseExamples}
+          onSelectPrompt={setText}
+          onShowAll={handleShowAllExamples}
+        />
+      ) : null}
+
+      <section
+        className="results"
+        aria-live="polite"
+        aria-busy={state.phase === 'loading'}
+        aria-label="Result"
+      >
+        {state.phase === 'idle' ? <EmptyState /> : null}
+        {/* A retry keeps the previous result on screen, so the full loading card
+            is only for a run that has nothing to preserve. */}
+        {state.phase === 'loading' && state.previous === null ? <LoadingState /> : null}
+        {state.phase === 'error' ? (
+          <ErrorState errorType={state.errorType} onRetry={handleRetry} />
+        ) : null}
+        {shownResult && shownStatus ? (
+          <>
+            {shownStatus === 'degraded' ? (
+              <DegradedNotice
+                stopReason={shownResult.stop_reason}
+                caveat={shownResult.observability?.caveat ?? ''}
+              />
+            ) : null}
+            {shownStatus === 'unsupported' ? <UnsupportedNotice /> : null}
+            <ResultCard
+              response={shownResult}
+              status={shownStatus}
+              expanded={resultExpanded}
+              onToggleExpanded={() => setResultExpanded((open) => !open)}
+              isRunning={state.phase === 'loading'}
+              isRetry={isRetryRun}
+              onRetry={handleRetry}
+              revision={completedRuns}
+            />
+          </>
+        ) : null}
+      </section>
+    </>
+  );
+
+  // Total mapping: the preview covers every phase that is not a rendered result.
+  const previewPhase =
+    state.phase === 'loading' ? 'loading' : state.phase === 'error' ? 'error' : 'idle';
+
+  const aside =
+    state.phase === 'success' && status ? (
+      <ExecutionPanel response={state.response} status={status} />
+    ) : (
+      <ExecutionPreview phase={previewPhase} />
+    );
+
+  return (
+    <AppShell
+      banner={<StatusBanner health={health} />}
+      sidebar={
+        <CapabilitySidebar
+          selectedIntent={selectedIntent}
+          onSelectCapability={handleSelectCapability}
+        />
+      }
+      main={main}
+      aside={aside}
+      onReset={handleReset}
+    />
+  );
+}
