@@ -3,7 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ResultCard } from './ResultCard';
-import { knowledgeSuccess, ticketsSuccess, unsupportedResponse } from '../../mocks/fixtures';
+import {
+  approvalsSuccess,
+  briefingSuccess,
+  calendarSuccess,
+  knowledgeSuccess,
+  meetingSuccess,
+  ticketsSuccess,
+  unsupportedResponse,
+} from '../../mocks/fixtures';
 import type { AgentRunResponse, RunStatus } from '../../types/api';
 
 /** jsdom's Blob has no `text()`, so read it the long way. */
@@ -120,6 +128,65 @@ describe('header', () => {
       expect(button.tagName).toBe('BUTTON');
     }
   });
+});
+
+describe('per-intent frames', () => {
+  // The four routed capabilities that previously lacked a direct result-render
+  // test. Each is a deterministic mock fixture (mono typography), so the frame is:
+  // the capability's own title, its intent accent class, monospace-preserved
+  // verbatim content, and a business token proved to survive byte-for-byte — the
+  // renderer frames the engine string, it never recomputes a date, count, id, or
+  // label. Knowledge Q&A, Email Summary, Ticket Assistant, and the unsupported
+  // (unknown) frame are already covered elsewhere in this file and in App.test.tsx.
+  const cases = [
+    {
+      response: calendarSuccess,
+      title: 'Calendar Lookup',
+      intentClass: 'cap--calendar_lookup',
+      token: 'Calendar — 2026-07-01 (3 events)',
+    },
+    {
+      response: briefingSuccess,
+      title: 'Daily Briefing',
+      intentClass: 'cap--daily_briefing',
+      token: 'earliest due 2026-07-02T17:00:00.',
+    },
+    {
+      response: meetingSuccess,
+      title: 'Meeting Agent',
+      intentClass: 'cap--meeting_agent',
+      token: 'Meeting prep — VPN rollout review',
+    },
+    {
+      response: approvalsSuccess,
+      title: 'Workflow Approval',
+      intentClass: 'cap--workflow_approval',
+      token: 'Approve / reject actions are simulated — nothing is written back.',
+    },
+  ] as const;
+
+  it.each(cases)(
+    'frames $title with its own title, accent, and verbatim monospace content',
+    ({ response, title, intentClass, token }) => {
+      render(card({ response }));
+
+      // 1. Intent-specific frame/title, taken from the capability, not the content.
+      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+
+      // 3. Intent accent class on the card root.
+      const article = document.querySelector('article.result');
+      expect(article).toHaveClass('result', intentClass);
+
+      // 4. Monospace/preformatted typography, chosen from the intent.
+      const block = document.querySelector('.result__content');
+      expect(block).toHaveAttribute('data-typography', 'mono');
+
+      // 2 + 5. Exact engine content verbatim (including its aligned whitespace and
+      // this business token) — no date, count, id, or label is recomputed.
+      expect(block?.textContent).toBe(response.content);
+      expect(block?.textContent).toContain(token);
+    },
+  );
 });
 
 describe('copy', () => {

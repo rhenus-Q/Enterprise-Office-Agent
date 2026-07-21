@@ -19,5 +19,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Vitest owns the unit suite under src/ only. The Playwright responsive suite
+    // lives in e2e/ and is run by `npm run test:responsive`, never by Vitest —
+    // its `@playwright/test` `test`/`expect` are incompatible with Vitest's.
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 });

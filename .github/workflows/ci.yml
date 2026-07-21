@@ -1,16 +1,28 @@
-# CI: two parallel jobs, both keys-free.
+# CI: three parallel jobs, all keys-free.
 #
 # mocked-tests: runs the fully mocked test suites (tests/enterprise_rag/nodes/ +
 # tests/enterprise_rag/graph/ + tests/enterprise_rag/evals/ + tests/office_agent/,
-# excluding the gated real-model tests/office_agent/integration/) on every push
-# and pull request. These suites mock every external dependency at its lazy
-# factory seam (the evals/ helper tests cover only the eval harness's pure
-# helpers; tests/office_agent/ patches the knowledge adapter so no real
+# excluding the gated real-model tests/office_agent/integration/) plus the mocked
+# thin-adapter suite tests/api/ (fastapi.testclient over the api/ package, with
+# answer_office_request and the flag readers monkeypatched — no real engine call),
+# on every push and pull request. These suites mock every external dependency at
+# its lazy factory seam (the evals/ helper tests cover only the eval harness's
+# pure helpers; tests/office_agent/ patches the knowledge adapter so no real
 # enterprise_rag graph call is made), so the job needs NO API keys (OpenAI /
-# Tavily / LangSmith). The real-model suites (tests/enterprise_rag/chains/ and
+# Tavily / LangSmith). The api dependency group (fastapi/uvicorn/httpx) is
+# installed alongside dev so the adapter imports and TestClient resolve. The
+# real-model suites (tests/enterprise_rag/chains/ and
 # tests/office_agent/integration/) call the real model and the full eval run
 # (evals/enterprise_rag/run_eval.py) costs real API money; all are deliberately
 # excluded from CI.
+#
+# frontend: builds and tests the Vite + React + TypeScript workspace under
+# frontend/ (npm ci against the committed package-lock.json, then npm run build —
+# which type-checks via tsc — npm test — Vitest + React Testing Library on jsdom —
+# and npm run test:responsive — Playwright/Chromium responsive checks against the
+# Vite dev server in typed mock mode, so still keys-free and networkless beyond
+# localhost). It is npm-managed and independent of uv, uses no API keys, and runs
+# no deployment/publish steps.
 #
 # Coverage for enterprise_rag/ and office_agent/ is reported to the job log
 # (--cov-report=term). There is deliberately NO --cov-fail-under gate: the
@@ -21,9 +33,11 @@
 # lint: runs ruff (lint + format check) and mypy. The mypy scope is the
 # [tool.mypy] `files` list in pyproject.toml (the single source of truth): the
 # enterprise_rag CLI (cli.py) and graph engine surface
-# (engine/config/formatting/state/consts plus nodes/ and chains/) and the
-# office_agent package, including office_agent/llm_assist/. A type regression
-# in any of those fails this job.
+# (engine/config/formatting/state/consts plus nodes/ and chains/), the
+# office_agent package including office_agent/llm_assist/, and the api/ adapter.
+# The api dependency group is installed here too so mypy can resolve
+# fastapi/pydantic when type-checking api/. A type regression in any of those
+# fails this job.
 # No API keys required. Runs in parallel with mocked-tests so test feedback
 # is never delayed by lint failures.
 
@@ -49,10 +63,13 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies from the committed lockfile
-        run: uv sync --locked --group dev
+        run: uv sync --locked --group dev --group api
 
       - name: Run mocked test suites (no API keys required)
         run: uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -q --cov=enterprise_rag --cov=office_agent --cov-report=term
+
+      - name: Run mocked API adapter tests (no API keys required)
+        run: uv run pytest tests/api/ -q
 
   lint:
     runs-on: ubuntu-latest
@@ -69,7 +86,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies from the committed lockfile
-        run: uv sync --locked --group dev
+        run: uv sync --locked --group dev --group api
 
       - name: Lint with ruff
         run: uv run ruff check .
@@ -79,3 +96,37 @@ jobs:
 
       - name: Type-check scoped modules with mypy
         run: uv run mypy
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Node 20 LTS (with npm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies from the committed lockfile
+        run: npm ci
+
+      - name: Build (type-checks via tsc, then bundles with Vite)
+        run: npm run build
+
+      - name: Run frontend tests (Vitest + React Testing Library)
+        run: npm test
+
+      - name: Install Playwright Chromium (with system deps)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run responsive verification (Playwright, Chromium, mock mode)
+        run: npm run test:responsive

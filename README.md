@@ -98,15 +98,17 @@ deterministic Office capabilities keep working.
 │   ├── tools/                   #   knowledge, email, calendar, tickets, briefing, meeting, approvals
 │   ├── llm_assist/              #   Isolated boundary for optional, structured, grounded Office LLM assists (default off)
 │   └── mock_data/               #   Fictional AcmeCorp JSON (read-only, deterministic)
+├── api/                         # ✅ Thin FastAPI adapter over answer_office_request() — GET /api/health, POST /api/agent/run (localhost demo)
+├── frontend/                    # ✅ Vite + React + TS observability workspace — see frontend/README.md
 ├── scripts/demo_office_agent_v1.py  # Local-only Office Agent demo
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
 │   ├── engineering/             #   Onboarding, testing strategy, release checklist
 │   ├── releases/                #   Release notes (office-agent-v1.6.md)
-│   └── adr/                     #   Architecture Decision Records 001–020 (repo-level; index in docs/adr/README.md)
+│   └── adr/                     #   Architecture Decision Records 001–021 (repo-level; index in docs/adr/README.md)
 ├── evals/                       # Eval harnesses by module (not in CI): enterprise_rag/ (RAG behavioral eval) + office_agent/llm_assist/ (assist evals)
-├── tests/                       # enterprise_rag/{nodes,graph,evals} + office_agent/ (fully mocked); chains/ + office_agent/integration/ (key-gated)
-├── .github/workflows/ci.yml     # CI: fully mocked suites + lint — no API keys
+├── tests/                       # enterprise_rag/{nodes,graph,evals} + office_agent/ + api/ (fully mocked); chains/ + office_agent/integration/ (key-gated)
+├── .github/workflows/ci.yml     # CI: mocked suites (incl. tests/api/) + lint + frontend build/test — no API keys
 ├── pyproject.toml               # uv project config (deps, ruff, mypy, pytest)
 └── CLAUDE.md                    # Repo-level guidance for Claude Code
 ```
@@ -160,6 +162,55 @@ Or call it programmatically via `office_agent.engine.answer_office_request(...)`
 See [`office_agent/README.md`](office_agent/README.md) for the full
 capability list, routing precedence, and example requests.
 
+### Observability workspace (web UI)
+
+A single **three-pane web workspace** ([`frontend/`](frontend/README.md)) exercises
+all seven capabilities plus the `unknown` route through one composer and surfaces
+the engines' **existing** observability — run ids, node paths, per-node timings,
+counters, stop reasons, caveats, and privacy-mode state. It talks to a **thin
+FastAPI adapter** ([`api/`](api/)) over two endpoints — `GET /api/health` and
+`POST /api/agent/run` — whose only engine call is `answer_office_request()`; it
+duplicates no routing, formatting, privacy, or fallback logic.
+
+The workspace exposes two clearly separated settings layers:
+
+- **Server policy (read-only).** The top status badges come from `GET /api/health`
+  and report backend/runtime policy — privacy mode, offline mode, Office LLM
+  availability, and effective web-search availability. They are informational only;
+  the frontend cannot weaken server policy.
+- **Run Settings (interactive, per-run).** Controls beside the composer — Privacy
+  (Standard / Strict), LLM Assist (Off / On), Web Search (Off / On) — apply to a
+  single submitted run via an optional `options` object on the request body. The
+  backend resolves them against server policy (a request can only *restrict*, never
+  enable a prohibited path) and reports the authoritative `requested` / `effective` /
+  `applicability` / `constraints` back as `run_settings`. Omitting `options`
+  preserves the original behavior and returns `run_settings: null`.
+
+It is a **localhost-only demo surface** — no auth, no database, no deployment
+tooling — and every displayed value traces to a named engine field: adapter-measured
+`duration_ms` and adapter-derived `execution_mode` are labeled as such, the
+Knowledge Q&A timeline appears only when the engine reported it (never fabricated),
+and `effective` Run Settings are shown only from the backend. See
+[ADR 021](docs/adr/021-frontend-observability-workspace.md).
+
+```powershell
+# 1. Start the adapter (localhost only). The deterministic six capabilities and the
+#    unknown route need no keys; only a real Knowledge Q&A run reaches the RAG engine.
+uv sync --group dev --group api
+uv run uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000
+
+# 2. In another terminal, start the frontend (Vite dev server proxies /api → :8000).
+cd frontend
+npm install            # or `npm ci` against the committed package-lock.json
+npm run dev
+
+# Offline demo without the adapter: run the UI over typed fixtures instead.
+#   VITE_API_MODE=mock npm run dev
+```
+
+See [`frontend/README.md`](frontend/README.md) for the full stack, scripts,
+mock/http client modes, and the honest-observability principles.
+
 ## Tests
 
 ```powershell
@@ -208,9 +259,11 @@ re-run the commands above for present totals):
 - `mypy`: **passed**
 
 GitHub Actions CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs
-two parallel keys-free jobs on every push and pull request: **`mocked-tests`**
-(the fully mocked suites) and **`lint`** (`ruff check`, `ruff format --check`, and
-scoped `mypy`). The key-gated `tests/enterprise_rag/chains/` and
+three parallel keys-free jobs on every push and pull request: **`mocked-tests`**
+(the fully mocked suites, including `tests/api/`), **`lint`** (`ruff check`,
+`ruff format --check`, and scoped `mypy`, now covering `api/`), and **`frontend`**
+(`npm ci`, `npm run build`, `npm test` on Node 20). No job uses API keys and none
+performs any deployment step. The key-gated `tests/enterprise_rag/chains/` and
 `tests/office_agent/integration/` suites and the full eval run are
 deliberately excluded.
 
@@ -222,8 +275,13 @@ deliberately excluded.
 - **No LLM routing** in the Office Agent — intent classification is pure keyword
   matching by design (fast, offline, reproducible).
 - **Single-turn** — neither module carries conversation memory.
-- **No frontend, deployment tooling, or external integrations** ship in this
-  repository; those are explicitly out of scope.
+- **The web workspace is a localhost-only demo surface.** A
+  [React observability workspace](frontend/README.md) and a
+  [thin FastAPI adapter](api/) ship for local demonstration, but **deployment
+  tooling** (Docker, hosting), **authentication**, **persistence**, and **external
+  integrations** remain explicitly out of scope. The adapter duplicates no engine
+  logic — it only calls `answer_office_request()` (see
+  [ADR 021](docs/adr/021-frontend-observability-workspace.md)).
 - The `enterprise_rag` engine's own limitations (single-turn CLI, `print`-based
   logging, sequential grading, prompt-level-only injection defense) are detailed
   in [`structure.md`](structure.md) §15.
@@ -237,6 +295,9 @@ deliberately excluded.
 - **[`office_agent/README.md`](office_agent/README.md)** — the
   dedicated Office Agent demo & usage doc: all seven capabilities, routing
   precedence, the programmatic API, and example requests.
+- **[`frontend/README.md`](frontend/README.md)** — the observability workspace:
+  stack, scripts, the mock/http client modes, the thin-adapter boundary, and the
+  honest-observability principles.
 - **[`docs/engineering/onboarding.md`](docs/engineering/onboarding.md)** — new-engineer
   onboarding: repo layout, setup, module boundary, how to add a tool safely, and a
   pre-PR checklist.
@@ -258,6 +319,8 @@ deliberately excluded.
   default-off Office LLM assists are the Email Summary digest
   ([ADR 017](docs/adr/office_agent/017-office-agent-llm-assist-email-digest.md)) and the Daily
   Briefing narrative ([ADR 018](docs/adr/office_agent/018-office-agent-llm-assist-daily-briefing.md)).
+  The web workspace and thin FastAPI adapter are
+  [ADR 021](docs/adr/021-frontend-observability-workspace.md).
 
 ## Working in this repository
 

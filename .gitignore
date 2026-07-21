@@ -17,6 +17,14 @@ __pycache__/
 # The Vite frontend is npm-managed; its build output is covered by `dist/` below.
 node_modules/
 
+# ---- Playwright (frontend responsive e2e) ----
+# Generated report / artifact dirs; never committed. Browser binaries live in a
+# global cache outside the repo, so they need no ignore here.
+playwright-report/
+blob-report/
+test-results/
+/frontend/playwright/.cache/
+
 # ---- Virtual environments ----
 .venv/
 venv/
