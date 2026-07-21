@@ -23,6 +23,15 @@ def _script_input(monkeypatch, responses):
     monkeypatch.setattr(builtins, "input", lambda _prompt="": next(it))
 
 
+def _raising_input(monkeypatch, exc):
+    """Make the next input() call raise `exc` (e.g. Ctrl+C / EOF at the prompt)."""
+
+    def _raise(_prompt=""):
+        raise exc
+
+    monkeypatch.setattr(builtins, "input", _raise)
+
+
 def test_cli_renders_intent_tool_and_content(monkeypatch, capsys):
     _script_input(monkeypatch, ["show pending approvals", "exit"])
     monkeypatch.setattr(
@@ -132,6 +141,52 @@ def test_cli_strips_the_request_and_exit_is_case_insensitive(monkeypatch, capsys
 
     assert seen == ["show pending approvals"]  # surrounding whitespace dropped
     assert "Bye." in capsys.readouterr().out  # uppercase EXIT still ends the loop
+
+
+def test_cli_engine_exception_is_type_only_and_loop_continues(monkeypatch, capsys):
+    # An unexpected engine error (e.g. from the Knowledge Q&A / RAG path) must
+    # not crash the CLI or leak the exception message: only the exception *type*
+    # is surfaced, and the loop survives to the next prompt (here, an exit).
+    _script_input(monkeypatch, ["trigger failure", "exit"])
+
+    secret = "C:/secrets/api_key.env::sk_live_DO_NOT_ECHO"
+
+    def boom(_request):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(cli, "answer_office_request", boom)
+
+    cli.main()  # must not raise
+    out = capsys.readouterr().out
+
+    assert "RuntimeError" in out  # the exception type is surfaced
+    assert secret not in out  # the full message never printed
+    assert "sk_live_DO_NOT_ECHO" not in out  # no secret fragment
+    assert "api_key" not in out  # no path fragment
+    assert "Traceback" not in out  # no traceback
+    assert "Bye." in out  # the loop survived to the explicit exit
+
+
+def test_cli_exits_cleanly_on_keyboard_interrupt(monkeypatch, capsys):
+    # Ctrl+C at the prompt exits like a quit command, with no traceback.
+    _raising_input(monkeypatch, KeyboardInterrupt())
+
+    cli.main()  # must not raise
+    out = capsys.readouterr().out
+
+    assert "Bye." in out
+    assert "Traceback" not in out
+
+
+def test_cli_exits_cleanly_on_eof(monkeypatch, capsys):
+    # EOF (piped/closed stdin) exits like a quit command, with no traceback.
+    _raising_input(monkeypatch, EOFError())
+
+    cli.main()  # must not raise
+    out = capsys.readouterr().out
+
+    assert "Bye." in out
+    assert "Traceback" not in out
 
 
 def test_root_main_delegates_to_office_cli():

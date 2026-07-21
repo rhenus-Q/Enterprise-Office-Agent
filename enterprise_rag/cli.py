@@ -60,7 +60,14 @@ def main() -> None:
         )
 
     while True:
-        question = input("Enter your question:\n> ").strip()
+        try:
+            question = input("Enter your question:\n> ").strip()
+        except (KeyboardInterrupt, EOFError):
+            # Ctrl+C / EOF at the prompt: exit cleanly, exactly like an explicit
+            # quit command -- never surface a traceback. These are control-flow
+            # signals, not engine failures.
+            print("\nBye.")
+            break
 
         if question.lower() in ["exit", "quit", "q"]:
             print("Bye.")
@@ -69,10 +76,20 @@ def main() -> None:
         if not question:
             continue
 
-        # The engine seeds the full GraphState (including the per-run
-        # web_search_enabled / web_fallback_policy resolution) and runs the
-        # compiled graph.
-        result = answer_question(question)
+        # The engine handles *expected* dependency failures internally, but its
+        # contract does not promise an AnswerResult for an unexpected internal
+        # error. Keep the interactive loop alive on such an error and, matching
+        # the repo convention (console banners, the API adapter's 500), surface
+        # only the exception *type* -- a message could carry paths or secrets.
+        try:
+            # The engine seeds the full GraphState (including the per-run
+            # web_search_enabled / web_fallback_policy resolution) and runs the
+            # compiled graph.
+            result = answer_question(question)
+        except Exception as exc:
+            print(f"\n---REQUEST FAILED ({type(exc).__name__})---")
+            print("-" * 80)
+            continue
 
         print("\nAnswer:")
         print(format_answer(result.raw_state))

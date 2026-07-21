@@ -279,6 +279,15 @@ def test_format_answer_no_caveat_on_success():
     assert format_answer({"generation": "Clean answer.", "stop_reason": ""}) == "Clean answer."
 
 
+def test_web_search_error_caveat_is_recovery_safe():
+    # The web_search_error caveat must stay truthful whether every web-search
+    # attempt failed or a later retry recovered: it must not claim the answer
+    # was based only on the local knowledge base, nor imply no web source was
+    # used. (The fail-then-succeed lifecycle is exercised end-to-end below.)
+    assert "only from the local knowledge base" not in WEB_SEARCH_ERROR_NOTE
+    assert "web search attempt failed" in WEB_SEARCH_ERROR_NOTE.lower()
+
+
 # ---------------------------------------------------------------------------
 # Compiled graph end-to-end
 # ---------------------------------------------------------------------------
@@ -343,9 +352,8 @@ def test_app_compound_source_failure_keeps_retrieval_error_over_web_search_error
     # Compound whole-source failure: local retrieval fails (retrieval_error) and
     # the web fallback then also fails (Tavily raises). retrieval_error is the
     # more upstream cause, so it must survive -- the run must NOT end with
-    # web_search_error, whose caveat ("answered only from the local knowledge
-    # base") would misdescribe a run in which the local knowledge base was
-    # itself unavailable.
+    # web_search_error, whose caveat would point at web search when the real
+    # degradation was that the local knowledge base itself was unavailable.
     _patch_router(monkeypatch, RETRIEVE)
     _patch_graders(monkeypatch, grounded=True, useful=True)
     web_calls = _patch_all_node_seams(monkeypatch, retriever_raises=True, web_tool_raises=True)
@@ -360,6 +368,106 @@ def test_app_compound_source_failure_keeps_retrieval_error_over_web_search_error
     caveat = format_answer(result)
     assert RETRIEVAL_ERROR_NOTE in caveat
     assert WEB_SEARCH_ERROR_NOTE not in caveat
+
+
+def test_app_web_search_error_persists_but_caveat_stays_truthful_after_recovery(monkeypatch):
+    # Fail-then-succeed lifecycle: a FIRST web-search attempt fails
+    # (web_search_error recorded), the grounded-but-not-useful gate rewrites the
+    # query and retries, and a LATER web-search attempt SUCCEEDS, contributing a
+    # vetted web supplement to the final, useful answer.
+    #
+    # The machine-readable web_search_error stop_reason must PERSIST (no node
+    # clears it on recovery, and no unrelated reason overwrites it), but its
+    # user-facing caveat must stay truthful -- it must not claim the answer used
+    # only the local knowledge base, since a web source did contribute.
+    _patch_router(monkeypatch, RETRIEVE)
+
+    # Grounded throughout; not useful for the first two answers, useful once the
+    # recovered web supplement is in context.
+    useful_seq = iter([False, False, True])
+    monkeypatch.setattr(
+        graph_module,
+        "get_hallucination_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_grounded=True)),
+    )
+    monkeypatch.setattr(
+        graph_module,
+        "get_answer_grader",
+        lambda: SimpleNamespace(
+            invoke=lambda p: SimpleNamespace(answers_question=next(useful_seq))
+        ),
+    )
+
+    retrieve_module = importlib.import_module("enterprise_rag.graph.nodes.retrieve")
+    grade_module = importlib.import_module("enterprise_rag.graph.nodes.grade_documents")
+    generate_module = importlib.import_module("enterprise_rag.graph.nodes.generate")
+    web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
+    rewrite_module = importlib.import_module("enterprise_rag.graph.nodes.rewrite_query")
+
+    # A relevant local chunk so generation always has real context (never the
+    # empty-context insufficient-context short-circuit).
+    monkeypatch.setattr(
+        retrieve_module,
+        "get_node_retriever",
+        lambda: SimpleNamespace(invoke=lambda q: [Document(page_content="local chunk")]),
+    )
+    monkeypatch.setattr(
+        grade_module,
+        "get_retrieval_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=True)),
+    )
+    # Vet the web results as relevant once a search succeeds.
+    monkeypatch.setattr(
+        web_module,
+        "get_retrieval_grader",
+        lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=True)),
+    )
+
+    answers = iter(["ANSWER 1", "ANSWER 2", "ANSWER 3"])
+    monkeypatch.setattr(
+        generate_module,
+        "generate_answer",
+        lambda q, d, retry_feedback="": next(answers),
+    )
+    monkeypatch.setattr(
+        rewrite_module,
+        "get_query_rewriter",
+        lambda: SimpleNamespace(invoke=lambda p: "rewritten query"),
+    )
+
+    # Web tool: the first attempt fails (Tavily down), a later attempt succeeds.
+    web_calls = []
+
+    class FailThenSucceedWebTool:
+        def invoke(self, payload):
+            web_calls.append(payload)
+            if len(web_calls) == 1:
+                raise TimeoutError("tavily timed out")
+            return [{"content": "web result"}]
+
+    monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FailThenSucceedWebTool())
+
+    result = graph_module.app.invoke(_initial_state())  # must not raise
+
+    # Both attempts happened: the first failed, a later one succeeded.
+    assert len(web_calls) == 2
+    assert result["web_search_count"] == 2  # both attempts counted (bounded)
+    assert result["retries"] <= graph_module.MAX_RETRIES  # loop stayed bounded
+    # The vetted web supplement reached the final documents.
+    assert any(d.metadata.get("source") == "web_search" for d in result["documents"])
+    # The answer completed and passed both gates.
+    assert result["generation"] == "ANSWER 3"
+    # web_search_error persists: recovery does not clear it and no unrelated
+    # stop reason overwrote it.
+    assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_ERROR
+
+    formatted = format_answer(result)
+    # The recovery-safe caveat is present ...
+    assert WEB_SEARCH_ERROR_NOTE in formatted
+    # ... a web source is cited (the retry's supplement) ...
+    assert "Web search:" in formatted
+    # ... and the obsolete "only from the local knowledge base" claim is gone.
+    assert "only from the local knowledge base" not in formatted
 
 
 def test_app_stops_safely_when_generation_fails(monkeypatch):

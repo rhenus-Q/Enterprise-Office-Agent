@@ -68,11 +68,14 @@ RETRIEVAL_ERROR_NOTE = (
     "Note: Local document retrieval failed, so the answer may be incomplete or unavailable."
 )
 
-# Caveat shown when the web search call (Tavily) failed; the run continued
-# with the local knowledge base only.
+# Caveat shown when a web search attempt (Tavily) failed during the run. The
+# run continues and may still incorporate web evidence from a later successful
+# retry, so the wording stays truthful whether every attempt failed or a later
+# one recovered: it never claims the answer used only the local knowledge base,
+# nor that no web source was used.
 WEB_SEARCH_ERROR_NOTE = (
-    "Note: Web search failed, so I answered only from the local knowledge "
-    "base. The answer may be incomplete."
+    "Note: A web search attempt failed during this run, so available web "
+    "evidence may be incomplete."
 )
 
 # Caveat shown when the generation LLM call itself failed; the answer above
