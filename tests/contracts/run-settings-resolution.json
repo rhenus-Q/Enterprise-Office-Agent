@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "_comment": "Shared cross-language contract for request-scoped Run Settings resolution. Consumed by tests/office_agent/test_run_settings_contract.py (Python, authoritative: office_agent.run_settings.resolve_run_settings) and frontend/src/mocks/run-settings-contract.test.ts (TypeScript: resolveMockRunSettings with each case's server policy injected). Every case runs in BOTH resolvers with no filtering and they must agree exactly — including the cases where a server privacy/offline mode blocks a requested *applicable* service, which the mock resolver reproduces by mirroring the Python constraint attribution, deduplication, and canonical ordering (see _blocked_reason / _CONSTRAINT_ORDER in run_settings.py). Each case's `server` object holds exactly the keyword inputs of resolve_run_settings. Test-only fixture; not shipped or imported by production code.",
+  "cases": [
+    {
+      "name": "knowledge-standard-web-requested-enabled",
+      "intent": "knowledge_qa",
+      "options": { "privacy_mode": "standard", "llm_assist": false, "web_search": true },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": false, "web_search": true },
+        "effective": { "privacy_mode": "standard", "llm_assist": false, "web_search": true },
+        "applicability": { "llm_assist": false, "web_search": true },
+        "constraints": []
+      }
+    },
+    {
+      "name": "email-standard-assist-requested-but-server-disabled",
+      "intent": "email_summary",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+        "effective": { "privacy_mode": "standard", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": true, "web_search": false },
+        "constraints": ["server_llm_assist_disabled"]
+      }
+    },
+    {
+      "name": "email-strict-request-blocks-assist-via-server-disabled",
+      "intent": "email_summary",
+      "options": { "privacy_mode": "strict", "llm_assist": true, "web_search": false },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "strict", "llm_assist": true, "web_search": false },
+        "effective": { "privacy_mode": "strict", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": true, "web_search": false },
+        "constraints": ["server_llm_assist_disabled"]
+      }
+    },
+    {
+      "name": "knowledge-strict-request-blocks-web-search",
+      "intent": "knowledge_qa",
+      "options": { "privacy_mode": "strict", "llm_assist": false, "web_search": true },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "strict", "llm_assist": false, "web_search": true },
+        "effective": { "privacy_mode": "strict", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": false, "web_search": true },
+        "constraints": ["request_privacy_strict"]
+      }
+    },
+    {
+      "name": "calendar-standard-both-not-applicable",
+      "intent": "calendar_lookup",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+        "effective": { "privacy_mode": "standard", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": false, "web_search": false },
+        "constraints": ["llm_assist_not_applicable", "web_search_not_applicable"]
+      }
+    },
+    {
+      "name": "email-standard-nothing-requested",
+      "intent": "email_summary",
+      "options": { "privacy_mode": "standard", "llm_assist": false, "web_search": false },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": false, "web_search": false },
+        "effective": { "privacy_mode": "standard", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": true, "web_search": false },
+        "constraints": []
+      }
+    },
+    {
+      "name": "briefing-standard-assist-requested-but-server-disabled",
+      "intent": "daily_briefing",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+        "effective": { "privacy_mode": "standard", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": true, "web_search": false },
+        "constraints": ["server_llm_assist_disabled"]
+      }
+    },
+    {
+      "name": "unknown-standard-both-not-applicable",
+      "intent": "unknown",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+        "effective": { "privacy_mode": "standard", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": false, "web_search": false },
+        "constraints": ["llm_assist_not_applicable", "web_search_not_applicable"]
+      }
+    },
+    {
+      "name": "email-server-privacy-blocks-requested-applicable-assist",
+      "intent": "email_summary",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+      "server": {
+        "server_privacy_mode": true,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": false
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+        "effective": { "privacy_mode": "strict", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": true, "web_search": false },
+        "constraints": ["server_privacy_mode"]
+      }
+    },
+    {
+      "name": "knowledge-server-privacy-blocks-requested-web-search",
+      "intent": "knowledge_qa",
+      "options": { "privacy_mode": "standard", "llm_assist": false, "web_search": true },
+      "server": {
+        "server_privacy_mode": true,
+        "server_offline_mode": false,
+        "server_llm_assist_available": false,
+        "server_web_search_available": false
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": false, "web_search": true },
+        "effective": { "privacy_mode": "strict", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": false, "web_search": true },
+        "constraints": ["server_privacy_mode"]
+      }
+    },
+    {
+      "name": "email-open-server-standard-assist-enabled",
+      "intent": "email_summary",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": false,
+        "server_llm_assist_available": true,
+        "server_web_search_available": true
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+        "effective": { "privacy_mode": "standard", "llm_assist": true, "web_search": false },
+        "applicability": { "llm_assist": true, "web_search": false },
+        "constraints": []
+      }
+    },
+    {
+      "name": "email-server-offline-blocks-requested-assist-web-not-applicable",
+      "intent": "email_summary",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": true,
+        "server_llm_assist_available": false,
+        "server_web_search_available": false
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+        "effective": { "privacy_mode": "strict", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": true, "web_search": false },
+        "constraints": ["server_offline_mode", "web_search_not_applicable"]
+      }
+    },
+    {
+      "name": "calendar-server-offline-constraint-ordering",
+      "intent": "calendar_lookup",
+      "options": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+      "server": {
+        "server_privacy_mode": false,
+        "server_offline_mode": true,
+        "server_llm_assist_available": false,
+        "server_web_search_available": false
+      },
+      "expected": {
+        "requested": { "privacy_mode": "standard", "llm_assist": true, "web_search": true },
+        "effective": { "privacy_mode": "strict", "llm_assist": false, "web_search": false },
+        "applicability": { "llm_assist": false, "web_search": false },
+        "constraints": ["server_offline_mode", "llm_assist_not_applicable", "web_search_not_applicable"]
+      }
+    }
+  ]
+}
