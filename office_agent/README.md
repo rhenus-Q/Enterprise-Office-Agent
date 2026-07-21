@@ -88,7 +88,44 @@ print(response.content)   # the rendered briefing text
 
 `response` is an `OfficeAgentResponse` with `intent`, `content`, `tool`,
 `stop_reason`, `sources`, and `run_id` (the last three are populated for
-Knowledge Q&A, which carries through the `enterprise_rag` caveats and sources).
+Knowledge Q&A, which carries through the `enterprise_rag` caveats and sources),
+plus two additive, default-`None` fields
+([ADR 021](../docs/adr/021-frontend-observability-workspace.md)):
+
+- `observability` — a `KnowledgeObservability` with the `enterprise_rag` run
+  metadata (run id, node path, per-node timings, counters, caveat). Only the
+  Knowledge Q&A adapter sets it; every other tool leaves it `None`.
+- `run_settings` — a `ResolvedRunSettings` reporting `requested` / `effective` /
+  `applicability` / `constraints`. Set only when the caller passed per-run
+  `options`; `None` otherwise.
+
+### Request-scoped run options (optional)
+
+`answer_office_request(user_input, options=None)` accepts an optional frozen
+`OfficeRunOptions` (defaults: `privacy_mode="standard"`, `llm_assist=False`,
+`web_search=False` — constructing one never silently enables anything):
+
+```python
+from office_agent.engine import answer_office_request
+from office_agent.run_settings import OfficeRunOptions
+
+response = answer_office_request(
+    "summarize unread emails",
+    OfficeRunOptions(privacy_mode="standard", llm_assist=True),
+)
+print(response.run_settings.effective.llm_assist)
+```
+
+Omitting `options` (the default) preserves the previous behavior exactly —
+every tool uses the server defaults and `run_settings` is `None`. When
+supplied, the options are resolved **after** routing against server policy
+(precedence `OFFLINE_MODE` > `PRIVACY_MODE` > server flags > per-run request):
+a request can only *restrict* a run — turn LLM assist or web search off, or run
+privacy-strict — never enable a path the server prohibits. Resolution is a pure
+function over frozen dataclasses (no environment reads, no module globals), so
+concurrent requests with different settings stay isolated. The HTTP wire shape
+of the same data lives in `api/schemas.py` (`AgentRunRequest.options` in,
+`run_settings` on the response), mapping these dataclasses 1:1.
 
 ### Example requests
 

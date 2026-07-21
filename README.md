@@ -271,7 +271,9 @@ GitHub Actions CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs
 three parallel keys-free jobs on every push and pull request: **`mocked-tests`**
 (the fully mocked suites, including `tests/api/`), **`lint`** (`ruff check`,
 `ruff format --check`, and scoped `mypy`, now covering `api/`), and **`frontend`**
-(`npm ci`, `npm run build`, `npm test` on Node 20). No job uses API keys and none
+(`npm ci`, `npm run build`, `npm test`, and — after
+`npx playwright install --with-deps chromium` — `npm run test:responsive` on
+Node 20). No job uses API keys and none
 performs any deployment step. The key-gated `tests/enterprise_rag/chains/` and
 `tests/office_agent/integration/` suites and the full eval run are
 deliberately excluded.

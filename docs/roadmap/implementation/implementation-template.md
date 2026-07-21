@@ -70,6 +70,13 @@ Example:
 * `uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -q` — passed.
 * `uv run python evals/enterprise_rag/run_eval.py --validate-only` — passed.
 
+Conditional examples, by area touched:
+
+* `uv run pytest tests/api/ -q` — passed (only when the change touched `api/`
+  or the Office Agent response contract).
+* From `frontend/`: `npm run build`, `npm test`, `npm run test:responsive` —
+  passed (only when the change touched `frontend/`).
+
 If full eval was run, include:
 
 * command

@@ -148,8 +148,9 @@ Requires **Python ≥ 3.11** and [uv](https://docs.astral.sh/uv/).
 git clone https://github.com/rhenus-Q/Enterprise-Office-Agent.git
 cd Enterprise-Office-Agent
 
-# 2. Install dependencies (creates .venv from the committed uv.lock)
-uv sync --group dev
+# 2. Install dependencies (creates .venv from the committed uv.lock; the api
+#    group lets the repo-wide pytest run collect tests/api/)
+uv sync --group dev --group api
 
 # 3. Configure environment variables
 Copy-Item .env.example .env   # then edit .env and add your keys
@@ -485,7 +486,8 @@ uv run pytest tests/enterprise_rag/graph/ -v
 # Eval-harness helper tests — fully mocked, NO API keys required
 uv run pytest tests/enterprise_rag/evals/ -v
 
-# RAG chain integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
+# RAG chain integration tests — real gpt-5-mini; marked real_model, so they skip
+# unless RUN_REAL_MODEL_TESTS=1 and OPENAI_API_KEY are both set
 uv run pytest tests/enterprise_rag/chains/ -v
 
 # Whole suite
@@ -497,18 +499,24 @@ The Office Agent has its own suites at the repo root — the fully mocked
 `gpt-5-mini` for the two LLM assists) — documented in the
 [Office Agent demo doc](../office_agent/README.md), not here.
 
-CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs two parallel
-jobs on every push and pull request — both keys-free:
+CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs three parallel
+jobs on every push and pull request — all keys-free:
 
 * **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/`,
-  `tests/enterprise_rag/graph/`, `tests/enterprise_rag/evals/`, and the Office
-  Agent's `tests/office_agent/` excluding its gated `integration/`), which also
+  `tests/enterprise_rag/graph/`, `tests/enterprise_rag/evals/`, the Office
+  Agent's `tests/office_agent/` excluding its gated `integration/`, and the
+  mocked thin-adapter suite `tests/api/`), which also
   doubles as a regression test that imports stay side-effect-free.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy`. The mypy scope is
   the `[tool.mypy]` `files` list in `pyproject.toml`: the standalone CLI
   (`enterprise_rag/cli.py`) and the engine-API surface
   (`engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py`) plus the
-  graph `nodes/` and `chains/` packages, plus the whole `office_agent/` package.
+  graph `nodes/` and `chains/` packages, the whole `office_agent/` package, and
+  the `api/` adapter.
+* **`frontend`**: the web workspace's `npm ci`, `npm run build`, `npm test`
+  (Vitest), and `npm run test:responsive` (Playwright, typed mock mode) on
+  Node 20 — the presentation tier is documented in the
+  [repo-level README](../README.md) and [structure.md](../structure.md), not here.
 
 The key-gated integration suites (`tests/enterprise_rag/chains/`,
 `tests/office_agent/integration/`) and
@@ -539,8 +547,8 @@ Mypy's scope is the `[tool.mypy]` `files` list in [`pyproject.toml`](../pyprojec
 the standalone CLI (`enterprise_rag/cli.py`),
 the engine-API surface (`enterprise_rag/graph/engine.py`, `enterprise_rag/graph/config.py`,
 `enterprise_rag/graph/formatting.py`, `enterprise_rag/graph/state.py`, `enterprise_rag/graph/consts.py`),
-the graph `enterprise_rag/graph/nodes/` and `enterprise_rag/graph/chains/` packages, and the whole
-`office_agent/` package. The graph-assembly module (`enterprise_rag/graph/graph.py`),
+the graph `enterprise_rag/graph/nodes/` and `enterprise_rag/graph/chains/` packages, the whole
+`office_agent/` package, and the `api/` adapter package. The graph-assembly module (`enterprise_rag/graph/graph.py`),
 `enterprise_rag/ingestion.py`, and the tests stay outside scope (`graph.py` and
 `ingestion.py` are followed silently when imported by in-scope modules). Mypy is
 **not** a pre-commit hook (hook-venv isolation makes it unreliable for
@@ -594,15 +602,15 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model                      |
 | External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories           | Real OpenAI API calls                                                                         |
-| Requirements   | No API keys                                                                                                                  | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
+| Requirements   | No API keys                                                                                                                  | `RUN_REAL_MODEL_TESTS=1` + `OPENAI_API_KEY` (marked `real_model` via `requires_openai`; skipped, not failed, without both) |
 | Speed / cost   | Seconds, free                                                                                                                | ~1 minute, small API cost                                                                     |
-| CI             | Run keys-free on every push/PR (the `mocked-tests` job, alongside `tests/office_agent/`)                                     | Excluded from CI — needs a real key                                                           |
+| CI             | Run keys-free on every push/PR (the `mocked-tests` job, alongside `tests/office_agent/` and `tests/api/`)                    | Excluded from CI — needs a real key                                                           |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
 ## Current Limitations
 
-* **Single-turn CLI** — no conversation memory; each question is independent. No API/web surface.
+* **Single-turn CLI** — no conversation memory; each question is independent. The engine has no HTTP endpoint of its own: its Knowledge Q&A path is exposed on the web only through the Office Agent adapter and the repository's presentation tier (`api/` + `frontend/`, [ADR 021](../docs/adr/021-frontend-observability-workspace.md)), whose only engine call is `answer_office_request()` — never this engine directly.
 * **Observability is split across two layers, but not yet production-grade** — LangSmith tracing is supported through environment variables, and the engine records lightweight per-run metadata (`run_id`, node path, timings, counters, stop reasons, and optional trace JSON). However, console logs are still `print()`-based, there is no structured logging or metrics backend, and the README does not yet include trace screenshots or saved LangSmith trace examples.
 * **Per-document sequential grading** — relevance grading makes one LLM call per chunk/result, so latency and cost scale with the number of items graded.
 * **Grounding feedback is coarse-grained** — failed grounding currently produces a fixed corrective instruction, not a rationale listing which claims were unsupported.

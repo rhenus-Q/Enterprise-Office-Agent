@@ -24,13 +24,16 @@ office_agent/           # Office-workflow agent: deterministic router + base too
   router.py             #   Keyword intent router (no LLM)
   engine.py             #   answer_office_request() entry point + dispatch
   schemas.py            #   Intent constants + typed dataclasses
+  run_settings.py       #   Request-scoped Run Settings resolver (pure; server policy wins — ADR 021)
   tools/                #   One tool per intent
   llm_assist/           #   Optional, default-off LLM assists (email digest + briefing narrative)
   mock_data/            #   Fictional AcmeCorp JSON (read-only, deterministic)
+api/                    # Thin FastAPI adapter over answer_office_request(): GET /api/health + POST /api/agent/run (ADR 021)
+frontend/               # Vite + React + TypeScript observability workspace (npm-managed; see frontend/README.md)
 scripts/                # Local demos (demo_office_agent_v1.py)
-tests/                  # enterprise_rag/{nodes,graph,evals} + office_agent/ (mocked) + enterprise_rag/chains/ & office_agent/integration/ (key-gated real-model)
+tests/                  # enterprise_rag/{nodes,graph,evals} + office_agent/ + api/ (mocked) + enterprise_rag/chains/ & office_agent/integration/ (key-gated real-model)
 evals/                  # Behavioral evals (not in CI): enterprise_rag/ + office_agent/llm_assist/
-docs/                   # ADRs (adr/), engineering docs, release notes
+docs/                   # ADRs (adr/), engineering docs, release notes, employee quickstart (employee-guide/)
 ```
 
 ## Module boundary (read this first)
@@ -57,6 +60,13 @@ docs/                   # ADRs (adr/), engineering docs, release notes
   the deterministic output on any failure. They are presentation layers — **not**
   new intents or capabilities — and, alongside Knowledge Q&A, the only sanctioned
   LLM paths in `office_agent`. The router itself remains LLM-free.
+- **The presentation tier (`api/` + `frontend/`) adds no engine behavior**
+  ([ADR 021](../adr/021-frontend-observability-workspace.md)). The thin FastAPI
+  adapter's only engine call is `office_agent.engine.answer_office_request()` —
+  it never calls `enterprise_rag` directly and duplicates no routing, privacy,
+  formatting, or tool logic. The frontend reaches the Office Agent only through
+  the adapter's two endpoints (`GET /api/health`, `POST /api/agent/run`) and
+  re-derives nothing the backend owns.
 
 ## Setup with uv
 
@@ -64,7 +74,8 @@ Requires **Python ≥ 3.11** and [uv](https://docs.astral.sh/uv/). Run everythin
 from the repository root.
 
 ```powershell
-uv sync --group dev                 # create .venv from the committed uv.lock
+uv sync --group dev --group api     # create .venv from the committed uv.lock (the api group is
+                                    # needed: pytest collects tests/api/ and mypy type-checks api/)
 uv run pre-commit install           # one-time per clone (mirrors CI lint)
 ```
 
@@ -95,6 +106,22 @@ uv run python scripts/demo_office_agent_v1.py --include-knowledge   # also hits 
 For the full capability list, routing precedence, and example requests, see the
 dedicated demo / usage doc: [`office_agent/README.md`](../../office_agent/README.md).
 
+## Run the web workspace (optional)
+
+The observability workspace runs against the thin adapter — the deterministic
+capabilities and the `unknown` route need no API keys:
+
+```powershell
+uv run uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000
+
+cd frontend
+npm install          # or `npm ci` against the committed package-lock.json
+npm run dev          # Vite dev server (proxies /api → http://127.0.0.1:8000)
+```
+
+See [`frontend/README.md`](../../frontend/README.md) for the client modes and
+the honest-observability rules.
+
 ## Run the tests
 
 ```powershell
@@ -104,7 +131,10 @@ uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/ente
 # Office Agent suite only
 uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v
 
-# Whole suite (integration tests are skipped without OPENAI_API_KEY)
+# Mocked API adapter suite — keys-free, needs the api dependency group
+uv run pytest tests/api/ -v
+
+# Whole ordinary suite (real-model tests skip unless RUN_REAL_MODEL_TESTS=1 and OPENAI_API_KEY are set)
 uv run pytest -v
 ```
 
@@ -132,6 +162,9 @@ uv run mypy                    # type-check the scoped engine-API surface
 | Office LLM assists (optional, default-off) | [`office_agent/llm_assist/`](../../office_agent/llm_assist/) — email digest + briefing narrative; `config.py` reads `OFFICE_LLM_ENABLED` / `OFFICE_LLM_REQUEST_TIMEOUT_SECONDS` |
 | Office Agent tests | [`tests/office_agent/`](../../tests/office_agent/) (mocked/offline) and [`tests/office_agent/integration/`](../../tests/office_agent/integration/) (gated real-model assist chains) |
 | Office assist behavioral evals | [`evals/office_agent/llm_assist/`](../../evals/office_agent/llm_assist/) — runners + `*_cases.jsonl` datasets |
+| Request-scoped Run Settings | [`office_agent/run_settings.py`](../../office_agent/run_settings.py) (`OfficeRunOptions`, `resolve_run_settings`; ADR 021) |
+| HTTP adapter (presentation tier) | [`api/`](../../api/) — `app.py` (`create_app()` factory, two routes) + `schemas.py` (Pydantic wire models); mocked tests in [`tests/api/`](../../tests/api/) |
+| Frontend observability workspace | [`frontend/`](../../frontend/) — see [`frontend/README.md`](../../frontend/README.md) |
 | Why the assists are shaped this way | [ADR 017](../adr/office_agent/017-office-agent-llm-assist-email-digest.md) (email digest), [ADR 018](../adr/office_agent/018-office-agent-llm-assist-daily-briefing.md) (briefing narrative) |
 
 ## How to add a new Office Agent tool safely
@@ -218,6 +251,8 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv run python scripts/demo_office_agent_v1.py # if you touched the Office Agent
+uv run pytest tests/api/ -v                   # if you touched api/ or the office_agent response contract
+cd frontend; npm run build; npm test; npm run test:responsive   # if you touched frontend/ (one-time: npx playwright install chromium)
 ```
 
 Prefer **small, scoped PRs**. Keep the diff minimal and reviewable, and update the

@@ -13,7 +13,7 @@ This repository — **Enterprise Office Agent** — is organized as named capabi
   knowledge base and falls back to web search when needed. Public entry point:
   `enterprise_rag.graph.engine.answer_question()`.
 - **`office_agent/`** — ✅ **implemented through v1.6 / Phase 7 (seven capabilities).** A
-  deterministic, LLM-free intent router — entry point `office_agent.engine.answer_office_request(user_input)`
+  deterministic, LLM-free intent router — entry point `office_agent.engine.answer_office_request(user_input, options=None)`
   — over local capabilities. Version map: **v1 / Phases 1–5** — **Knowledge Q&A** (a thin
   adapter over the `enterprise_rag` engine), **Email Summary**, **Calendar Lookup**,
   **Task / Ticket Assistant**, **Daily Briefing**; **v1.5 / Phase 6** — **Meeting Agent /
@@ -32,7 +32,8 @@ This repository — **Enterprise Office Agent** — is organized as named capabi
 Root docs (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) are repository-level;
 detailed engine usage lives in `enterprise_rag/README.md`, the dedicated Office Agent demo /
 usage doc is `office_agent/README.md`, and engineering / release docs live under
-`docs/engineering/` and `docs/releases/`.
+`docs/engineering/` and `docs/releases/` (plus the employee-facing quickstart in
+`docs/employee-guide/`).
 Most of this file is guidance for working in `enterprise_rag`; office-agent-specific rules are
 called out in §3.
 
@@ -107,15 +108,15 @@ service.
 | `enterprise_rag/graph/consts.py` | Node-name string constants (`RETRIEVE`, `GRADE_DOCUMENTS`, `GENERATE`, `WEBSEARCH`, `WEB_SEARCH_DISABLED_NOTICE`) and `stop_reason` values. |
 | `enterprise_rag/graph/nodes/` | Graph node functions: `retrieve`, `grade_documents`, `generate`, `web_search`, retry helpers (`add_grounding_feedback`, `rewrite_query`), plus terminal notice nodes (`web_search_disabled_notice`, `web_fallback_disabled_notice`, `max_retries_not_grounded_notice`, `max_retries_not_useful_notice`, `budget_exhausted_notice`, `tool_error_notice`) that record `stop_reason`, and `clear_transient_tool_error` (success-path pass-through: clears a stale transient `tool_error` once both gates pass). |
 | `enterprise_rag/graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. |
-| `tests/` | Test tree mirrors the two source modules: `tests/enterprise_rag/` and `tests/office_agent/`, with `tests/conftest.py` shared at the root. |
+| `tests/` | Test tree mirrors the two source modules plus the HTTP adapter: `tests/enterprise_rag/`, `tests/office_agent/`, and `tests/api/`, with `tests/conftest.py` shared at the root. |
 | `tests/enterprise_rag/nodes/` | Unit tests for `enterprise_rag` node functions. Fully mocked — no API keys needed. |
 | `tests/enterprise_rag/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
-| `tests/enterprise_rag/chains/` | Integration tests for the `enterprise_rag` chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
+| `tests/enterprise_rag/chains/` | Integration tests for the `enterprise_rag` chains. Call the real `gpt-5-mini` — marked `real_model`, so they skip unless `RUN_REAL_MODEL_TESTS=1` and `OPENAI_API_KEY` are both set. |
 | `tests/enterprise_rag/evals/` | Mocked unit tests for the Enterprise RAG eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
 | `tests/office_agent/` | Unit tests for the Office Agent (router, engine dispatch, each mock tool, and the LLM email-digest / briefing assists mocked at their seams). Fully mocked / deterministic — no OpenAI, Tavily, Chroma, or external services; no `enterprise_rag` graph call (the knowledge adapter is patched) and no real assist call. No API keys needed. |
 | `tests/office_agent/evals/` | Mocked unit tests for the two Office Agent LLM-assist eval runners (email digest + briefing narrative env loading and CONFIG/INFRA/EVAL_FAIL classification). No API keys needed. |
-| `tests/office_agent/integration/` | Gated real-model tests for the Office Agent LLM assists (email digest + briefing narrative; call the real `gpt-5-mini` — need `OPENAI_API_KEY`, marked `requires_openai`). Kept out of the mocked `tests/office_agent/` unit suite so it stays keys-free; gated like `tests/enterprise_rag/chains/`. |
-| `tests/api/` | Keys-free **mocked adapter tests** for `api/` (`fastapi.testclient` with `answer_office_request` and the flag readers monkeypatched — no real engine call): the health flag matrix, 1:1 field mapping, the `execution_mode` matrix, `text` length bounds, the type-only 500 handler, and the additive `observability` pass-through. Run in CI's `mocked-tests` job; needs the `api` dependency group installed. |
+| `tests/office_agent/integration/` | Gated real-model tests for the Office Agent LLM assists (email digest + briefing narrative; call the real `gpt-5-mini` — marked `requires_openai`/`real_model`, so they skip unless `RUN_REAL_MODEL_TESTS=1` and `OPENAI_API_KEY` are both set). Kept out of the mocked `tests/office_agent/` unit suite so it stays keys-free; gated like `tests/enterprise_rag/chains/`. |
+| `tests/api/` | Keys-free **mocked adapter tests** for `api/` (`fastapi.testclient` with `answer_office_request` and the flag readers monkeypatched — no real engine call): the health flag matrix, 1:1 field mapping, the `execution_mode` matrix, `text` length bounds, the type-only 500 handler, the additive `observability` / `run_settings` pass-through, the app-factory tracing-privacy enforcement, and the OpenAPI wire contract. Run in CI's `mocked-tests` job; needs the `api` dependency group installed. |
 | `evals/` | Evaluation harnesses, organized by owning module (root `evals/README.md` is a short navigation page). `evals/enterprise_rag/` is the **Enterprise RAG behavioral eval**; `evals/office_agent/llm_assist/` evaluates only the two optional Office Agent LLM assists (email digest + briefing narrative). Not part of CI. |
 | `evals/enterprise_rag/` | Behavioral eval harness for the RAG graph: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `enterprise_rag.graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report), and `history/`. A full run refuses under `OFFLINE_MODE` (`CONFIG ERROR`, exit 2, report/history untouched); `PRIVACY_MODE` deliberately does *not* block it, but forces web search off, so web-dependent rows fail by design. Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. |
 | `evals/enterprise_rag/history/` | Append-only, metadata-only eval history records (one JSON per full run; never answer text, `page_content`, prompts, or raw state). The harness only writes new records — never edits/deletes. `evals/enterprise_rag/history/*.json` is gitignored by default (the dir is tracked via `.gitkeep`); force-add (`git add -f`) to share a known-good baseline. |
@@ -123,8 +124,8 @@ service.
 | `docs/adr/` | Architecture Decision Records (001–021) with an index in `docs/adr/README.md`, split by owning scope: `docs/adr/enterprise_rag/` (001–014), `docs/adr/office_agent/` (015–018), and the repository-wide ADRs directly under `docs/adr/` — [019 — hierarchical runtime privacy modes](docs/adr/019-hierarchical-runtime-privacy-modes.md), [020 — module-owned CLI entry points](docs/adr/020-module-owned-cli-entry-points.md), and [021 — frontend observability workspace and thin FastAPI adapter](docs/adr/021-frontend-observability-workspace.md) (the presentation tier: `api/` + `frontend/`). When a documented decision changes, update or supersede the matching ADR. |
 | `docs/roadmap/` | A **local working-artifact area** (see `docs/roadmap/README.md`): `spec/`, `plan/`, `implementation/`, `commands-review/`, plus per-topic `<topic>-review/` dirs (e.g. `architecture-review/`, `security-review/`, `failure-modes-review/`, `test-coverage-review/`). Its contents are ignored by Git by default, and **exactly four files are version-controlled** (workflow infrastructure the `.claude/commands/` files depend on): `docs/roadmap/README.md`, `docs/roadmap/spec/spec-template.md`, `docs/roadmap/plan/plan-template.md`, and `docs/roadmap/implementation/implementation-template.md`. Everything else — specs, plans, implementation reports, and all review reports — **stays local and is never committed**. **Durable conclusions must be promoted** into the tracked documentation instead: `docs/adr/`, `docs/engineering/`, `docs/releases/`, the READMEs, `structure.md`, tests, or code. Reports from project-level `<topic>-review` commands (architecture, security, failure-modes, test-coverage) go under `docs/roadmap/<topic>-review/` with dated `<YYYY-MM-DD>-<focus-slug>-<topic>-review.md` collision-safe filenames and must not overwrite prior reports; `docs/roadmap/commands-review/` holds command-file review reports (e.g. `/review-command`). |
 | `.claude/commands/` | Claude Code slash-command workflow files (spec → plan → implement → review-diff; plus `arch-review`, command-authoring/review, and `update-claude-md`). Each has YAML frontmatter (`description`, `argument-hint`, `allowed-tools`); keep `allowed-tools` minimal and scoped (e.g. `Bash(git status:*)`, not blanket `Bash`). |
-| `tests/conftest.py` | Loads `.env` before collection; provides the `requires_openai` skip marker, which also skips (with an explicit offline reason) under `OFFLINE_MODE`. |
-| `pyproject.toml` | uv project config: deps, `[dependency-groups] dev` (pytest, pytest-cov, ruff, mypy, pre-commit), `[tool.pytest.ini_options]`, `[tool.ruff]`/`[tool.ruff.lint]`/`[tool.ruff.lint.per-file-ignores]`, and `[tool.mypy]`/`[[tool.mypy.overrides]]`. |
+| `tests/conftest.py` | Pytest bootstrap: isolates ordinary tests from the local environment (forces `OFFICE_LLM_ENABLED=false` and disables `.env` loading for the pytest process) and owns real-model gating — the canonical `real_model` marker (legacy `requires_openai` alias) skips unless `RUN_REAL_MODEL_TESTS=1` and the marker's named credentials (default `OPENAI_API_KEY`) are set, and always skips under `OFFLINE_MODE`. |
+| `pyproject.toml` | uv project config: deps, `[dependency-groups]` — `dev` (pytest, pytest-cov, ruff, mypy, pre-commit) and `api` (fastapi, uvicorn, httpx; required for `api/` and `tests/api/`) — `[tool.pytest.ini_options]`, `[tool.ruff]`/`[tool.ruff.lint]`/`[tool.ruff.lint.per-file-ignores]`, and `[tool.mypy]`/`[[tool.mypy.overrides]]` (the `files` list scopes mypy to the engine-API surface, `office_agent/`, and `api/`). |
 | `.gitattributes` | Line-ending policy: `* text=auto` plus explicit `*.py/md/yml/yaml/toml/json text` patterns, marking those files as text so Git normalizes line endings to LF in the repository. No `eol=` is configured, so working-copy endings follow each clone's `core.autocrlf`/platform default. |
 | `.pre-commit-config.yaml` | Local hooks mirroring CI: `ruff-check --fix`, `ruff-format`, and basic hygiene hooks (`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-toml`, `check-added-large-files`, `check-merge-conflict`). |
 
@@ -171,7 +172,11 @@ service.
     **read-only** and anchor dates to the data, **not the system clock**. **No external
     integrations** (Gmail, Google/Outlook Calendar, Slack, Jira, Linear, Asana, Trello) unless
     explicitly requested.
-  - Tools return a `ToolResult`; `answer_office_request(user_input)` is the single entry point.
+  - Tools return a `ToolResult`; `answer_office_request(user_input, options=None)` is the single
+    entry point. Two additive, default-`None` response fields ([ADR 021](docs/adr/021-frontend-observability-workspace.md)):
+    `observability` (`KnowledgeObservability` — set only by the Knowledge Q&A adapter) and
+    `run_settings` (`ResolvedRunSettings` — set only when the caller passed `OfficeRunOptions`;
+    resolved after routing, server policy wins).
   - Same discipline as `enterprise_rag`: **side-effect-free imports**, lazy data/client access.
   - **`office_agent` tests stay fully mocked / CI-safe** — no OpenAI, Tavily, Chroma, or external
     services, and no real `enterprise_rag` graph call (patch the knowledge adapter) and no real
@@ -208,8 +213,10 @@ service.
   `generate_answer`).
 - **Node tests (`tests/enterprise_rag/nodes/`) must never call real OpenAI, Tavily, Chroma, or embeddings.**
   They must pass with no API keys.
-- **Integration tests (`tests/enterprise_rag/chains/`) call real services** and require `OPENAI_API_KEY`.
-  Label such tests clearly and gate them with the `requires_openai` marker from `conftest.py`.
+- **Integration tests (`tests/enterprise_rag/chains/`) call real services** and require both the
+  `RUN_REAL_MODEL_TESTS=1` opt-in and `OPENAI_API_KEY` — a key alone never authorizes a paid call.
+  Label such tests clearly and gate them with the `requires_openai` marker from `conftest.py`
+  (an alias of the canonical `real_model` marker).
 - **Do not run tests unless explicitly asked.** Writing tests ≠ running them.
 
 ## 5. Claude Code Behavior Rules
@@ -253,10 +260,25 @@ uv run python -m office_agent.cli
 # Run the standalone Enterprise RAG CLI
 uv run python -m enterprise_rag.cli
 
+# Run the web presentation tier (ADR 021): thin FastAPI adapter + frontend workspace
+uv run uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000
+
+# Frontend (npm-managed, independent of uv; run from frontend/)
+npm ci                              # or npm install
+npm run dev                         # Vite dev server (proxies /api → 127.0.0.1:8000)
+npm run build                       # tsc type-check + vite build
+npm test                            # Vitest (jsdom)
+npx playwright install chromium     # one-time per machine
+npm run test:responsive             # Playwright responsive checks (typed mock mode)
+
 # Node unit tests — fully mocked, NO API keys required
 uv run pytest tests/enterprise_rag/nodes/ -v
 
-# Chain integration tests — real gpt-5-mini, needs OPENAI_API_KEY
+# Mocked API adapter tests — keys-free, needs the api dependency group
+uv run pytest tests/api/ -v
+
+# Chain integration tests — real gpt-5-mini; skip unless RUN_REAL_MODEL_TESTS=1
+# and OPENAI_API_KEY are both set
 uv run pytest tests/enterprise_rag/chains/ -v
 
 # Whole suite
