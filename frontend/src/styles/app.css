@@ -1073,10 +1073,31 @@ svg {
 
 .examples__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.15rem;
+}
+
+/* Right side of the header: the contextual control(s) plus the collapse toggle. */
+.examples__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.examples__toggle {
+  width: 26px;
+  height: 26px;
+}
+
+/* Collapsed: only the header bar remains, so trim the panel's trailing space. */
+.examples[data-collapsed='true'] {
+  padding-bottom: 0.85rem;
+}
+
+.examples[data-collapsed='true'] .examples__head {
+  margin-bottom: 0;
 }
 
 .examples__title {
@@ -2329,6 +2350,7 @@ svg {
    a raised surface rather than the badges' flat, static chips. */
 
 .run-settings {
+  --sec: var(--accent);
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -2338,10 +2360,33 @@ svg {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
+  transition:
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease),
+    box-shadow 160ms var(--ease);
 }
 
 .run-settings[data-disabled='true'] {
   opacity: 0.62;
+}
+
+/* The right-panel cards' hover treatment, minus the lift: this panel holds live
+   controls (radios, checkboxes), so it must not shift under the pointer. Inert
+   while disabled — a run is in flight and the panel is already dimmed. */
+.run-settings:hover:not([data-disabled='true']) {
+  border-color: color-mix(in srgb, var(--sec) 34%, var(--border));
+  box-shadow:
+    0 6px 18px color-mix(in srgb, var(--sec) 13%, transparent),
+    var(--shadow);
+}
+
+.run-settings:hover:not([data-disabled='true']) .run-settings__toggle,
+.run-settings:hover:not([data-disabled='true']) .run-settings__chevron {
+  color: var(--sec);
+}
+
+.run-settings:hover:not([data-disabled='true']) .run-settings__icon {
+  background: color-mix(in srgb, var(--sec) 20%, transparent);
 }
 
 .run-settings__header {
@@ -2350,9 +2395,64 @@ svg {
 
 .run-settings__title {
   margin: 0;
+}
+
+/* The whole header row is the disclosure toggle (heading wraps the button so the
+   landmark heading survives). Button reset + the title typography. */
+.run-settings__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  font: inherit;
   font-size: 0.82rem;
   font-weight: 650;
   letter-spacing: 0.01em;
+  transition: color 190ms var(--ease);
+}
+
+/* Compact glance of the current selection, shown only while collapsed. */
+.run-settings__summary {
+  margin-left: auto;
+  font-size: 0.76rem;
+  font-weight: 550;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.run-settings__chevron {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-3);
+  transition: color 190ms var(--ease);
+}
+
+/* Holds the three control groups in the same wrapping row layout as before. */
+.run-settings__body {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+
+/* Mirrors .card__icon so the header chip matches the right-panel cards. */
+.run-settings__icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 6px;
+  color: var(--sec);
+  background: color-mix(in srgb, var(--sec) 12%, transparent);
+  transition: background-color 190ms var(--ease);
 }
 
 .run-settings__note {
