@@ -39,7 +39,14 @@ def main() -> None:
     print("Type 'exit' to quit.\n")
 
     while True:
-        request = input("Enter your request:\n> ").strip()
+        try:
+            request = input("Enter your request:\n> ").strip()
+        except (KeyboardInterrupt, EOFError):
+            # Ctrl+C / EOF at the prompt: exit cleanly, exactly like an explicit
+            # quit command -- never surface a traceback. These are control-flow
+            # signals, not engine failures.
+            print("\nBye.")
+            break
 
         if request.lower() in ["exit", "quit", "q"]:
             print("Bye.")
@@ -50,8 +57,17 @@ def main() -> None:
 
         # Single entry point: the router picks the intent and the engine
         # dispatches to the matching tool. Everything printed below comes from
-        # the returned OfficeAgentResponse fields only.
-        response = answer_office_request(request)
+        # the returned OfficeAgentResponse fields only. The deterministic tools
+        # do not raise, but the Knowledge Q&A path reaches the RAG engine, whose
+        # contract does not promise a result for an unexpected internal error;
+        # keep the loop alive and surface only the exception *type* (a message
+        # could carry paths or secrets), matching the repo convention.
+        try:
+            response = answer_office_request(request)
+        except Exception as exc:
+            print(f"\n---REQUEST FAILED ({type(exc).__name__})---")
+            print("-" * 80)
+            continue
 
         print(f"\nIntent : {response.intent}")
         print(f"Tool   : {response.tool or '-'}")
