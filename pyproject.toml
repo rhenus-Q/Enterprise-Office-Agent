@@ -12,7 +12,6 @@ dependencies = [
     "langchain-text-splitters",
     "chromadb",
     "tavily-python",
-    "beautifulsoup4",
     "python-dotenv",
     "pydantic",
 ]
