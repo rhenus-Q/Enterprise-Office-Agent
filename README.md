@@ -123,8 +123,9 @@ from the repository root.
 git clone https://github.com/rhenus-Q/Enterprise-Office-Agent.git
 cd Enterprise-Office-Agent
 
-# 2. Install dependencies (creates .venv from the committed uv.lock)
-uv sync --group dev
+# 2. Install dependencies (creates .venv from the committed uv.lock). The api group is
+#    included because pytest collects tests/api/ (FastAPI/httpx) and mypy type-checks api/.
+uv sync --group dev --group api
 
 # 3. Configure environment variables (only needed for the RAG engine / Knowledge Q&A)
 Copy-Item .env.example .env   # then edit .env and add your keys
