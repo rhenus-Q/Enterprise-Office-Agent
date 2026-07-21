@@ -1,0 +1,412 @@
+{
+  "components": {
+    "schemas": {
+      "AgentRunRequest": {
+        "properties": {
+          "options": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOptionsRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "AgentRunResponse": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "execution_mode": {
+            "enum": [
+              "none",
+              "deterministic",
+              "llm_assisted",
+              "llm_assist_fallback",
+              "rag_llm",
+              "rag_blocked_offline"
+            ],
+            "type": "string"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "observability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KnowledgeObservabilityModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunSettingsModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "stop_reason": {
+            "default": "",
+            "type": "string"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent",
+          "content",
+          "duration_ms",
+          "execution_mode"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "office_llm_enabled": {
+            "type": "boolean"
+          },
+          "offline_mode": {
+            "type": "boolean"
+          },
+          "privacy_mode": {
+            "type": "boolean"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "type": "string"
+          },
+          "web_search_effective": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "privacy_mode",
+          "offline_mode",
+          "office_llm_enabled",
+          "web_search_effective"
+        ],
+        "type": "object"
+      },
+      "KnowledgeObservabilityModel": {
+        "properties": {
+          "caveat": {
+            "default": "",
+            "type": "string"
+          },
+          "node_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "node_timings_ms": {
+            "items": {
+              "$ref": "#/components/schemas/NodeTimingModel"
+            },
+            "type": "array"
+          },
+          "retries": {
+            "default": 0,
+            "type": "integer"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_duration_ms": {
+            "default": 0.0,
+            "type": "number"
+          },
+          "tracked_llm_calls": {
+            "default": 0,
+            "type": "integer"
+          },
+          "web_fallback_policy": {
+            "default": "",
+            "type": "string"
+          },
+          "web_result_grading_count": {
+            "default": 0,
+            "type": "integer"
+          },
+          "web_search_count": {
+            "default": 0,
+            "type": "integer"
+          },
+          "web_search_enabled": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "NodeTimingModel": {
+        "properties": {
+          "duration_ms": {
+            "type": "number"
+          },
+          "node": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node",
+          "duration_ms"
+        ],
+        "type": "object"
+      },
+      "RunOptionsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "llm_assist": {
+            "default": false,
+            "type": "boolean"
+          },
+          "privacy_mode": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "strict"
+            ],
+            "type": "string"
+          },
+          "web_search": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "RunSettingsApplicabilityModel": {
+        "properties": {
+          "llm_assist": {
+            "type": "boolean"
+          },
+          "web_search": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "llm_assist",
+          "web_search"
+        ],
+        "type": "object"
+      },
+      "RunSettingsModel": {
+        "properties": {
+          "applicability": {
+            "$ref": "#/components/schemas/RunSettingsApplicabilityModel"
+          },
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "effective": {
+            "$ref": "#/components/schemas/RunSettingsValuesModel"
+          },
+          "requested": {
+            "$ref": "#/components/schemas/RunSettingsValuesModel"
+          }
+        },
+        "required": [
+          "requested",
+          "effective",
+          "applicability"
+        ],
+        "type": "object"
+      },
+      "RunSettingsValuesModel": {
+        "properties": {
+          "llm_assist": {
+            "type": "boolean"
+          },
+          "privacy_mode": {
+            "enum": [
+              "standard",
+              "strict"
+            ],
+            "type": "string"
+          },
+          "web_search": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "privacy_mode",
+          "llm_assist",
+          "web_search"
+        ],
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "type": "object"
+          },
+          "input": {},
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "paths": {
+    "/api/agent/run": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
