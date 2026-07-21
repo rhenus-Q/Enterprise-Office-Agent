@@ -1,8 +1,9 @@
 """
 Unit tests for `POST /api/agent/run` (api/app.py).
 
-The engine is mocked at the seam the adapter imported
-(`api.app.answer_office_request`), so the real Office Agent never runs and no
+Most tests mock the engine at the seam the adapter imported
+(`api.app.answer_office_request`). The privacy-precedence regression keeps
+the real Office Agent resolver but mocks the Knowledge Q&A tool, so no
 API keys, Chroma index, web search, or other external service is required —
 mirroring the `tests/office_agent/` style.
 
@@ -16,9 +17,12 @@ from fastapi.testclient import TestClient
 
 from api import app as app_module
 from enterprise_rag.graph.consts import STOP_REASON_OFFLINE_MODE
+from office_agent.llm_assist import config as llm_config
 from office_agent.llm_assist.config import STOP_REASON_LLM_ASSIST_ERROR
 from office_agent.run_settings import (
+    CONSTRAINT_SERVER_OFFLINE_MODE,
     CONSTRAINT_SERVER_PRIVACY_MODE,
+    CONSTRAINT_SERVER_WEB_SEARCH_DISABLED,
     CONSTRAINT_WEB_SEARCH_NOT_APPLICABLE,
     LLM_ASSIST_INTENTS,
     OfficeRunOptions,
@@ -39,7 +43,9 @@ from office_agent.schemas import (
     KnowledgeObservability,
     NodeTiming,
     OfficeAgentResponse,
+    ToolResult,
 )
+from office_agent.tools import knowledge
 
 RUN_URL = "/api/agent/run"
 
@@ -378,6 +384,41 @@ def test_effective_settings_come_from_the_backend_not_the_adapter(monkeypatch):
     assert payload["run_settings"]["constraints"] == []
 
 
+def test_server_privacy_blocks_requested_web_search_through_http(monkeypatch):
+    """The real engine resolver restricts execution before the knowledge tool."""
+
+    monkeypatch.setattr(llm_config, "privacy_mode", lambda: True)
+    monkeypatch.setattr(llm_config, "offline_mode", lambda: False)
+    monkeypatch.setattr(llm_config, "office_llm_enabled", lambda: True)
+    monkeypatch.setattr(knowledge, "web_search_available", lambda: True)
+    received_web_search: list[bool | None] = []
+
+    def fake_knowledge(_text, *, web_search_enabled=None):
+        received_web_search.append(web_search_enabled)
+        return ToolResult(tool=INTENT_KNOWLEDGE_QA, content="A")
+
+    monkeypatch.setattr(knowledge, "run_knowledge_qa", fake_knowledge)
+    client = TestClient(app_module.create_app())
+
+    response = client.post(
+        RUN_URL,
+        json={
+            "text": "What is the VPN access policy?",
+            "options": {"privacy_mode": "standard", "web_search": True},
+        },
+    )
+
+    assert response.status_code == 200
+    settings = response.json()["run_settings"]
+    assert settings["requested"]["web_search"] is True
+    assert settings["effective"]["web_search"] is False
+    assert settings["applicability"]["web_search"] is True
+    assert CONSTRAINT_SERVER_PRIVACY_MODE in settings["constraints"]
+    assert CONSTRAINT_SERVER_OFFLINE_MODE not in settings["constraints"]
+    assert CONSTRAINT_SERVER_WEB_SEARCH_DISABLED not in settings["constraints"]
+    assert received_web_search == [False]
+
+
 def test_execution_mode_respects_a_request_that_disabled_the_assist(monkeypatch):
     """Server flag on, request off: reporting "llm_assisted" would be a lie."""
 
@@ -709,6 +750,18 @@ def test_4001_characters_is_rejected_with_422(monkeypatch):
     client = _validation_client(monkeypatch)
 
     assert client.post(RUN_URL, json={"text": "a" * 4001}).status_code == 422
+
+
+def test_validation_error_does_not_echo_rejected_input(monkeypatch):
+    client = _validation_client(monkeypatch)
+    secret = "C:/secrets/api_key.env::sk_live_DO_NOT_ECHO"
+
+    response = client.post(RUN_URL, json={"text": secret + "a" * 4001})
+
+    assert response.status_code == 422
+    assert response.json() == {"error": "RequestValidationError"}
+    for fragment in (secret, "secrets", "api_key", "sk_live_DO_NOT_ECHO", "input"):
+        assert fragment not in response.text
 
 
 def test_missing_text_field_is_rejected_with_422(monkeypatch):
