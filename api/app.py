@@ -26,7 +26,8 @@ monkeypatch, so they are imported into this module's namespace on purpose.
 import time
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from api.schemas import (
@@ -219,6 +220,14 @@ def create_app() -> FastAPI:
             "Transports engine output; implements no business logic."
         ),
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error(
+        _request: Request, _exc: RequestValidationError
+    ) -> JSONResponse:
+        """Return only the validation exception type, never rejected input."""
+
+        return JSONResponse(status_code=422, content={"error": "RequestValidationError"})
 
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
