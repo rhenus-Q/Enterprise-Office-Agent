@@ -584,10 +584,14 @@ describe('run states', () => {
     await user.click(screen.getByRole('button', { name: 'Retry request' }));
 
     await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
-    // The original request text, not anything read back out of the content.
+    // The original request text, not anything read back out of the content —
+    // and the original run's settings snapshot, so the retry is reproducible.
     expect(run).toHaveBeenNthCalledWith(
       2,
-      { text: 'Show my open tickets' },
+      {
+        text: 'Show my open tickets',
+        options: { privacy_mode: 'standard', llm_assist: false, web_search: false },
+      },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });

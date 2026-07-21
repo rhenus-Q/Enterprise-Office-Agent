@@ -144,7 +144,10 @@ describe('live API mode', () => {
       '/api/agent/run',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ text: 'Show my open tickets' }),
+        body: JSON.stringify({
+          text: 'Show my open tickets',
+          options: { privacy_mode: 'standard', llm_assist: false, web_search: false },
+        }),
       }),
     );
   });

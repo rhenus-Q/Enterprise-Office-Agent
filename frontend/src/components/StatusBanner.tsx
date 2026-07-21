@@ -58,6 +58,15 @@ function StatusChip({ icon: Icon, label, value, tone, explanation }: StatusChipP
   );
 }
 
+/**
+ * What the chips are, stated outright.
+ *
+ * These report server/runtime policy and cannot be changed from the browser.
+ * The per-run controls next to the composer are the interactive surface; this
+ * note keeps the two from being mistaken for one another.
+ */
+const SERVER_POLICY_NOTE = 'Read-only server policy configured by the API runtime.';
+
 /** The exact command that starts the adapter, shown when it is not answering. */
 const START_API_COMMAND =
   'uv run uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000';
@@ -115,6 +124,13 @@ export function StatusBanner({
   return (
     <div className="status-bar">
       <ul className="status" aria-label="Runtime status" aria-live="polite">
+        <li className="status__policy" title={SERVER_POLICY_NOTE}>
+          <span className="status__policy-text" aria-hidden="true">
+            Server policy
+          </span>
+          <span className="sr-only">{SERVER_POLICY_NOTE}</span>
+        </li>
+
         {phase === 'loading' ? (
           <li className="status-chip status-chip--slate">
             <span className="status-chip__label">Runtime status</span>

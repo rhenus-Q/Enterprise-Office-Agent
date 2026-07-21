@@ -38,6 +38,7 @@ const runPayload: AgentRunResponse = {
   run_id: null,
   duration_ms: 3.4,
   execution_mode: 'deterministic',
+  run_settings: null,
   observability: null,
 };
 

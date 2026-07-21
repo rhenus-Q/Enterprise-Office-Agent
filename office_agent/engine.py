@@ -17,6 +17,12 @@ thin dispatch entry point. It deliberately uses no LLM routing.
 """
 
 from office_agent import formatting, router
+from office_agent.llm_assist import config as llm_config
+from office_agent.run_settings import (
+    OfficeRunOptions,
+    ResolvedRunSettings,
+    resolve_run_settings,
+)
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
     INTENT_DAILY_BRIEFING,
@@ -39,7 +45,9 @@ from office_agent.tools import (
 )
 
 
-def answer_office_request(user_input: str) -> OfficeAgentResponse:
+def answer_office_request(
+    user_input: str, options: OfficeRunOptions | None = None
+) -> OfficeAgentResponse:
     """Route `user_input` and run the matching Office Agent tool.
 
     - `knowledge_qa` -> the enterprise_rag Knowledge Q&A adapter (caveats and
@@ -54,20 +62,39 @@ def answer_office_request(user_input: str) -> OfficeAgentResponse:
 
     Each tool returns a `ToolResult`, so the response is built uniformly with
     the routed intent attached for observability.
+
+    `options` is optional and request-scoped. When omitted (the default),
+    behavior is exactly as before: every tool falls back to the server defaults
+    and `run_settings` is `None` — there is nothing honest to report as
+    "requested". When supplied, the options are resolved against server policy
+    *after* routing (routing itself is never influenced by them) and threaded
+    explicitly into the affected tool call. Nothing is written to the
+    environment or to any module global, so concurrent requests with opposite
+    settings stay fully isolated.
     """
 
     routed = router.route_request(user_input)
+    settings = _resolve(routed.intent, options)
 
     if routed.intent == INTENT_KNOWLEDGE_QA:
-        result = knowledge.run_knowledge_qa(user_input)
+        result = knowledge.run_knowledge_qa(
+            user_input,
+            web_search_enabled=settings.effective.web_search if settings else None,
+        )
     elif routed.intent == INTENT_EMAIL_SUMMARY:
-        result = email.summarize_emails(user_input)
+        result = email.summarize_emails(
+            user_input,
+            llm_assist_enabled=settings.effective.llm_assist if settings else None,
+        )
     elif routed.intent == INTENT_CALENDAR_LOOKUP:
         result = calendar.lookup_calendar(user_input)
     elif routed.intent == INTENT_TICKET_ASSISTANT:
         result = tickets.handle_ticket_request(user_input)
     elif routed.intent == INTENT_DAILY_BRIEFING:
-        result = briefing.generate_daily_briefing(user_input)
+        result = briefing.generate_daily_briefing(
+            user_input,
+            llm_assist_enabled=settings.effective.llm_assist if settings else None,
+        )
     elif routed.intent == INTENT_MEETING_AGENT:
         result = meeting.prepare_meeting(user_input)
     elif routed.intent == INTENT_WORKFLOW_APPROVAL:
@@ -77,6 +104,7 @@ def answer_office_request(user_input: str) -> OfficeAgentResponse:
             intent=INTENT_UNKNOWN,
             content=formatting.UNSUPPORTED_INTENT_NOTE,
             tool=None,
+            run_settings=settings,
         )
 
     return OfficeAgentResponse(
@@ -89,4 +117,31 @@ def answer_office_request(user_input: str) -> OfficeAgentResponse:
         # Only the Knowledge Q&A adapter sets this; for every other tool it
         # stays the `None` default rather than being fabricated.
         observability=result.observability,
+        run_settings=settings,
+    )
+
+
+def _resolve(intent: str, options: OfficeRunOptions | None) -> ResolvedRunSettings | None:
+    """Resolve per-run options against the server's current policy.
+
+    The server policy is read here, once per request, and passed into the pure
+    resolver — so the precedence rules stay independent of environment access.
+    `None` in, `None` out: a caller that requested nothing gets no fabricated
+    "requested" settings.
+
+    Web-search policy comes from the knowledge adapter (the Office Agent's one
+    sanctioned `enterprise_rag` boundary); the privacy / offline / assist flags
+    come from the office-owned readers. Both are already mode-aware.
+    """
+
+    if options is None:
+        return None
+
+    return resolve_run_settings(
+        intent,
+        options,
+        server_privacy_mode=llm_config.privacy_mode(),
+        server_offline_mode=llm_config.offline_mode(),
+        server_llm_assist_available=llm_config.office_llm_enabled(),
+        server_web_search_available=knowledge.web_search_available(),
     )

@@ -14,7 +14,13 @@
  * every one of those belongs to the Python engines.
  */
 
-import { ERROR_PROMPT, RESPONSES_BY_PROMPT, mockHealth, unsupportedResponse } from '../mocks/fixtures';
+import {
+  ERROR_PROMPT,
+  RESPONSES_BY_PROMPT,
+  mockHealth,
+  resolveMockRunSettings,
+  unsupportedResponse,
+} from '../mocks/fixtures';
 import type { AgentRunRequest, AgentRunResponse, HealthResponse } from '../types/api';
 
 /** Which client backs the workspace. Surfaced in the runtime status bar. */
@@ -143,7 +149,14 @@ export function createMockClient(options: MockClientOptions = {}): AgentClient {
         throw new AgentApiError('SimulatedUpstreamError');
       }
 
-      return RESPONSES_BY_PROMPT[prompt] ?? unsupportedResponse;
+      const response = RESPONSES_BY_PROMPT[prompt] ?? unsupportedResponse;
+
+      // The mock stands in for the backend, so it resolves per-run settings the
+      // way the adapter does. With no options the response is returned exactly
+      // as before, `run_settings` null.
+      return request.options
+        ? { ...response, run_settings: resolveMockRunSettings(request.options, response.intent) }
+        : response;
     },
 
     async health(options?: RequestOptions): Promise<HealthResponse> {

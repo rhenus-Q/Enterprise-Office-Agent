@@ -16,6 +16,14 @@ from fastapi.testclient import TestClient
 
 from api import app as app_module
 from enterprise_rag.graph.consts import STOP_REASON_OFFLINE_MODE
+from office_agent.run_settings import (
+    CONSTRAINT_SERVER_PRIVACY_MODE,
+    CONSTRAINT_WEB_SEARCH_NOT_APPLICABLE,
+    OfficeRunOptions,
+    ResolvedRunSettings,
+    RunSettingsApplicability,
+    RunSettingsValues,
+)
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
     INTENT_DAILY_BRIEFING,
@@ -37,7 +45,7 @@ def _client(monkeypatch, response, *, llm_enabled=False):
     """Patch the engine seam to return `response`, and the assist flag reader."""
 
     monkeypatch.setattr(app_module, "office_llm_enabled", lambda: llm_enabled)
-    monkeypatch.setattr(app_module, "answer_office_request", lambda _text: response)
+    monkeypatch.setattr(app_module, "answer_office_request", lambda _text, _options=None: response)
     return TestClient(app_module.create_app())
 
 
@@ -99,7 +107,7 @@ def test_user_text_is_passed_to_the_engine_unmodified(monkeypatch):
     seen = []
     monkeypatch.setattr(app_module, "office_llm_enabled", lambda: False)
 
-    def fake_engine(text):
+    def fake_engine(text, _options=None):
         seen.append(text)
         return OfficeAgentResponse(intent=INTENT_UNKNOWN, content="X", tool=None)
 
@@ -208,6 +216,211 @@ def test_non_knowledge_intents_report_null_observability(monkeypatch, intent):
     )
 
     assert _run(client).json()["observability"] is None
+
+
+# --- run settings: request parsing and response shape -----------------------
+
+
+def _settings(
+    *,
+    requested=("standard", True, True),
+    effective=("strict", False, False),
+    applicability=(True, False),
+    constraints=(CONSTRAINT_SERVER_PRIVACY_MODE, CONSTRAINT_WEB_SEARCH_NOT_APPLICABLE),
+):
+    return ResolvedRunSettings(
+        requested=RunSettingsValues(*requested),
+        effective=RunSettingsValues(*effective),
+        applicability=RunSettingsApplicability(*applicability),
+        constraints=tuple(constraints),
+    )
+
+
+def _capturing_client(monkeypatch, response, *, llm_enabled=False):
+    """Patch the engine seam and record the options object it was handed."""
+
+    seen: list[object] = []
+
+    def fake_engine(_text, options=None):
+        seen.append(options)
+        return response
+
+    monkeypatch.setattr(app_module, "office_llm_enabled", lambda: llm_enabled)
+    monkeypatch.setattr(app_module, "answer_office_request", fake_engine)
+    return TestClient(app_module.create_app()), seen
+
+
+def test_omitting_options_sends_none_to_the_engine(monkeypatch):
+    """Backward compatibility: no options means no per-run options at all."""
+
+    client, seen = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(intent=INTENT_EMAIL_SUMMARY, content="X", tool="email_summary"),
+    )
+
+    payload = client.post(RUN_URL, json={"text": "hi"}).json()
+
+    assert seen == [None]
+    assert payload["run_settings"] is None
+
+
+def test_request_options_are_converted_to_office_run_options(monkeypatch):
+    client, seen = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(intent=INTENT_EMAIL_SUMMARY, content="X", tool="email_summary"),
+    )
+
+    client.post(
+        RUN_URL,
+        json={
+            "text": "hi",
+            "options": {"privacy_mode": "strict", "llm_assist": True, "web_search": True},
+        },
+    )
+
+    assert seen == [OfficeRunOptions(privacy_mode="strict", llm_assist=True, web_search=True)]
+
+
+def test_partial_options_default_to_the_conservative_values(monkeypatch):
+    client, seen = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(intent=INTENT_EMAIL_SUMMARY, content="X", tool="email_summary"),
+    )
+
+    client.post(RUN_URL, json={"text": "hi", "options": {"llm_assist": True}})
+
+    assert seen == [OfficeRunOptions(privacy_mode="standard", llm_assist=True, web_search=False)]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"privacy_mode": "paranoid"},
+        {"privacy_mode": 1},
+        {"privacy_mode": None},
+        {"llm_assist": "maybe"},
+        {"web_search": 7},
+        {"unknown_field": True},
+    ],
+)
+def test_invalid_options_are_rejected_with_422(monkeypatch, options):
+    client, _ = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(intent=INTENT_EMAIL_SUMMARY, content="X", tool="email_summary"),
+    )
+
+    assert client.post(RUN_URL, json={"text": "hi", "options": options}).status_code == 422
+
+
+def test_standard_boolean_coercion_applies_to_the_toggles(monkeypatch):
+    """Pydantic's usual lax bool parsing is kept deliberately.
+
+    Coercion here is unambiguous ("true"/"yes" -> True, anything ambiguous is a
+    422), and it cannot weaken anything: server policy is applied after parsing
+    regardless of how the toggle arrived.
+    """
+
+    client, seen = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(intent=INTENT_EMAIL_SUMMARY, content="X", tool="email_summary"),
+    )
+
+    client.post(RUN_URL, json={"text": "hi", "options": {"llm_assist": "true"}})
+
+    assert seen == [OfficeRunOptions(privacy_mode="standard", llm_assist=True, web_search=False)]
+
+
+def test_run_settings_are_returned_field_for_field(monkeypatch):
+    client, _ = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(
+            intent=INTENT_EMAIL_SUMMARY,
+            content="X",
+            tool="email_summary",
+            run_settings=_settings(),
+        ),
+    )
+
+    payload = client.post(RUN_URL, json={"text": "hi", "options": {}}).json()
+
+    assert payload["run_settings"] == {
+        "requested": {"privacy_mode": "standard", "llm_assist": True, "web_search": True},
+        "effective": {"privacy_mode": "strict", "llm_assist": False, "web_search": False},
+        "applicability": {"llm_assist": True, "web_search": False},
+        "constraints": ["server_privacy_mode", "web_search_not_applicable"],
+    }
+
+
+def test_effective_settings_come_from_the_backend_not_the_adapter(monkeypatch):
+    """The adapter transports whatever the engine resolved — it re-derives nothing."""
+
+    client, _ = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(
+            intent=INTENT_KNOWLEDGE_QA,
+            content="A",
+            tool="knowledge_qa",
+            run_settings=_settings(
+                requested=("standard", False, True),
+                effective=("standard", False, True),
+                applicability=(False, True),
+                constraints=(),
+            ),
+        ),
+    )
+
+    payload = client.post(RUN_URL, json={"text": "hi", "options": {"web_search": True}}).json()
+
+    assert payload["run_settings"]["effective"]["web_search"] is True
+    assert payload["run_settings"]["constraints"] == []
+
+
+def test_execution_mode_respects_a_request_that_disabled_the_assist(monkeypatch):
+    """Server flag on, request off: reporting "llm_assisted" would be a lie."""
+
+    client, _ = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(
+            intent=INTENT_EMAIL_SUMMARY,
+            content="X",
+            tool="email_summary",
+            run_settings=_settings(
+                requested=("strict", False, False),
+                effective=("strict", False, False),
+                applicability=(True, False),
+                constraints=(),
+            ),
+        ),
+        llm_enabled=True,
+    )
+
+    payload = client.post(
+        RUN_URL, json={"text": "hi", "options": {"privacy_mode": "strict"}}
+    ).json()
+
+    assert payload["execution_mode"] == "deterministic"
+
+
+def test_execution_mode_is_llm_assisted_when_the_assist_actually_ran(monkeypatch):
+    client, _ = _capturing_client(
+        monkeypatch,
+        OfficeAgentResponse(
+            intent=INTENT_EMAIL_SUMMARY,
+            content="X",
+            tool="email_summary",
+            run_settings=_settings(
+                requested=("standard", True, False),
+                effective=("standard", True, False),
+                applicability=(True, False),
+                constraints=(),
+            ),
+        ),
+        llm_enabled=True,
+    )
+
+    payload = client.post(RUN_URL, json={"text": "hi", "options": {"llm_assist": True}}).json()
+
+    assert payload["execution_mode"] == "llm_assisted"
 
 
 # --- execution_mode matrix (spec §8.2, exhaustive) --------------------------
@@ -359,7 +572,7 @@ def test_other_knowledge_stop_reasons_stay_rag_llm(monkeypatch, stop_reason):
 def test_engine_exception_returns_500_with_type_name_only(monkeypatch):
     monkeypatch.setattr(app_module, "office_llm_enabled", lambda: False)
 
-    def boom(_text):
+    def boom(_text, _options=None):
         raise RuntimeError("secret path C:/keys/openai.txt leaked in the message")
 
     monkeypatch.setattr(app_module, "answer_office_request", boom)
@@ -374,7 +587,7 @@ def test_engine_exception_returns_500_with_type_name_only(monkeypatch):
 def test_engine_exception_message_is_not_exposed(monkeypatch):
     monkeypatch.setattr(app_module, "office_llm_enabled", lambda: False)
 
-    def boom(_text):
+    def boom(_text, _options=None):
         raise ValueError("C:/secrets/api_key.env")
 
     monkeypatch.setattr(app_module, "answer_office_request", boom)

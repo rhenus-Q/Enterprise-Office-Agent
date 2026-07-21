@@ -7,6 +7,7 @@ import { ExamplePrompts, type PanelView } from './components/ExamplePrompts';
 import { ExecutionPanel } from './components/ExecutionPanel';
 import { ExecutionPreview } from './components/ExecutionPreview';
 import { RequestComposer } from './components/RequestComposer';
+import { RunSettingsControls } from './components/RunSettingsControls';
 import { StatusBanner } from './components/StatusBanner';
 import { ResultCard } from './components/results/ResultCard';
 import { DegradedNotice } from './components/states/DegradedNotice';
@@ -18,7 +19,14 @@ import { UnsupportedNotice } from './components/states/UnsupportedNotice';
 import { useAgentRun } from './hooks/useAgentRun';
 import { useHealth } from './hooks/useHealth';
 import { classifyRunStatus } from './lib/status';
-import type { CapabilityIntent } from './types/api';
+import type { CapabilityIntent, RunOptions } from './types/api';
+
+/** Conservative defaults: nothing external is requested until the user asks. */
+const DEFAULT_RUN_OPTIONS: RunOptions = {
+  privacy_mode: 'standard',
+  llm_assist: false,
+  web_search: false,
+};
 
 interface AppProps {
   /**
@@ -57,6 +65,10 @@ export function App({ client }: AppProps) {
     refresh: refreshHealth,
   } = useHealth(agentClient);
   const [text, setText] = useState('');
+  // The live Run Settings selection. It is only ever read at submit time — the
+  // snapshot travelling with a run lives in run state, so editing these controls
+  // can never affect a request already in flight.
+  const [runOptions, setRunOptions] = useState<RunOptions>(DEFAULT_RUN_OPTIONS);
   // Three independent concerns, deliberately not inferred from one another:
   //   selectedIntent — the capability in focus (rail highlight); after a run
   //                    this is whatever the backend router returned.
@@ -127,21 +139,32 @@ export function App({ client }: AppProps) {
     state.phase === 'error' ||
     state.phase === 'stopped';
 
-  /** Every new run reveals its answer, so a collapsed result expands first. */
+  /**
+   * Every new run reveals its answer, so a collapsed result expands first.
+   *
+   * The current selection is snapshotted here (`{ ...runOptions }`) and handed
+   * to the run, so a new request always uses whatever the controls say *now*.
+   */
   function handleRun(text: string) {
     setResultExpanded(true);
     setDisarmed(null);
-    void run(text);
+    void run(text, { options: { ...runOptions } });
   }
 
-  /** Re-runs the request behind the visible result through the shared machinery. */
+  /**
+   * Re-runs the request behind the visible result through the shared machinery.
+   *
+   * Retry deliberately reuses the *original* run's snapshot rather than the
+   * current controls, so a retry reproduces the run it is retrying. Changing the
+   * controls and pressing Run is the way to get a new snapshot.
+   */
   function handleRetry() {
     if (state.phase === 'loading' || state.phase === 'idle') {
       return;
     }
     setResultExpanded(true);
     setDisarmed(null);
-    void run(state.text, { isRetry: true });
+    void run(state.text, { isRetry: true, options: state.options });
   }
 
   /**
@@ -164,11 +187,14 @@ export function App({ client }: AppProps) {
   }
 
   /**
-   * Return the workspace to its initial state: empty composer, no result, no
-   * error, no capability filter, execution details back to placeholders.
+   * Clear the request workspace: empty composer, no result, no error, no
+   * capability filter, execution details back to placeholders.
    *
-   * Runtime status is deliberately preserved — it describes the environment, not
-   * the request, so a reset must not discard it.
+   * Two things are deliberately preserved, because neither belongs to the
+   * request being cleared: runtime status describes the environment, and the
+   * selected Run Settings are a persistent run preference (like a chosen
+   * privacy level), not transient per-result state — so `runOptions` is left
+   * untouched and carries into the next run.
    */
   function handleReset() {
     setText('');
@@ -221,6 +247,12 @@ export function App({ client }: AppProps) {
         onStop={handleStop}
         disarmed={disarmed === 'composer'}
         onRearm={handleRearm}
+      />
+
+      <RunSettingsControls
+        value={runOptions}
+        onChange={setRunOptions}
+        disabled={state.phase === 'loading'}
       />
 
       {showExamples ? (
@@ -287,7 +319,18 @@ export function App({ client }: AppProps) {
 
   // Total mapping: the preview covers every phase that is not a rendered result.
   const previewPhase =
-    state.phase === 'loading' ? 'loading' : state.phase === 'error' ? 'error' : 'idle';
+    state.phase === 'loading'
+      ? 'loading'
+      : state.phase === 'error'
+        ? 'error'
+        : state.phase === 'stopped'
+          ? 'stopped'
+          : 'idle';
+
+  // The settings snapshot belonging to the current or latest run. Read from run
+  // state, never from the live controls, so the panel reports what was actually
+  // submitted rather than what the controls happen to show now.
+  const activeOptions = state.phase === 'idle' ? null : state.options;
 
   // Details describe a settled result, so they follow the card that is on
   // screen — including the one restored after a stopped retry — but stay as
@@ -297,9 +340,14 @@ export function App({ client }: AppProps) {
 
   const aside =
     detailResult && detailStatus ? (
-      <ExecutionPanel response={detailResult} status={detailStatus} />
+      <ExecutionPanel
+        response={detailResult}
+        status={detailStatus}
+        requestedSettings={activeOptions}
+        stopped={state.phase === 'stopped'}
+      />
     ) : (
-      <ExecutionPreview phase={previewPhase} />
+      <ExecutionPreview phase={previewPhase} requestedSettings={activeOptions} />
     );
 
   return (

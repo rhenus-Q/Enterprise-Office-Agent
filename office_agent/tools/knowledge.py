@@ -13,7 +13,8 @@ external clients lazily, so importing this module needs no API keys and no
 network (see CLAUDE.md).
 """
 
-from enterprise_rag.graph.engine import AnswerResult, answer_question
+from enterprise_rag.graph.config import web_search_enabled as _server_web_search_enabled
+from enterprise_rag.graph.engine import AnswerOptions, AnswerResult, answer_question
 from enterprise_rag.graph.formatting import STOP_REASON_NOTES, format_answer
 from office_agent.schemas import (
     INTENT_KNOWLEDGE_QA,
@@ -27,16 +28,39 @@ from office_agent.schemas import (
 KNOWLEDGE_TOOL_NAME = INTENT_KNOWLEDGE_QA
 
 
-def run_knowledge_qa(question: str) -> ToolResult:
+def web_search_available() -> bool:
+    """The server's *effective* web-search policy.
+
+    Re-exported through this adapter deliberately: it is the Office Agent's one
+    sanctioned `enterprise_rag` boundary, and web search only ever applies to
+    Knowledge Q&A. The underlying reader already folds in the runtime privacy
+    modes, so a `True` here means web search is genuinely available.
+    """
+
+    return _server_web_search_enabled()
+
+
+def run_knowledge_qa(question: str, *, web_search_enabled: bool | None = None) -> ToolResult:
     """Answer an enterprise knowledge question via the enterprise_rag engine.
 
     Returns a ToolResult whose `content` is the fully formatted answer
     (enterprise_rag caveats + Sources preserved); `stop_reason`, `sources`,
     `run_id`, and the engine's execution metadata (`observability`) are carried
     through unchanged for observability.
+
+    `web_search_enabled` is a request-scoped override threaded through the
+    engine's existing `AnswerOptions` seam — nothing is written to the
+    environment and no global is touched. `None` (the default) means "use the
+    engine's own default", which keeps every existing caller byte-for-byte
+    unchanged. Callers are expected to have already ANDed an explicit `True`
+    with the server policy (`web_search_available()`), since a per-run option
+    must never re-enable a service the server disabled.
     """
 
-    result = answer_question(question)
+    if web_search_enabled is None:
+        result = answer_question(question)
+    else:
+        result = answer_question(question, AnswerOptions(web_search_enabled=web_search_enabled))
 
     return ToolResult(
         tool=KNOWLEDGE_TOOL_NAME,

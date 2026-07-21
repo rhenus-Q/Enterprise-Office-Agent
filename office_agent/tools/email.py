@@ -152,7 +152,17 @@ def _render_digest(digest: EmailDigest, matched: list[Email]) -> str:
     return "\n".join(lines)
 
 
-def _maybe_apply_llm_digest(content: str, matched: list[Email]) -> ToolResult:
+def _assist_enabled(llm_assist_enabled: bool | None) -> bool:
+    """Resolve the per-run assist decision, defaulting to the server flag."""
+
+    if llm_assist_enabled is None:
+        return llm_config.office_llm_enabled()
+    return llm_assist_enabled
+
+
+def _maybe_apply_llm_digest(
+    content: str, matched: list[Email], llm_assist_enabled: bool | None = None
+) -> ToolResult:
     """Optionally append an LLM-assisted digest to the deterministic summary.
 
     Default **off**: when `OFFICE_LLM_ENABLED` is not truthy, this returns exactly
@@ -162,9 +172,15 @@ def _maybe_apply_llm_digest(content: str, matched: list[Email]) -> ToolResult:
     failure from `validate_digest`) logs a type-only banner and falls back to the
     deterministic summary plus a caveat and `stop_reason="llm_assist_error"`. It
     never re-raises — the assist can never crash the Office Agent.
+
+    `llm_assist_enabled` is the request-scoped decision: `None` (the default)
+    reads the server flag exactly as before, so behavior without per-run options
+    is unchanged. An explicit value is expected to have already been ANDed with
+    the server flag by the caller, so a request can only ever turn the assist
+    *off*, never on.
     """
 
-    if not llm_config.office_llm_enabled():
+    if not _assist_enabled(llm_assist_enabled):
         return ToolResult(tool=EMAIL_TOOL_NAME, content=content)
 
     try:
@@ -186,7 +202,7 @@ def _maybe_apply_llm_digest(content: str, matched: list[Email]) -> ToolResult:
     )
 
 
-def summarize_emails(query: str) -> ToolResult:
+def summarize_emails(query: str, *, llm_assist_enabled: bool | None = None) -> ToolResult:
     """Summarize the mock inbox for `query` and return a ToolResult.
 
     The content includes a one-line summary (filter + counts), the matching
@@ -194,6 +210,9 @@ def summarize_emails(query: str) -> ToolResult:
     require a response. The deterministic summary is identical on every run; the
     optional, default-off LLM digest (`_maybe_apply_llm_digest`) only ever appends
     to it and never alters the deterministic lines.
+
+    `llm_assist_enabled` is the request-scoped assist decision; `None` keeps the
+    previous server-flag behavior exactly.
     """
 
     label, matched = filter_for_query(query)
@@ -217,4 +236,4 @@ def summarize_emails(query: str) -> ToolResult:
             for email in action_items
         ]
 
-    return _maybe_apply_llm_digest("\n".join(lines), matched)
+    return _maybe_apply_llm_digest("\n".join(lines), matched, llm_assist_enabled)

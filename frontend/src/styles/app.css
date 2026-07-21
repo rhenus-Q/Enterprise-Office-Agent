@@ -2322,3 +2322,121 @@ svg {
     filter: none !important;
   }
 }
+
+/* --- Run settings ------------------------------------------------------- */
+/* Deliberately styled as interactive controls, unlike the read-only status
+   badges at the top of the workspace: real fieldsets, visible focus rings, and
+   a raised surface rather than the badges' flat, static chips. */
+
+.run-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1.5rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.run-settings[data-disabled='true'] {
+  opacity: 0.62;
+}
+
+.run-settings__header {
+  flex: 1 1 100%;
+}
+
+.run-settings__title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.run-settings__note {
+  margin: 0.2rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.run-settings__group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.run-settings__legend {
+  padding: 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.run-settings__applies {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.run-settings__choices {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.run-settings__group:disabled .choice {
+  cursor: not-allowed;
+}
+
+.choice input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Requested vs. effective run settings ------------------------------- */
+
+.run-settings-summary__title {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.run-settings-summary__title:first-child {
+  margin-top: 0;
+}
+
+.run-settings-summary__constraints {
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+}
+
+.not-applicable {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.status__policy {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}

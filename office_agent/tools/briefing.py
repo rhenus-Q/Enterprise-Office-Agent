@@ -369,7 +369,17 @@ def collect_briefing_facts() -> list[dict[str, object]]:
     return facts
 
 
-def _maybe_apply_llm_narrative(content: str, facts: list[dict[str, object]]) -> ToolResult:
+def _assist_enabled(llm_assist_enabled: bool | None) -> bool:
+    """Resolve the per-run assist decision, defaulting to the server flag."""
+
+    if llm_assist_enabled is None:
+        return llm_config.office_llm_enabled()
+    return llm_assist_enabled
+
+
+def _maybe_apply_llm_narrative(
+    content: str, facts: list[dict[str, object]], llm_assist_enabled: bool | None = None
+) -> ToolResult:
     """Optionally prepend an LLM-assisted narrative above the deterministic briefing.
 
     Default **off**: when `OFFICE_LLM_ENABLED` is not truthy this returns exactly
@@ -383,9 +393,14 @@ def _maybe_apply_llm_narrative(content: str, facts: list[dict[str, object]]) -> 
 
     On success the narrative block + validated reference list are prepended above a
     `"Deterministic briefing (facts):"`-labeled copy of the unchanged `content`.
+
+    `llm_assist_enabled` is the request-scoped decision: `None` (the default)
+    reads the server flag exactly as before. An explicit value is expected to
+    have already been ANDed with the server flag by the caller, so a request can
+    only ever turn the assist *off*, never on.
     """
 
-    if not llm_config.office_llm_enabled():
+    if not _assist_enabled(llm_assist_enabled):
         return ToolResult(tool=BRIEFING_TOOL_NAME, content=content)
 
     if not facts:
@@ -411,13 +426,16 @@ def _maybe_apply_llm_narrative(content: str, facts: list[dict[str, object]]) -> 
     )
 
 
-def generate_daily_briefing(query: str) -> ToolResult:
+def generate_daily_briefing(query: str, *, llm_assist_enabled: bool | None = None) -> ToolResult:
     """Aggregate email/calendar/ticket mock data into one deterministic briefing.
 
     `query` is accepted for interface consistency but not needed: the briefing is
     holistic. The deterministic result is identical on every run (no system clock,
     no LLM); the optional, default-off LLM narrative (`_maybe_apply_llm_narrative`)
     only ever prepends above it and never alters the deterministic lines.
+
+    `llm_assist_enabled` is the request-scoped assist decision; `None` keeps the
+    previous server-flag behavior exactly.
     """
 
     sections: list[list[str]] = [
@@ -429,4 +447,4 @@ def generate_daily_briefing(query: str) -> ToolResult:
     ]
 
     content = "\n\n".join("\n".join(section) for section in sections)
-    return _maybe_apply_llm_narrative(content, collect_briefing_facts())
+    return _maybe_apply_llm_narrative(content, collect_briefing_facts(), llm_assist_enabled)

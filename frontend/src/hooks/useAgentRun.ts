@@ -9,7 +9,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { AgentApiError, isCancellation, type AgentClient } from '../api/client';
-import type { AgentRunResponse } from '../types/api';
+import type { AgentRunResponse, RunOptions } from '../types/api';
+
+/**
+ * The settings snapshot a run was submitted with.
+ *
+ * Held in run state rather than read from the live controls, so changing a
+ * control mid-run cannot affect the request already in flight, and Retry can
+ * reproduce the original run exactly.
+ */
+export type RunOptionsSnapshot = RunOptions | null;
 
 export type RunState =
   | { phase: 'idle' }
@@ -22,8 +31,13 @@ export type RunState =
    * frontend cannot predict because routing belongs to the backend — so holding
    * the old card in place would misreport what is being run.
    */
-  | { phase: 'loading'; text: string; previous: AgentRunResponse | null }
-  | { phase: 'success'; text: string; response: AgentRunResponse }
+  | {
+      phase: 'loading';
+      text: string;
+      previous: AgentRunResponse | null;
+      options: RunOptionsSnapshot;
+    }
+  | { phase: 'success'; text: string; response: AgentRunResponse; options: RunOptionsSnapshot }
   /**
    * The user pressed Stop. `previous` carries the same result the loading phase
    * was holding, so a stopped retry lands back on the result it started from and
@@ -32,8 +46,13 @@ export type RunState =
    * This describes the browser only: it stopped waiting. Server-side work that
    * had already begun is not interrupted by it.
    */
-  | { phase: 'stopped'; text: string; previous: AgentRunResponse | null }
-  | { phase: 'error'; text: string; errorType: string };
+  | {
+      phase: 'stopped';
+      text: string;
+      previous: AgentRunResponse | null;
+      options: RunOptionsSnapshot;
+    }
+  | { phase: 'error'; text: string; errorType: string; options: RunOptionsSnapshot };
 
 function toErrorType(error: unknown): string {
   if (error instanceof AgentApiError) {
@@ -77,9 +96,16 @@ export function useAgentRun(client: AgentClient) {
    * `isRetry` is the single source of truth for "this run targets the result
    * already on screen". It is passed explicitly rather than inferred, because
    * only the caller knows whether the user pressed Run or Retry.
+   *
+   * `options` is the settings snapshot for this run. It is captured into state
+   * here and sent verbatim, so later control changes cannot reach a request
+   * that has already started.
    */
   const run = useCallback(
-    async (text: string, { isRetry = false }: { isRetry?: boolean } = {}) => {
+    async (
+      text: string,
+      { isRetry = false, options = null }: { isRetry?: boolean; options?: RunOptionsSnapshot } = {},
+    ) => {
       // A replacement supersedes whatever was in flight, rather than racing it.
       abortActive();
 
@@ -91,12 +117,17 @@ export function useAgentRun(client: AgentClient) {
         phase: 'loading',
         text,
         previous: isRetry && current.phase === 'success' ? current.response : null,
+        options,
       }));
 
       try {
-        const response = await client.run({ text }, { signal: controller.signal });
+        // `options` is omitted entirely when null, so a run with no per-run
+        // settings sends the original request body and the backend keeps its
+        // existing behavior.
+        const request = options === null ? { text } : { text, options };
+        const response = await client.run(request, { signal: controller.signal });
         if (latestRequestRef.current === requestId) {
-          setState({ phase: 'success', text, response });
+          setState({ phase: 'success', text, response, options });
           setCompletedRuns((count) => count + 1);
         }
       } catch (error) {
@@ -105,7 +136,7 @@ export function useAgentRun(client: AgentClient) {
         if (latestRequestRef.current !== requestId || isCancellation(error)) {
           return;
         }
-        setState({ phase: 'error', text, errorType: toErrorType(error) });
+        setState({ phase: 'error', text, errorType: toErrorType(error), options });
       } finally {
         if (controllerRef.current === controller) {
           controllerRef.current = null;
@@ -125,7 +156,12 @@ export function useAgentRun(client: AgentClient) {
     abortActive();
     setState((current) =>
       current.phase === 'loading'
-        ? { phase: 'stopped', text: current.text, previous: current.previous }
+        ? {
+            phase: 'stopped',
+            text: current.text,
+            previous: current.previous,
+            options: current.options,
+          }
         : current,
     );
   }, [abortActive]);
