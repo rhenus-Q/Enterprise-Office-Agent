@@ -19,11 +19,11 @@ const STOP_BUTTON = 'Stop waiting for this request';
 
 /** No horizontal overflow at the document level. */
 async function expectNoHorizontalOverflow(page: Page) {
-  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
+    clientWidth: document.documentElement.clientWidth,
   }));
-  expect(scrollWidth, 'document must not overflow horizontally').toBeLessThanOrEqual(innerWidth);
+  expect(scrollWidth, 'document must not overflow horizontally').toBeLessThanOrEqual(clientWidth);
 }
 
 /** Load the workspace and wait until it is interactive (mock health resolved). */
@@ -181,6 +181,42 @@ test.describe('narrow / mobile (390x844)', () => {
     }
     await aside.scrollIntoViewIfNeeded();
     await expect(aside).toBeVisible();
+
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('keeps a degraded knowledge result, caveat, and provenance readable', async ({ page }) => {
+    await gotoWorkspace(page);
+
+    await page
+      .getByRole('textbox', { name: REQUEST_LABEL })
+      .fill('Demo: knowledge with web search disabled');
+    await page.getByRole('button', { name: RUN_BUTTON }).click();
+
+    // The degraded notice is stable completion state: it can only render once
+    // the typed mock response has arrived, so no fixed delay is needed.
+    const results = page.getByRole('region', { name: 'Result' });
+    const degradedNotice = results.getByRole('status').filter({ hasText: 'Degraded run' });
+    await expect(degradedNotice).toBeVisible();
+    await expect(degradedNotice).toContainText('web_search_disabled');
+    await expect(degradedNotice).toContainText('Web search is disabled');
+
+    // A useful local answer remains readable despite the failed fallback path.
+    await expect(
+      results.getByText('The local knowledge base does not cover the third-party VPN vendor advisory'),
+    ).toBeVisible();
+
+    // Structured provenance and graph observability remain reachable below the
+    // result at the same narrow viewport.
+    const aside = page.getByRole('complementary', { name: 'Execution details' });
+    const source = aside.getByText('AcmeCorp VPN Access Policy (acmecorp_vpn_policy.md)');
+    await source.scrollIntoViewIfNeeded();
+    await expect(source).toBeVisible();
+
+    const graph = aside.getByRole('heading', { name: 'Graph execution' });
+    await graph.scrollIntoViewIfNeeded();
+    await expect(graph).toBeVisible();
+    await expect(aside.getByText('web_search_disabled_notice')).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
   });
