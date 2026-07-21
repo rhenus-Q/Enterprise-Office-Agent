@@ -288,6 +288,82 @@ export const mockHealth: HealthResponse = {
 };
 
 /**
+ * Server policy the mock resolver applies — exactly the keyword inputs of the
+ * Python `resolve_run_settings`. Injectable so tests can exercise other server
+ * configurations against the same rules; the mock client uses the default below.
+ */
+export interface MockServerPolicy {
+  server_privacy_mode: boolean;
+  server_offline_mode: boolean;
+  server_llm_assist_available: boolean;
+  server_web_search_available: boolean;
+}
+
+/**
+ * Default mock server policy, derived from `mockHealth` (assists disabled, web
+ * search available). It is the default argument to `resolveMockRunSettings`, so
+ * every existing caller keeps its exact previous behavior.
+ */
+export const MOCK_SERVER_POLICY: MockServerPolicy = {
+  server_privacy_mode: mockHealth.privacy_mode,
+  server_offline_mode: mockHealth.offline_mode,
+  server_llm_assist_available: mockHealth.office_llm_enabled,
+  server_web_search_available: mockHealth.web_search_effective,
+};
+
+/**
+ * Canonical constraint order — a faithful port of `_CONSTRAINT_ORDER` in
+ * `office_agent/run_settings.py`. Broadest cause first: a server mode explains
+ * more than a per-setting flag. The resolver deduplicates reasons into a set and
+ * emits them in this order, exactly as Python does.
+ */
+const CONSTRAINT_ORDER: RunConstraint[] = [
+  'server_offline_mode',
+  'server_privacy_mode',
+  'request_privacy_strict',
+  'server_llm_assist_disabled',
+  'server_web_search_disabled',
+  'llm_assist_not_applicable',
+  'web_search_not_applicable',
+];
+
+/**
+ * The single most explanatory reason a requested setting did not apply — a
+ * faithful port of `_blocked_reason` in `office_agent/run_settings.py`, including
+ * its priority: not-applicable first, then the active server mode (offline before
+ * privacy — a mode outranks the per-service flag it already forced off), then the
+ * per-service server-disabled flag, then a request-level strict, then the
+ * per-service flag as the fallback.
+ */
+function blockedReason(
+  server: MockServerPolicy,
+  args: {
+    applicable: boolean;
+    serverAvailable: boolean;
+    requestedStrict: boolean;
+    notApplicable: RunConstraint;
+    serverDisabled: RunConstraint;
+  },
+): RunConstraint {
+  if (!args.applicable) {
+    return args.notApplicable;
+  }
+  if (server.server_offline_mode) {
+    return 'server_offline_mode';
+  }
+  if (server.server_privacy_mode) {
+    return 'server_privacy_mode';
+  }
+  if (!args.serverAvailable) {
+    return args.serverDisabled;
+  }
+  if (args.requestedStrict) {
+    return 'request_privacy_strict';
+  }
+  return args.serverDisabled;
+}
+
+/**
  * Mock-server resolution of per-run settings.
  *
  * This is the *fake backend's* job, not the frontend's: it mirrors the rules in
@@ -295,13 +371,16 @@ export const mockHealth: HealthResponse = {
  * adapter. Production code never derives effective settings — it displays what
  * the backend returned.
  *
- * Server policy here is `mockHealth`: assists disabled, web search available.
+ * `server` defaults to `MOCK_SERVER_POLICY` (the frontend's fixed mock health:
+ * assists disabled, web search available), so the mock client is unchanged;
+ * tests may inject an explicit policy to drive other server configurations.
  */
 export function resolveMockRunSettings(
   options: RunOptions,
   intent: AgentRunResponse['intent'],
+  server: MockServerPolicy = MOCK_SERVER_POLICY,
 ): RunSettings {
-  const serverPrivacy = mockHealth.privacy_mode || mockHealth.offline_mode;
+  const serverPrivacy = server.server_privacy_mode || server.server_offline_mode;
   const effectivePrivacy: RunPrivacyMode =
     serverPrivacy || options.privacy_mode === 'strict' ? 'strict' : 'standard';
   const strict = effectivePrivacy === 'strict';
@@ -312,30 +391,40 @@ export function resolveMockRunSettings(
   };
 
   const llmAssist =
-    options.llm_assist && applicability.llm_assist && mockHealth.office_llm_enabled && !strict;
+    options.llm_assist && applicability.llm_assist && server.server_llm_assist_available && !strict;
   const webSearch =
-    options.web_search && applicability.web_search && mockHealth.web_search_effective && !strict;
+    options.web_search && applicability.web_search && server.server_web_search_available && !strict;
 
-  const constraints: RunConstraint[] = [];
+  // Collect a *set* of typed reasons (deduplicated), then emit them in the one
+  // canonical order — exactly as the Python resolver does, so a mode that blocks
+  // a requested applicable service is attributed to the mode (not the per-service
+  // flag) and folded into a single constraint.
+  const reasons = new Set<RunConstraint>();
+
+  // Privacy escalated beyond what the caller asked for.
   if (options.privacy_mode === 'standard' && strict) {
-    constraints.push(mockHealth.offline_mode ? 'server_offline_mode' : 'server_privacy_mode');
+    reasons.add(server.server_offline_mode ? 'server_offline_mode' : 'server_privacy_mode');
   }
   if (options.llm_assist && !llmAssist) {
-    constraints.push(
-      !applicability.llm_assist
-        ? 'llm_assist_not_applicable'
-        : !mockHealth.office_llm_enabled
-          ? 'server_llm_assist_disabled'
-          : 'request_privacy_strict',
+    reasons.add(
+      blockedReason(server, {
+        applicable: applicability.llm_assist,
+        serverAvailable: server.server_llm_assist_available,
+        requestedStrict: options.privacy_mode === 'strict',
+        notApplicable: 'llm_assist_not_applicable',
+        serverDisabled: 'server_llm_assist_disabled',
+      }),
     );
   }
   if (options.web_search && !webSearch) {
-    constraints.push(
-      !applicability.web_search
-        ? 'web_search_not_applicable'
-        : !mockHealth.web_search_effective
-          ? 'server_web_search_disabled'
-          : 'request_privacy_strict',
+    reasons.add(
+      blockedReason(server, {
+        applicable: applicability.web_search,
+        serverAvailable: server.server_web_search_available,
+        requestedStrict: options.privacy_mode === 'strict',
+        notApplicable: 'web_search_not_applicable',
+        serverDisabled: 'server_web_search_disabled',
+      }),
     );
   }
 
@@ -343,7 +432,7 @@ export function resolveMockRunSettings(
     requested: { ...options },
     effective: { privacy_mode: effectivePrivacy, llm_assist: llmAssist, web_search: webSearch },
     applicability,
-    constraints,
+    constraints: CONSTRAINT_ORDER.filter((reason) => reasons.has(reason)),
   };
 }
 

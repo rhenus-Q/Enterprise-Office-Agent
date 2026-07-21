@@ -16,9 +16,11 @@ from fastapi.testclient import TestClient
 
 from api import app as app_module
 from enterprise_rag.graph.consts import STOP_REASON_OFFLINE_MODE
+from office_agent.llm_assist.config import STOP_REASON_LLM_ASSIST_ERROR
 from office_agent.run_settings import (
     CONSTRAINT_SERVER_PRIVACY_MODE,
     CONSTRAINT_WEB_SEARCH_NOT_APPLICABLE,
+    LLM_ASSIST_INTENTS,
     OfficeRunOptions,
     ResolvedRunSettings,
     RunSettingsApplicability,
@@ -33,6 +35,7 @@ from office_agent.schemas import (
     INTENT_TICKET_ASSISTANT,
     INTENT_UNKNOWN,
     INTENT_WORKFLOW_APPROVAL,
+    OFFICE_INTENTS,
     KnowledgeObservability,
     NodeTiming,
     OfficeAgentResponse,
@@ -564,6 +567,84 @@ def test_other_knowledge_stop_reasons_stay_rag_llm(monkeypatch, stop_reason):
 
     assert payload["execution_mode"] == "rag_llm"
     assert payload["stop_reason"] == stop_reason
+
+
+# --- lockstep: adapter classification vs the authoritative Office vocabulary --
+#
+# `derive_execution_mode()` keeps its own private intent sets
+# (`_ALWAYS_DETERMINISTIC_INTENTS`, `_LLM_ASSIST_INTENTS`). These tests drive the
+# real adapter function from the office-owned sources of truth — `OFFICE_INTENTS`
+# (every routable intent) and `LLM_ASSIST_INTENTS` (the assist-capable ones) — so
+# the classification cannot silently drift from that vocabulary: a new intent, or
+# an intent becoming assist-capable, without a matching adapter update fails here.
+# `office_llm_enabled` is patched through the same seam the endpoint tests use.
+
+
+def _expected_execution_mode(intent, *, llm_enabled, stop_reason):
+    """Oracle over the authoritative Office Agent vocabulary, not the adapter's
+    private copies."""
+
+    if intent == INTENT_UNKNOWN:
+        return "none"
+    if intent == INTENT_KNOWLEDGE_QA:
+        return "rag_blocked_offline" if stop_reason == STOP_REASON_OFFLINE_MODE else "rag_llm"
+    if intent in LLM_ASSIST_INTENTS:
+        if not llm_enabled:
+            return "deterministic"
+        return (
+            "llm_assist_fallback" if stop_reason == STOP_REASON_LLM_ASSIST_ERROR else "llm_assisted"
+        )
+    # Every remaining supported capability is deterministic. A brand-new intent
+    # with no adapter branch would fall through the adapter to "none", diverging
+    # from this expectation and failing the test.
+    return "deterministic"
+
+
+@pytest.mark.parametrize("intent", OFFICE_INTENTS)
+@pytest.mark.parametrize("llm_enabled", [True, False])
+@pytest.mark.parametrize(
+    "stop_reason", ["", STOP_REASON_OFFLINE_MODE, STOP_REASON_LLM_ASSIST_ERROR]
+)
+def test_execution_mode_matches_the_office_vocabulary(
+    monkeypatch, intent, llm_enabled, stop_reason
+):
+    """Every OFFICE_INTENTS member is classified exactly as the authoritative
+    vocabulary dictates, across the full assist-flag x stop-reason matrix."""
+
+    monkeypatch.setattr(app_module, "office_llm_enabled", lambda: llm_enabled)
+
+    assert app_module.derive_execution_mode(intent, stop_reason) == _expected_execution_mode(
+        intent, llm_enabled=llm_enabled, stop_reason=stop_reason
+    )
+
+
+def test_only_unknown_is_ever_classified_none(monkeypatch):
+    """A supported intent must never silently fall through to "none" — which is
+    exactly what an unclassified new intent would do."""
+
+    monkeypatch.setattr(app_module, "office_llm_enabled", lambda: True)
+
+    for intent in OFFICE_INTENTS:
+        mode = app_module.derive_execution_mode(intent, "")
+        if intent == INTENT_UNKNOWN:
+            assert mode == "none"
+        else:
+            assert mode != "none", f"{intent} was silently classified as 'none'"
+
+
+def test_adapter_reflects_every_office_owned_assist_intent(monkeypatch):
+    """If an intent becomes assist-capable in the office-owned LLM_ASSIST_INTENTS,
+    the adapter must route it through the assist branch (assisted / fallback), not
+    treat it as a plain deterministic capability."""
+
+    monkeypatch.setattr(app_module, "office_llm_enabled", lambda: True)
+
+    for intent in LLM_ASSIST_INTENTS:
+        assert app_module.derive_execution_mode(intent, "") == "llm_assisted"
+        assert (
+            app_module.derive_execution_mode(intent, STOP_REASON_LLM_ASSIST_ERROR)
+            == "llm_assist_fallback"
+        )
 
 
 # --- error handling ---------------------------------------------------------
