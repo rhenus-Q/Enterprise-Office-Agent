@@ -21,7 +21,7 @@ from enterprise_rag.graph.chains.generation import (
     INSUFFICIENT_CONTEXT_ANSWER,
     format_documents,
     generate_answer,
-    generation_chain,
+    get_generation_chain,
 )
 from tests.conftest import requires_openai
 
@@ -140,7 +140,7 @@ GROUNDING_DOCS = [
 def test_generation_chain_returns_nonempty_string():
     """The chain should return a non-empty plain string answer."""
 
-    result = generation_chain.invoke(
+    result = get_generation_chain().invoke(
         {
             "question": "What is Retrieval-Augmented Generation?",
             "documents": GROUNDING_DOCS,
@@ -165,7 +165,7 @@ def test_generation_chain_answer_uses_unique_context_fact():
         )
     ]
 
-    result = generation_chain.invoke(
+    result = get_generation_chain().invoke(
         {
             "question": (
                 "According to the documents, what method describes Retrieval-Augmented Generation?"

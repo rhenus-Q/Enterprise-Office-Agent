@@ -7,8 +7,13 @@ service. The briefing must be identical on every run (no system clock) and must
 never mutate the mock data.
 """
 
+import os
+from unittest.mock import Mock
+
+from office_agent.llm_assist import briefing_narrative
 from office_agent.schemas import INTENT_DAILY_BRIEFING
 from office_agent.tools import briefing, calendar, email, tickets
+from tests.conftest import isolate_ordinary_test_environment
 
 
 def test_briefing_day_is_calendar_today_not_system_clock():
@@ -21,12 +26,27 @@ def test_briefing_day_is_calendar_today_not_system_clock():
     assert briefing.briefing_day() == expected_today  # stable across calls
 
 
-def test_briefing_is_deterministic():
+def test_briefing_is_deterministic(monkeypatch):
+    """A contaminated parent flag cannot activate the assist in ordinary pytest."""
+
+    monkeypatch.setenv("OFFICE_LLM_ENABLED", "true")
+    isolate_ordinary_test_environment(os.environ)
+
+    model_factory = Mock(
+        side_effect=AssertionError("real LLM factory must not be called by an ordinary test")
+    )
+    monkeypatch.setattr(
+        briefing_narrative,
+        "get_briefing_narrative_chain",
+        model_factory,
+    )
+
     first = briefing.generate_daily_briefing("give me my daily briefing")
     second = briefing.generate_daily_briefing("morning briefing")
 
     assert first.tool == INTENT_DAILY_BRIEFING
-    assert first.content == second.content
+    assert first.content.encode("utf-8") == second.content.encode("utf-8")
+    model_factory.assert_not_called()
 
 
 def test_briefing_has_all_sections_with_the_briefing_day():

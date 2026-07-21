@@ -3,12 +3,14 @@ Gated real-model test for the Office Agent LLM Daily Briefing narrative chain.
 
 Lives under tests/office_agent/integration/, kept OUT of the mocked
 tests/office_agent/ unit suite (which is strictly keys-free) and marked
-`requires_openai`, so it is skipped unless `OPENAI_API_KEY` is set. It calls the
-real gpt-5-mini narrative chain over the collected briefing facts and asserts the
-parsed result is a well-formed, grounded `BriefingNarrative`. Run only with
-explicit approval:
+`real_model`, so it is skipped unless `RUN_REAL_MODEL_TESTS=1` and
+`OPENAI_API_KEY` are both set. It calls the real gpt-5-mini narrative chain over
+the collected briefing facts and asserts the parsed result is a well-formed,
+grounded `BriefingNarrative`. Run only with explicit approval (this may incur
+cost):
 
-    uv run pytest tests/office_agent/integration/ -v
+    $env:RUN_REAL_MODEL_TESTS="1"
+    uv run pytest -m real_model tests/office_agent/integration/ -v
 """
 
 from office_agent.llm_assist import briefing_narrative

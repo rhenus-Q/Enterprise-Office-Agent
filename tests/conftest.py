@@ -1,36 +1,84 @@
-"""
-conftest.py
+"""Shared pytest bootstrap and real-model test gating.
 
-pytest loads conftest.py before collecting tests.
-We load env vars from .env (OPENAI_API_KEY, etc.) here, before any
-`from enterprise_rag.graph.chains.question_router import ...` triggers ChatOpenAI construction.
+Ordinary tests must be independent of a developer's local ``.env``. This file
+is loaded before test-module collection, so it establishes the safe environment
+before any project module can read feature flags or call ``load_dotenv()``.
+
+Real-model tests are marked ``real_model`` and require two independent signals:
+``RUN_REAL_MODEL_TESTS=1`` plus every credential named by the marker. A key by
+itself is never authorization to make a paid provider request.
 """
 
 import os
+from collections.abc import Mapping, MutableMapping, Sequence
 
 import pytest
-from dotenv import load_dotenv
 
-load_dotenv()
-
-
-# Values enabling a runtime privacy mode. Mirrors the parsing in
-# enterprise_rag/graph/config.py; inlined so collection imports no application code.
 _TRUTHY_VALUES = {"true", "1", "yes", "on"}
+_REAL_MODEL_OPT_IN = "RUN_REAL_MODEL_TESTS"
+_DEFAULT_REAL_MODEL_CREDENTIALS = ("OPENAI_API_KEY",)
 
-# OFFLINE_MODE fails closed for real-model tests: no external call may be made,
-# so the gated suites skip instead of attempting one.
-_offline_mode = os.getenv("OFFLINE_MODE", "false").strip().lower() in _TRUTHY_VALUES
 
-# Skip the whole integration suite (instead of erroring) when no API key is set,
-# or when OFFLINE_MODE forbids external calls. A whitespace-only key counts as
-# missing (mirrors evals/office_agent/llm_assist/_env.py), so the real-model
-# suites skip cleanly instead of failing on auth.
-requires_openai = pytest.mark.skipif(
-    _offline_mode or not os.getenv("OPENAI_API_KEY", "").strip(),
-    reason=(
-        "OFFLINE_MODE is enabled — real-model tests must not call external services"
-        if _offline_mode
-        else "OPENAI_API_KEY is required to call the real gpt-5-mini for these tests"
-    ),
-)
+def isolate_ordinary_test_environment(environ: MutableMapping[str, str]) -> None:
+    """Force the keys-free pytest defaults into ``environ``.
+
+    These assignments deliberately overwrite inherited values. ``setdefault``
+    would preserve a contaminated parent process. ``PYTHON_DOTENV_DISABLED`` is
+    python-dotenv's supported process switch, so later production-entry-point
+    calls to ``load_dotenv()`` are harmless no-ops during ordinary pytest.
+    """
+
+    environ["OFFICE_LLM_ENABLED"] = "false"
+    environ["PYTHON_DOTENV_DISABLED"] = "1"
+
+
+isolate_ordinary_test_environment(os.environ)
+
+
+def _is_truthy(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in _TRUTHY_VALUES
+
+
+def real_model_skip_reason(
+    required_credentials: Sequence[str] = _DEFAULT_REAL_MODEL_CREDENTIALS,
+    environ: Mapping[str, str] | None = None,
+) -> str | None:
+    """Return why a paid test is disabled, or ``None`` when it may run.
+
+    ``environ`` makes the authorization matrix directly testable without
+    mutating the real test process or spawning a provider-backed test.
+    """
+
+    env = os.environ if environ is None else environ
+
+    if not _is_truthy(env.get(_REAL_MODEL_OPT_IN)):
+        return f"set {_REAL_MODEL_OPT_IN}=1 to authorize real-model tests (may incur cost)"
+
+    if _is_truthy(env.get("OFFLINE_MODE")):
+        return "OFFLINE_MODE is enabled; real-model tests must not call external services"
+
+    missing = [name for name in required_credentials if not env.get(name, "").strip()]
+    if missing:
+        return f"missing required credential(s): {', '.join(missing)}"
+
+    return None
+
+
+# Backward-compatible decorator name used by the existing OpenAI integration
+# tests. It now classifies tests with the canonical marker; the collection hook
+# below owns the opt-in and credential gate in one place.
+requires_openai = pytest.mark.real_model("OPENAI_API_KEY")
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Skip every marked paid test unless its full authorization gate passes."""
+
+    for item in items:
+        marker = item.get_closest_marker("real_model")
+        if marker is None:
+            continue
+
+        required_credentials = tuple(str(name) for name in marker.args)
+        reason = real_model_skip_reason(required_credentials or _DEFAULT_REAL_MODEL_CREDENTIALS)
+        if reason is not None:
+            item.add_marker(pytest.mark.skip(reason=reason))

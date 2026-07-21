@@ -214,6 +214,11 @@ mock/http client modes, and the honest-observability principles.
 
 ## Tests
 
+Ordinary pytest runs are always keys-free: test bootstrap overwrites
+`OFFICE_LLM_ENABLED=false` before test-module imports and disables `.env` loading
+for the pytest process. A local `.env` therefore cannot enable an Office LLM
+assist or supply credentials to ordinary tests.
+
 ```powershell
 # Fully mocked suites — NO API keys required
 uv run python -m pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -v
@@ -221,10 +226,13 @@ uv run python -m pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ 
 # Office Agent suite only (fully mocked / deterministic)
 uv run python -m pytest tests/office_agent/ --ignore=tests/office_agent/integration -v
 
-# Integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
-uv run python -m pytest tests/enterprise_rag/chains/ tests/office_agent/integration/ -v
+# Real-model integration tests — require an exported OPENAI_API_KEY plus this opt-in
+# and may incur provider cost. The key alone is not authorization.
+$env:RUN_REAL_MODEL_TESTS="1"  # separate, deliberate opt-in; calls may incur cost
+uv run python -m pytest -m real_model tests/enterprise_rag/chains/ tests/office_agent/integration/ -v
+Remove-Item Env:RUN_REAL_MODEL_TESTS
 
-# Whole suite
+# Whole ordinary suite (real-model tests skip unless explicitly authorized above)
 uv run python -m pytest -v
 ```
 
@@ -241,10 +249,10 @@ uv run python -m mypy          # type-check the scoped engine-API surface
 | Surface | API keys? |
 |---|---|
 | Office Agent local mock tools (Email, Calendar, Tickets/Tasks, Daily Briefing, Meeting Prep, Workflow/Approval) | **No** by default — local mock data, deterministic, and offline while the optional Office LLM assists are disabled. With `OFFICE_LLM_ENABLED` set, Email Summary and Daily Briefing attempt to call OpenAI; a valid `OPENAI_API_KEY` is required for the LLM-generated digest or narrative. Without one, they fall back to deterministic output with a caveat. |
-| `tests/enterprise_rag/` (`nodes/`, `graph/`, `evals/`), `tests/office_agent/` (excl. `integration/`), CI | **No** — fully mocked |
+| `tests/enterprise_rag/` (`nodes/`, `graph/`, `evals/`), `tests/office_agent/` (excl. `integration/`), `tests/api/`, CI | **No** — fully mocked; pytest forces the Office assist off and ignores local `.env` values. |
 | `ruff` / `mypy` | **No** |
 | Knowledge Q&A + `enterprise_rag` engine (`enterprise_rag.cli`, the Office Agent's knowledge intent, or the demo `--include-knowledge`) | **Yes** — `OPENAI_API_KEY` (and `TAVILY_API_KEY` when web search is enabled) |
-| `tests/enterprise_rag/chains/` + `tests/office_agent/integration/` integration tests, the full eval run | **Yes** — real `gpt-5-mini`; skipped/excluded without keys |
+| Tests marked `real_model` in `tests/enterprise_rag/chains/` + `tests/office_agent/integration/`, and the full eval run | **Yes** — real `gpt-5-mini`. Pytest requires both `RUN_REAL_MODEL_TESTS=1` and an exported `OPENAI_API_KEY`; otherwise marked tests skip. These tests may incur cost. |
 
 ## Validation
 

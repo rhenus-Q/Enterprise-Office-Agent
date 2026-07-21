@@ -13,7 +13,7 @@ doc.page_content per document.
 
 import pytest
 
-from enterprise_rag.graph.chains.retrieval_grader import RetrievalGrade, retrieval_grader
+from enterprise_rag.graph.chains.retrieval_grader import RetrievalGrade, get_retrieval_grader
 from tests.conftest import requires_openai
 
 # (question, document) document helps answer the question -> expect is_relevant == True
@@ -61,7 +61,7 @@ IRRELEVANT_CASES = [
 def test_retrieval_grader_returns_retrievalgrade_with_bool():
     """The result should be a RetrievalGrade, with is_relevant as a bool."""
 
-    result = retrieval_grader.invoke(
+    result = get_retrieval_grader().invoke(
         {
             "question": "What is RAG?",
             "document": "RAG retrieves documents and feeds them to a model.",
@@ -77,7 +77,7 @@ def test_retrieval_grader_returns_retrievalgrade_with_bool():
 def test_retrieval_grader_accepts_relevant_documents(user_question, document):
     """Documents that can help answer the question should be is_relevant == True."""
 
-    result = retrieval_grader.invoke(
+    result = get_retrieval_grader().invoke(
         {
             "question": user_question,
             "document": document,
@@ -94,7 +94,7 @@ def test_retrieval_grader_accepts_relevant_documents(user_question, document):
 def test_retrieval_grader_rejects_irrelevant_documents(user_question, document):
     """Documents unrelated to the question should be is_relevant == False."""
 
-    result = retrieval_grader.invoke(
+    result = get_retrieval_grader().invoke(
         {
             "question": user_question,
             "document": document,

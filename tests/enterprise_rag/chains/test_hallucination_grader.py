@@ -18,7 +18,7 @@ from langchain_core.documents import Document
 
 from enterprise_rag.graph.chains.hallucination_grader import (
     GradeHallucination,
-    hallucination_grader,
+    get_hallucination_grader,
 )
 from tests.conftest import requires_openai
 
@@ -73,7 +73,7 @@ NOT_GROUNDED_CASES = [
 def test_hallucination_grader_returns_gradehallucination_with_bool():
     """The result should be a GradeHallucination, with is_grounded as a bool."""
 
-    result = hallucination_grader.invoke(
+    result = get_hallucination_grader().invoke(
         {
             "documents": DOCS,
             "generation": "RAG retrieves documents and feeds them to a model.",
@@ -89,7 +89,7 @@ def test_hallucination_grader_returns_gradehallucination_with_bool():
 def test_hallucination_grader_accepts_grounded_answers(documents, generation):
     """Answers fully supported by the documents should be is_grounded == True."""
 
-    result = hallucination_grader.invoke(
+    result = get_hallucination_grader().invoke(
         {
             "documents": documents,
             "generation": generation,
@@ -106,7 +106,7 @@ def test_hallucination_grader_accepts_grounded_answers(documents, generation):
 def test_hallucination_grader_rejects_unsupported_answers(documents, generation):
     """Answers that add unsupported facts should be is_grounded == False."""
 
-    result = hallucination_grader.invoke(
+    result = get_hallucination_grader().invoke(
         {
             "documents": documents,
             "generation": generation,
