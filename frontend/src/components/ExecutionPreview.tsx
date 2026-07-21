@@ -1,13 +1,22 @@
 import { Activity, Gauge, Route, ShieldHalf } from 'lucide-react';
 
+import type { RunOptions } from '../types/api';
+import { RunSettingsSummary } from './RunSettingsSummary';
+
 interface ExecutionPreviewProps {
-  phase: 'idle' | 'loading' | 'error';
+  phase: 'idle' | 'loading' | 'error' | 'stopped';
+  /**
+   * The snapshot submitted with the run in flight (or the stopped one). Shown
+   * on its own, since no backend response exists yet to report effective values.
+   */
+  requestedSettings?: RunOptions | null;
 }
 
 const PHASE_NOTE: Record<ExecutionPreviewProps['phase'], string> = {
   idle: 'Run a request to see its intent, tool, duration, and execution mode.',
   loading: 'Waiting for the run to finish…',
   error: 'The request failed before any execution details were returned.',
+  stopped: 'The request was stopped in the browser before a response arrived.',
 };
 
 /**
@@ -19,7 +28,7 @@ const PHASE_NOTE: Record<ExecutionPreviewProps['phase'], string> = {
  * Every value is an explicit placeholder — no runtime data is invented, and no
  * RAG timeline is implied for capabilities that do not expose one.
  */
-export function ExecutionPreview({ phase }: ExecutionPreviewProps) {
+export function ExecutionPreview({ phase, requestedSettings = null }: ExecutionPreviewProps) {
   const isWaiting = phase === 'loading';
 
   return (
@@ -72,10 +81,19 @@ export function ExecutionPreview({ phase }: ExecutionPreviewProps) {
           </span>
           Privacy and modes
         </h3>
-        <p className="empty-note">
-          Per-run settings are reported for Knowledge Q&amp;A, the one capability that reaches an
-          external service.
-        </p>
+        {requestedSettings ? (
+          <RunSettingsSummary
+            requested={requestedSettings}
+            settings={null}
+            active={phase === 'loading'}
+            stopped={phase === 'stopped'}
+          />
+        ) : (
+          <p className="empty-note">
+            Per-run settings are reported for Knowledge Q&amp;A, the one capability that reaches an
+            external service.
+          </p>
+        )}
       </section>
 
       <section className="card card--preview card--observability">

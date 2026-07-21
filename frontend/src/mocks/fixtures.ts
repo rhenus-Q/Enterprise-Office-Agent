@@ -14,7 +14,14 @@
  * never invents engine copy.
  */
 
-import type { AgentRunResponse, HealthResponse } from '../types/api';
+import type {
+  AgentRunResponse,
+  HealthResponse,
+  RunConstraint,
+  RunOptions,
+  RunPrivacyMode,
+  RunSettings,
+} from '../types/api';
 
 /** Verbatim `WEB_SEARCH_DISABLED_NOTE` from enterprise_rag/graph/formatting.py. */
 const WEB_SEARCH_DISABLED_NOTE =
@@ -71,6 +78,7 @@ export const knowledgeSuccess: AgentRunResponse = {
     web_fallback_policy: 'conservative',
     caveat: '',
   },
+  run_settings: null,
 };
 
 export const knowledgeWebSearchDisabled: AgentRunResponse = {
@@ -108,6 +116,7 @@ export const knowledgeWebSearchDisabled: AgentRunResponse = {
     web_fallback_policy: 'conservative',
     caveat: WEB_SEARCH_DISABLED_NOTE,
   },
+  run_settings: null,
 };
 
 export const emailSuccess: AgentRunResponse = {
@@ -130,6 +139,7 @@ export const emailSuccess: AgentRunResponse = {
   duration_ms: 6.4,
   execution_mode: 'deterministic',
   observability: null,
+  run_settings: null,
 };
 
 export const emailAssistFallback: AgentRunResponse = {
@@ -142,6 +152,7 @@ export const emailAssistFallback: AgentRunResponse = {
   duration_ms: 61240.8,
   execution_mode: 'llm_assist_fallback',
   observability: null,
+  run_settings: null,
 };
 
 export const calendarSuccess: AgentRunResponse = {
@@ -162,6 +173,7 @@ export const calendarSuccess: AgentRunResponse = {
   duration_ms: 4.1,
   execution_mode: 'deterministic',
   observability: null,
+  run_settings: null,
 };
 
 export const ticketsSuccess: AgentRunResponse = {
@@ -182,6 +194,7 @@ export const ticketsSuccess: AgentRunResponse = {
   duration_ms: 5.2,
   execution_mode: 'deterministic',
   observability: null,
+  run_settings: null,
 };
 
 export const briefingSuccess: AgentRunResponse = {
@@ -201,6 +214,7 @@ export const briefingSuccess: AgentRunResponse = {
   duration_ms: 9.8,
   execution_mode: 'deterministic',
   observability: null,
+  run_settings: null,
 };
 
 export const meetingSuccess: AgentRunResponse = {
@@ -225,6 +239,7 @@ export const meetingSuccess: AgentRunResponse = {
   duration_ms: 7.6,
   execution_mode: 'deterministic',
   observability: null,
+  run_settings: null,
 };
 
 export const approvalsSuccess: AgentRunResponse = {
@@ -248,6 +263,7 @@ export const approvalsSuccess: AgentRunResponse = {
   duration_ms: 5.9,
   execution_mode: 'deterministic',
   observability: null,
+  run_settings: null,
 };
 
 export const unsupportedResponse: AgentRunResponse = {
@@ -260,6 +276,7 @@ export const unsupportedResponse: AgentRunResponse = {
   duration_ms: 0.3,
   execution_mode: 'none',
   observability: null,
+  run_settings: null,
 };
 
 export const mockHealth: HealthResponse = {
@@ -269,6 +286,66 @@ export const mockHealth: HealthResponse = {
   office_llm_enabled: false,
   web_search_effective: true,
 };
+
+/**
+ * Mock-server resolution of per-run settings.
+ *
+ * This is the *fake backend's* job, not the frontend's: it mirrors the rules in
+ * `office_agent/run_settings.py` so the offline demo behaves like the real
+ * adapter. Production code never derives effective settings — it displays what
+ * the backend returned.
+ *
+ * Server policy here is `mockHealth`: assists disabled, web search available.
+ */
+export function resolveMockRunSettings(
+  options: RunOptions,
+  intent: AgentRunResponse['intent'],
+): RunSettings {
+  const serverPrivacy = mockHealth.privacy_mode || mockHealth.offline_mode;
+  const effectivePrivacy: RunPrivacyMode =
+    serverPrivacy || options.privacy_mode === 'strict' ? 'strict' : 'standard';
+  const strict = effectivePrivacy === 'strict';
+
+  const applicability = {
+    llm_assist: intent === 'email_summary' || intent === 'daily_briefing',
+    web_search: intent === 'knowledge_qa',
+  };
+
+  const llmAssist =
+    options.llm_assist && applicability.llm_assist && mockHealth.office_llm_enabled && !strict;
+  const webSearch =
+    options.web_search && applicability.web_search && mockHealth.web_search_effective && !strict;
+
+  const constraints: RunConstraint[] = [];
+  if (options.privacy_mode === 'standard' && strict) {
+    constraints.push(mockHealth.offline_mode ? 'server_offline_mode' : 'server_privacy_mode');
+  }
+  if (options.llm_assist && !llmAssist) {
+    constraints.push(
+      !applicability.llm_assist
+        ? 'llm_assist_not_applicable'
+        : !mockHealth.office_llm_enabled
+          ? 'server_llm_assist_disabled'
+          : 'request_privacy_strict',
+    );
+  }
+  if (options.web_search && !webSearch) {
+    constraints.push(
+      !applicability.web_search
+        ? 'web_search_not_applicable'
+        : !mockHealth.web_search_effective
+          ? 'server_web_search_disabled'
+          : 'request_privacy_strict',
+    );
+  }
+
+  return {
+    requested: { ...options },
+    effective: { privacy_mode: effectivePrivacy, llm_assist: llmAssist, web_search: webSearch },
+    applicability,
+    constraints,
+  };
+}
 
 /** Prompt that makes the mock client reject, so the error state is reachable. */
 export const ERROR_PROMPT = 'Demo: simulated API error';

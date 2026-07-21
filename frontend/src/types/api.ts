@@ -84,8 +84,70 @@ export interface KnowledgeObservability {
   caveat: string;
 }
 
+/** Per-request privacy level. `strict` restricts this run only. */
+export type RunPrivacyMode = 'standard' | 'strict';
+
+/**
+ * What the user selected in the Run Settings controls.
+ *
+ * These are *requests*. The backend resolves them against server policy, which
+ * always wins — a request can make a run stricter, never more permissive.
+ */
+export interface RunOptions {
+  privacy_mode: RunPrivacyMode;
+  llm_assist: boolean;
+  web_search: boolean;
+}
+
+/** One coherent set of settings — used for both requested and effective. */
+export interface RunSettingsValues {
+  privacy_mode: RunPrivacyMode;
+  llm_assist: boolean;
+  web_search: boolean;
+}
+
+/**
+ * Whether each optional path applies to the routed capability.
+ *
+ * `false` means "not applicable to this capability" and must be displayed as
+ * such — never as though the setting had been used.
+ */
+export interface RunSettingsApplicability {
+  llm_assist: boolean;
+  web_search: boolean;
+}
+
+/**
+ * Typed reasons why `requested` and `effective` differ. Stable identifiers that
+ * the UI maps to text — the frontend never invents its own explanation.
+ */
+export type RunConstraint =
+  | 'server_offline_mode'
+  | 'server_privacy_mode'
+  | 'request_privacy_strict'
+  | 'server_llm_assist_disabled'
+  | 'server_web_search_disabled'
+  | 'llm_assist_not_applicable'
+  | 'web_search_not_applicable';
+
+/**
+ * The backend's authoritative account of one run's settings.
+ *
+ * `effective` is computed by the backend and displayed verbatim. The frontend
+ * must never re-derive it, and must never infer it from badge text or rendered
+ * DOM content.
+ */
+export interface RunSettings {
+  requested: RunSettingsValues;
+  effective: RunSettingsValues;
+  applicability: RunSettingsApplicability;
+  constraints: RunConstraint[];
+}
+
 export interface AgentRunRequest {
   text: string;
+  /** Omitted entirely when the caller has no per-run settings to send. */
+  options?: RunOptions;
 }
 
 export interface AgentRunResponse {
@@ -98,6 +160,8 @@ export interface AgentRunResponse {
   duration_ms: number;
   execution_mode: ExecutionMode;
   observability: KnowledgeObservability | null;
+  /** Null when the request carried no `options`. */
+  run_settings: RunSettings | null;
 }
 
 export interface HealthResponse {

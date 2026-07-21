@@ -1,12 +1,17 @@
 import { Activity, Gauge, Route, ShieldHalf } from 'lucide-react';
 
-import type { AgentRunResponse, RunStatus } from '../types/api';
+import type { AgentRunResponse, RunOptions, RunStatus } from '../types/api';
 import { EXECUTION_MODE_LABELS, RUN_STATUS_LABELS, formatDurationMs } from '../lib/status';
 import { KnowledgeTimeline } from './KnowledgeTimeline';
+import { RunSettingsSummary } from './RunSettingsSummary';
 
 interface ExecutionPanelProps {
   response: AgentRunResponse;
   status: RunStatus;
+  /** The snapshot submitted with this run, if any. */
+  requestedSettings?: RunOptions | null;
+  /** True when the browser stopped waiting for this run. */
+  stopped?: boolean;
 }
 
 /**
@@ -19,7 +24,12 @@ interface ExecutionPanelProps {
  * engine telemetry. Capabilities that expose no timeline say so explicitly
  * instead of showing a fabricated one.
  */
-export function ExecutionPanel({ response, status }: ExecutionPanelProps) {
+export function ExecutionPanel({
+  response,
+  status,
+  requestedSettings = null,
+  stopped = false,
+}: ExecutionPanelProps) {
   const observability = response.observability;
 
   return (
@@ -95,6 +105,13 @@ export function ExecutionPanel({ response, status }: ExecutionPanelProps) {
           </span>
           Privacy and modes
         </h3>
+
+        <RunSettingsSummary
+          requested={requestedSettings}
+          settings={response.run_settings}
+          stopped={stopped}
+        />
+
         {observability ? (
           <dl className="fields">
             <div className="field">

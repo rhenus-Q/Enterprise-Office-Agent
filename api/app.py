@@ -37,6 +37,10 @@ from api.schemas import (
     HealthResponse,
     KnowledgeObservabilityModel,
     NodeTimingModel,
+    RunOptionsRequest,
+    RunSettingsApplicabilityModel,
+    RunSettingsModel,
+    RunSettingsValuesModel,
 )
 from enterprise_rag.graph.config import web_search_enabled
 from enterprise_rag.graph.consts import STOP_REASON_OFFLINE_MODE
@@ -48,6 +52,7 @@ from office_agent.llm_assist.config import (
     offline_mode,
     privacy_mode,
 )
+from office_agent.run_settings import OfficeRunOptions, ResolvedRunSettings
 from office_agent.schemas import (
     INTENT_CALENDAR_LOOKUP,
     INTENT_DAILY_BRIEFING,
@@ -74,13 +79,21 @@ _ALWAYS_DETERMINISTIC_INTENTS = frozenset(
 _LLM_ASSIST_INTENTS = frozenset({INTENT_EMAIL_SUMMARY, INTENT_DAILY_BRIEFING})
 
 
-def derive_execution_mode(intent: str, stop_reason: str) -> ExecutionMode:
+def derive_execution_mode(
+    intent: str, stop_reason: str, settings: ResolvedRunSettings | None = None
+) -> ExecutionMode:
     """Classify how a completed run executed (spec §8.2 matrix, exhaustive).
 
     Purely presentational and adapter-derived: it reads the already-produced
-    `intent` / `stop_reason` plus the existing `office_llm_enabled()` reader.
-    It makes no routing decision, invokes nothing, and must never be treated as
-    engine telemetry.
+    `intent` / `stop_reason` plus the assist decision that actually governed the
+    run. It makes no routing decision, invokes nothing, and must never be
+    treated as engine telemetry.
+
+    When the request carried per-run settings, the assist branch uses the
+    **effective** decision the engine resolved rather than the bare server flag
+    — otherwise a run whose request switched the assist off would still be
+    reported as `"llm_assisted"`, which would be a lie. With no per-run settings
+    the original server-flag behavior is unchanged.
 
     Degradation *within* a mode stays the job of `stop_reason` — a knowledge run
     with `retrieval_error` is still `"rag_llm"`. Only the offline short-circuit
@@ -94,7 +107,8 @@ def derive_execution_mode(intent: str, stop_reason: str) -> ExecutionMode:
         return "deterministic"
 
     if intent in _LLM_ASSIST_INTENTS:
-        if not office_llm_enabled():
+        assist_ran = settings.effective.llm_assist if settings is not None else office_llm_enabled()
+        if not assist_ran:
             return "deterministic"
         if stop_reason == STOP_REASON_LLM_ASSIST_ERROR:
             return "llm_assist_fallback"
@@ -140,6 +154,53 @@ def _observability_model(
     )
 
 
+def _run_options(options: RunOptionsRequest | None) -> OfficeRunOptions | None:
+    """Convert the validated request body into the engine's frozen options type.
+
+    `None` stays `None` so an omitted `options` field reaches the engine as "no
+    per-run options" — preserving the original behavior exactly rather than
+    silently substituting defaults, which would force both external paths off.
+    """
+
+    if options is None:
+        return None
+
+    return OfficeRunOptions(
+        privacy_mode=options.privacy_mode,
+        llm_assist=options.llm_assist,
+        web_search=options.web_search,
+    )
+
+
+def _run_settings_model(settings: ResolvedRunSettings | None) -> RunSettingsModel | None:
+    """Transport the backend-resolved settings onto the wire, verbatim.
+
+    The adapter deliberately re-derives nothing here: `effective` is whatever
+    the engine resolved, so the frontend can display it as authoritative.
+    """
+
+    if settings is None:
+        return None
+
+    return RunSettingsModel(
+        requested=RunSettingsValuesModel(
+            privacy_mode=settings.requested.privacy_mode,  # type: ignore[arg-type]
+            llm_assist=settings.requested.llm_assist,
+            web_search=settings.requested.web_search,
+        ),
+        effective=RunSettingsValuesModel(
+            privacy_mode=settings.effective.privacy_mode,  # type: ignore[arg-type]
+            llm_assist=settings.effective.llm_assist,
+            web_search=settings.effective.web_search,
+        ),
+        applicability=RunSettingsApplicabilityModel(
+            llm_assist=settings.applicability.llm_assist,
+            web_search=settings.applicability.web_search,
+        ),
+        constraints=list(settings.constraints),
+    )
+
+
 def create_app() -> FastAPI:
     """Build the adapter application.
 
@@ -182,7 +243,7 @@ def create_app() -> FastAPI:
 
         started = time.perf_counter()
         try:
-            result = answer_office_request(request.text)
+            result = answer_office_request(request.text, _run_options(request.options))
         except Exception as exc:
             # Deliberately broad: this is the adapter's single engine boundary,
             # and no engine failure may escape as an unhandled 500 with a
@@ -200,10 +261,13 @@ def create_app() -> FastAPI:
             sources=list(result.sources),
             run_id=result.run_id,
             duration_ms=duration_ms,
-            execution_mode=derive_execution_mode(result.intent, result.stop_reason),
+            execution_mode=derive_execution_mode(
+                result.intent, result.stop_reason, result.run_settings
+            ),
             # Real engine metadata when the Knowledge Q&A adapter produced it;
             # null for every other capability rather than fabricated.
             observability=_observability_model(result.observability),
+            run_settings=_run_settings_model(result.run_settings),
         )
 
     return app

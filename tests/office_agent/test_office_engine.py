@@ -35,7 +35,7 @@ from office_agent.tools import (
 def _guard(tool_label):
     """Return a stand-in tool that fails if the engine ever calls it."""
 
-    def _fail(_arg):
+    def _fail(_arg, **_kwargs):
         raise AssertionError(f"{tool_label} tool must not run for this request")
 
     return _fail
@@ -44,7 +44,7 @@ def _guard(tool_label):
 def test_knowledge_qa_request_dispatches_to_knowledge_tool(monkeypatch):
     calls = []
 
-    def fake_tool(question):
+    def fake_tool(question, **_kwargs):
         calls.append(question)
         return ToolResult(
             tool=INTENT_KNOWLEDGE_QA,
@@ -75,7 +75,7 @@ def test_knowledge_qa_request_dispatches_to_knowledge_tool(monkeypatch):
 def test_email_summary_request_dispatches_to_email_tool(monkeypatch):
     calls = []
 
-    def fake_tool(query):
+    def fake_tool(query, **_kwargs):
         calls.append(query)
         return ToolResult(tool=INTENT_EMAIL_SUMMARY, content="INBOX SUMMARY")
 
@@ -144,7 +144,7 @@ def test_ticket_assistant_request_dispatches_to_ticket_tool(monkeypatch):
 def test_daily_briefing_request_dispatches_to_briefing_tool(monkeypatch):
     calls = []
 
-    def fake_tool(query):
+    def fake_tool(query, **_kwargs):
         calls.append(query)
         return ToolResult(tool=INTENT_DAILY_BRIEFING, content="DAILY BRIEFING")
 
@@ -248,7 +248,7 @@ def test_knowledge_response_carries_the_tool_observability(monkeypatch):
     monkeypatch.setattr(
         knowledge,
         "run_knowledge_qa",
-        lambda _question: ToolResult(
+        lambda _question, **_kwargs: ToolResult(
             tool=INTENT_KNOWLEDGE_QA,
             content="FORMATTED ANSWER",
             observability=observability,
@@ -266,7 +266,7 @@ def test_non_knowledge_capabilities_have_no_observability(monkeypatch):
     monkeypatch.setattr(
         email,
         "summarize_emails",
-        lambda _text: ToolResult(tool=INTENT_EMAIL_SUMMARY, content="INBOX SUMMARY"),
+        lambda _text, **_kwargs: ToolResult(tool=INTENT_EMAIL_SUMMARY, content="INBOX SUMMARY"),
     )
     monkeypatch.setattr(
         calendar,

@@ -9,6 +9,12 @@ As of Phase 7 (Office Agent v1.6) eight intents exist (`knowledge_qa`,
 """
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard, typing only
+    # `run_settings` imports the intent constants from this module, so the
+    # reverse reference exists only for type checkers.
+    from office_agent.run_settings import ResolvedRunSettings
 
 # Routed intents. Keep this in lockstep with the router and the engine dispatch:
 # adding a value here is meaningless until a route rule and a tool back it.
@@ -126,3 +132,6 @@ class OfficeAgentResponse:
     sources: list[str] = field(default_factory=list)
     run_id: str | None = None
     observability: KnowledgeObservability | None = None
+    # Set only when the caller supplied per-run options; `None` means the run
+    # used the server defaults and nothing was requested to report.
+    run_settings: "ResolvedRunSettings | None" = None

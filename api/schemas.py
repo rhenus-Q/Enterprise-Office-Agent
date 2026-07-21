@@ -18,7 +18,7 @@ Typing policy (deliberate, and the reason not every field is a `Literal`):
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Adapter-derived execution classification (spec §8.2 matrix). Not engine
 # telemetry — no engine reports such a field.
@@ -32,14 +32,75 @@ ExecutionMode = Literal[
 ]
 
 
+# Per-request privacy level. Unlike the transported engine fields, the adapter
+# fully owns this vocabulary, so a Literal is correct here.
+RunPrivacyMode = Literal["standard", "strict"]
+
+
+class RunOptionsRequest(BaseModel):
+    """Optional per-run settings on `POST /api/agent/run`.
+
+    Every field defaults to the conservative value, so a partial `options`
+    object can never implicitly switch an external path on. These are
+    *requests*: the backend resolves them against server policy, which always
+    wins.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    privacy_mode: RunPrivacyMode = "standard"
+    llm_assist: bool = False
+    web_search: bool = False
+
+
 class AgentRunRequest(BaseModel):
     """Body of `POST /api/agent/run`.
 
     The bounds are exact: 4000 characters is accepted, 4001 (and empty) get
     FastAPI's standard 422.
+
+    `options` is optional and additive. Omitting it preserves the original
+    behavior exactly — the run uses server defaults and `run_settings` comes
+    back `null`.
     """
 
     text: str = Field(min_length=1, max_length=4000)
+    options: RunOptionsRequest | None = None
+
+
+class RunSettingsValuesModel(BaseModel):
+    """One coherent set of settings (used for both requested and effective)."""
+
+    privacy_mode: RunPrivacyMode
+    llm_assist: bool
+    web_search: bool
+
+
+class RunSettingsApplicabilityModel(BaseModel):
+    """Whether each optional path applies to the routed capability at all.
+
+    `false` means "not applicable to this capability" — reported as such rather
+    than as though the setting had been used.
+    """
+
+    llm_assist: bool
+    web_search: bool
+
+
+class RunSettingsModel(BaseModel):
+    """The backend's authoritative account of one run's settings.
+
+    The frontend displays these; it must never re-derive `effective` itself.
+
+    `constraints` are stable typed identifiers (e.g. `server_privacy_mode`,
+    `web_search_not_applicable`) explaining why `requested` and `effective`
+    differ — the UI maps them to human text.
+    """
+
+    requested: RunSettingsValuesModel
+    effective: RunSettingsValuesModel
+    applicability: RunSettingsApplicabilityModel
+    constraints: list[str] = Field(default_factory=list)
 
 
 class NodeTimingModel(BaseModel):
@@ -83,7 +144,9 @@ class AgentRunResponse(BaseModel):
     - `duration_ms` — **adapter-measured** (`time.perf_counter()` around the
       single engine call), never claimed to be engine telemetry.
     - `execution_mode` — **adapter-derived** presentation classification.
-    - `observability` — `null` until Phase 4.
+    - `observability` — real Knowledge Q&A engine metadata, `null` otherwise.
+    - `run_settings` — the backend-resolved per-run settings; `null` when the
+      request omitted `options`.
     """
 
     intent: str
@@ -95,6 +158,7 @@ class AgentRunResponse(BaseModel):
     duration_ms: float
     execution_mode: ExecutionMode
     observability: KnowledgeObservabilityModel | None = None
+    run_settings: RunSettingsModel | None = None
 
 
 class HealthResponse(BaseModel):
