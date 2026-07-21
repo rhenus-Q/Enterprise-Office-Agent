@@ -29,13 +29,16 @@ uv run python scripts/demo_office_agent_v1.py
 ## 3. Tests
 
 ```powershell
+uv sync --group dev --group api           # the api group is required: pytest collects tests/api/
 uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -v   # Office Agent suite
-uv run pytest -v                          # full suite (integration tests skip without keys)
+uv run pytest tests/api/ -v               # thin-adapter suite (mocked, keys-free)
+uv run pytest -v                          # full suite (real-model tests skip without the opt-in below)
 ```
 
 - [ ] `tests/office_agent/` (excl. `integration/`) passes (fully mocked, no keys).
-- [ ] Full suite passes (`tests/enterprise_rag/chains/` and `tests/office_agent/integration/` skip without
-  `OPENAI_API_KEY`).
+- [ ] `tests/api/` passes (mocked, no keys; needs the `api` dependency group).
+- [ ] Full suite passes (`tests/enterprise_rag/chains/` and `tests/office_agent/integration/` are marked
+  `real_model` and skip unless `RUN_REAL_MODEL_TESTS=1` and `OPENAI_API_KEY` are both set).
 
 ## 3a. Office LLM-assist validation (optional, mostly key-gated)
 
@@ -55,7 +58,8 @@ uv run python evals/office_agent/llm_assist/run_email_digest_eval.py --validate-
 uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --validate-only
 ```
 
-- [ ] **Only with explicit approval and a real `OPENAI_API_KEY`:** the gated
+- [ ] **Only with explicit approval and a real `OPENAI_API_KEY`** (the pytest
+  chain tests additionally require `RUN_REAL_MODEL_TESTS=1`): the gated
   real-model chain tests (`uv run pytest tests/office_agent/integration/ -v`) and the full
   assist behavioral evals (the same runners **without** `--validate-only`).
 
@@ -63,8 +67,28 @@ uv run python evals/office_agent/llm_assist/run_briefing_narrative_eval.py --val
 
 - [ ] `uv run python evals/enterprise_rag/run_eval.py --validate-only` passes
   (keys-free).
-- [ ] **Only with explicit approval and real keys:** `tests/enterprise_rag/chains/` and the full
-  RAG behavioral eval.
+- [ ] **Only with explicit approval and real keys:** the full RAG behavioral eval,
+  and `tests/enterprise_rag/chains/` (which also needs the `RUN_REAL_MODEL_TESTS=1`
+  opt-in).
+
+## 3c. Presentation tier (api/ + frontend/) — release gate
+
+The web tier is part of the release gate; CI runs all of it keys-free on every
+push/PR. Run it locally for any release, and for any change touching `api/` or
+`frontend/`. For a narrow, unrelated backend-only change these steps may be
+left to CI:
+
+```powershell
+cd frontend
+npm ci                              # against the committed package-lock.json (what CI runs)
+npm run build                       # tsc type-check + vite build
+npm test                            # Vitest
+npx playwright install chromium     # one-time per machine
+npm run test:responsive             # Playwright responsive checks (typed mock mode, keys-free)
+```
+
+- [ ] `tests/api/` passes (see §3).
+- [ ] Frontend build, Vitest, and responsive Playwright checks pass.
 
 ## 4. Lint, format check, mypy
 
@@ -80,8 +104,8 @@ uv run mypy
 
 ## 5. Docs consistency checks
 
-- [ ] `README.md`, `structure.md`, `office_agent/README.md`, and the release
-  notes agree on:
+- [ ] `README.md`, `structure.md`, `office_agent/README.md`,
+  `frontend/README.md`, and the release notes agree on:
   - the capability count (**seven**) and the version map (below);
   - the **two optional LLM assists** (Email Digest, Daily Briefing Narrative)
     described as presentation layers, **not** additional capabilities or intents;

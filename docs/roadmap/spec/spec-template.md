@@ -108,6 +108,18 @@ uv run pytest tests/office_agent/ --ignore=tests/office_agent/integration -q
 uv run python evals/enterprise_rag/run_eval.py --validate-only
 ```
 
+Conditional, by area touched:
+
+* Changes touching `api/` (or the Office Agent response contract) also run
+  `uv run pytest tests/api/ -q` (requires the `api` dependency group).
+* Changes touching `frontend/` also run, from `frontend/`: `npm run build`,
+  `npm test`, and `npm run test:responsive` (one-time
+  `npx playwright install chromium`).
+* Full-repository or release-scope changes validate the complete CI-equivalent
+  set (all mocked Python suites including `tests/api/`, plus the frontend
+  build / Vitest / responsive checks). Backend-only tasks do not run the
+  frontend commands.
+
 Only run full eval if the feature explicitly needs it and the user separately approves:
 
 ```powershell

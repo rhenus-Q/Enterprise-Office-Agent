@@ -1,6 +1,6 @@
 # Office Agent Quick Start
 
-*Last updated: 2026-07-13*
+*Last updated: 2026-07-21*
 
 ## What the Office Agent Does
 
@@ -28,6 +28,12 @@ of request from the words you use, so ask naturally.
 
 A few important things to understand about this version:
 
+- **There are two ways to use it: the command line and a web workspace.**
+  Everything in this guide applies to both. The web workspace gives you a
+  single request box, shows which capability handled your request, and has an
+  execution-details panel where you can see the settings that governed the run
+  and (for Knowledge Q&A) the steps behind the answer. If it is running in your
+  environment, your administrator can give you the address.
 - **It runs on sample data, not your real accounts.** The email, calendar,
   ticket, task, and approval information all come from a small, fictional
   "AcmeCorp" data set built into the project. It is **not** connected to Gmail,
