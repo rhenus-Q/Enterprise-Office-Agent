@@ -62,6 +62,7 @@ describe('run settings controls', () => {
   // 2. The run settings themselves are interactive.
   it('renders interactive privacy, assist, and web-search controls', async () => {
     render(<App client={testClient()} />);
+    await screen.findByText('Available');
 
     const group = settingsGroup();
     expect(group.getByRole('radio', { name: 'Standard' })).toBeEnabled();
@@ -71,6 +72,7 @@ describe('run settings controls', () => {
 
   it('states where each setting applies', async () => {
     render(<App client={testClient()} />);
+    await screen.findByText('Available');
 
     const group = settingsGroup();
     expect(group.getByText('Email Summary and Daily Briefing')).toBeInTheDocument();
