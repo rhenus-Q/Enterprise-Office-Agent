@@ -340,6 +340,32 @@ describe('workspace shell', () => {
 
     expect(screen.getByLabelText('Request')).toHaveValue('Show my open tickets');
   });
+
+  it('collapses the examples panel to its header and expands it again', async () => {
+    const user = userEvent.setup();
+    render(<App client={testClient()} />);
+
+    // Default expanded: featured prompts and the demo-states section are shown.
+    expect(
+      await screen.findByRole('button', { name: 'Summarize my unread emails' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Demo states')).toBeInTheDocument();
+
+    const collapse = screen.getByRole('button', { name: 'Collapse examples' });
+    expect(collapse).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(collapse);
+
+    // Body hidden; the panel (region) and its now-"Expand" toggle stay.
+    expect(
+      screen.queryByRole('button', { name: 'Summarize my unread emails' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Demo states')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Example requests' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Expand examples' }));
+    expect(screen.getByRole('button', { name: 'Summarize my unread emails' })).toBeInTheDocument();
+  });
 });
 
 describe('run states', () => {

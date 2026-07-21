@@ -225,6 +225,29 @@ describe('run settings controls', () => {
       expect.anything(),
     );
   });
+
+  // Collapsible panel: default open, collapses to a summary, expands again.
+  it('collapses to a summary of the current selection and expands again', async () => {
+    const user = userEvent.setup();
+    render(<App client={testClient()} />);
+
+    // Default expanded: the controls are present.
+    expect(settingsGroup().getByRole('radio', { name: 'Standard' })).toBeInTheDocument();
+
+    const toggle = settingsGroup().getByRole('button', { name: /run settings/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(toggle);
+
+    // Collapsed: controls gone, a compact summary of the selection shown, and the
+    // section itself stays so it is re-expandable in place.
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(settingsGroup().queryByRole('radio', { name: 'Standard' })).not.toBeInTheDocument();
+    expect(settingsGroup().getByText('Standard · Assist Off · Web Off')).toBeInTheDocument();
+
+    await user.click(settingsGroup().getByRole('button', { name: /run settings/i }));
+    expect(settingsGroup().getByRole('radio', { name: 'Standard' })).toBeInTheDocument();
+  });
 });
 
 describe('execution details: requested vs effective settings', () => {
