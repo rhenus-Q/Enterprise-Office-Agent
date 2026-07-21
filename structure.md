@@ -64,6 +64,12 @@ The repository is organized as named capability modules (see
   (`README.md`, `CLAUDE.md`, `structure.md`, `docs/adr/`) stay repo-level;
   module-specific usage lives in `enterprise_rag/README.md` and
   `office_agent/README.md`.
+- **Presentation tier (`api/`, `frontend/`)** — a thin FastAPI adapter and a web
+  observability workspace over the Office Agent, described in
+  [The web workspace and API adapter](#the-web-workspace-and-api-adapter)
+  at the end of this file. They add **no** engine behavior: the adapter's only
+  engine call is `answer_office_request()`, so they sit outside the two-module
+  boundary above rather than becoming a third engine module.
 
 The numbered sections below (§1–§15) describe the `enterprise_rag` engine itself;
 the Office Agent module is documented in its own section at the end.
@@ -837,3 +843,52 @@ decisions behind the module are
 five-capability v1) and
 [ADR 016](docs/adr/office_agent/016-office-agent-capability-extensions.md) (the later Meeting
 and Workflow / Approval extensions — the current seven-capability architecture).
+
+## The web workspace and API adapter
+
+The repository's presentation tier makes the engines' existing observability
+visible on the web without adding any engine behavior. It is a thin layer over the
+Office Agent — the only engine call it makes is `answer_office_request()` — so it
+sits outside the two-module engine boundary and is documented in
+[ADR 021](docs/adr/021-frontend-observability-workspace.md).
+
+| Path | Purpose |
+|---|---|
+| `api/` | **Thin FastAPI adapter.** `api/app.py` exposes a factory `create_app() -> FastAPI` (no module-level app, so imports stay side-effect-free) that runs `load_dotenv()` then `enforce_tracing_privacy()` — the same entry-point pattern as the CLIs ([ADR 020](docs/adr/020-module-owned-cli-entry-points.md)). Exactly two routes: `GET /api/health` (the four existing flag readers — `privacy_mode` / `offline_mode` / `office_llm_enabled` from `office_agent.llm_assist.config`, and mode-aware `web_search_effective` from `enterprise_rag.graph.config.web_search_enabled()`) and `POST /api/agent/run` (body: `text` plus an optional `options` object — `privacy_mode` / `llm_assist` / `web_search`; calls `answer_office_request(text, options)` once, maps `OfficeAgentResponse` 1:1, and adds adapter-measured `duration_ms`, adapter-derived `execution_mode`, Knowledge-Q&A-only `observability`, and backend-resolved `run_settings` — the last `null` when `options` was omitted). Engine exceptions become HTTP 500 with the exception **type name only**. `api/schemas.py` holds the Pydantic v2 models (incl. `RunOptionsRequest`, `RunSettingsModel` with `requested` / `effective` / `applicability` / `constraints`). Run: `uv run uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000` (localhost only, no auth). |
+| `frontend/` | **Vite + React + TypeScript observability workspace.** A single three-pane layout (capability rail `nav` / composer + per-intent results `main` / execution details `aside`) over all seven capabilities plus `unknown`. Talks to the adapter through the two endpoints via one `AgentClient` interface with `http` (default) and `mock` implementations, selected by `VITE_API_MODE`. Two settings layers are kept visually separate: **read-only server-policy badges** (`StatusBanner`, from `GET /api/health` — informational, non-interactive) and **interactive per-run Run Settings** (`RunSettingsControls` — Privacy / LLM Assist / Web Search, snapshotted at submit and sent as the request's `options`). Renders engine `content` verbatim, labels `duration_ms` adapter-measured and `execution_mode` adapter-derived, shows the Knowledge Q&A timeline only when `observability` is present, shows `effective` Run Settings only from the backend's `run_settings` (never re-derived), and uses no browser-clock dates. See [`frontend/README.md`](frontend/README.md). |
+| `tests/api/` | **Mocked, keys-free adapter tests** (`fastapi.testclient.TestClient` with `answer_office_request` and the flag readers monkeypatched — no real engine call): the health flag matrix, 1:1 field mapping, the full `execution_mode` matrix, `text` length bounds (4000 accepted, 4001 → 422), the type-only 500 handler, and the additive `observability` pass-through (populated for a knowledge-shaped fake, `null` for the others). Collected by the existing pytest config and run in CI's `mocked-tests` job. |
+
+These consume two additive, backward-compatible changes to the `office_agent`
+contract — both default to the pre-existing behavior:
+
+1. **Knowledge Q&A observability carry-through** (`office_agent/schemas.py`,
+   `tools/knowledge.py`, `engine.py`): the rich `AnswerResult` metadata the knowledge
+   adapter already holds now survives to the API via an optional, default-`None`
+   `KnowledgeObservability` field, without duplicating any logic.
+2. **Request-scoped Run Settings** (`office_agent/run_settings.py`, plus optional
+   parameters threaded through `engine.py` into the knowledge / email / briefing
+   tools): `answer_office_request(user_input, options=None)` accepts an optional
+   frozen `OfficeRunOptions`. Routing runs **first**; the options are then resolved
+   **after routing** by the pure `resolve_run_settings(intent, options, server_*=…)`
+   (server policy is passed in as arguments — nothing is read from the environment
+   and no module global is mutated), and only the resolved *effective* decision is
+   threaded into the affected tool — web search through the knowledge adapter's
+   existing `AnswerOptions` seam, LLM assist into Email Summary / Daily Briefing;
+   deterministic tools receive nothing. The result is carried on
+   `OfficeAgentResponse.run_settings` (`requested` / `effective` / `applicability` /
+   `constraints`) and transported verbatim as the response's `run_settings` (`null`
+   when `options` was omitted). Precedence is `OFFLINE_MODE` > `PRIVACY_MODE` > server
+   flags > per-run request: a request can only ever *restrict* a run, never enable a
+   path the server prohibits. Because resolution is a pure function over frozen
+   dataclasses with no process-wide state, two concurrent requests with opposite
+   settings stay fully isolated.
+
+`enterprise_rag/**` is unchanged by both (the only touch point is the pre-existing
+`AnswerOptions(web_search_enabled=…)` seam), and with no per-run `options` every tool
+keeps its previous byte-for-byte behavior (see
+[ADR 021](docs/adr/021-frontend-observability-workspace.md) §3 and its Amendment).
+
+CI (`.github/workflows/ci.yml`) covers this tier keys-free and deployment-free: the
+`api` dependency group is installed in both uv jobs (the `lint` job needs it so
+mypy can type-check `api/`), the `mocked-tests` job runs `tests/api/`, and a
+`frontend` job runs `npm ci` / `npm run build` / `npm test` on Node 20.
