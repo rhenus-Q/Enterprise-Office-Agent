@@ -13,7 +13,7 @@ on-topic vs. off-topic.
 
 import pytest
 
-from enterprise_rag.graph.chains.answer_grader import GradeAnswer, answer_grader
+from enterprise_rag.graph.chains.answer_grader import GradeAnswer, get_answer_grader
 from tests.conftest import requires_openai
 
 # (question, generation) answer actually addresses the question -> expect answers_question == True
@@ -58,7 +58,7 @@ NOT_USEFUL_CASES = [
 def test_answer_grader_returns_gradeanswer_with_bool():
     """The result should be a GradeAnswer, with answers_question as a bool."""
 
-    result = answer_grader.invoke(
+    result = get_answer_grader().invoke(
         {
             "question": "What is RAG?",
             "generation": "RAG combines retrieval with generation.",
@@ -74,7 +74,7 @@ def test_answer_grader_returns_gradeanswer_with_bool():
 def test_answer_grader_accepts_relevant_answers(user_question, generation):
     """On-topic answers that actually address the question should be answers_question == True."""
 
-    result = answer_grader.invoke(
+    result = get_answer_grader().invoke(
         {
             "question": user_question,
             "generation": generation,
@@ -91,7 +91,7 @@ def test_answer_grader_accepts_relevant_answers(user_question, generation):
 def test_answer_grader_rejects_offtopic_answers(user_question, generation):
     """Off-topic answers that don't address the question should be answers_question == False."""
 
-    result = answer_grader.invoke(
+    result = get_answer_grader().invoke(
         {
             "question": user_question,
             "generation": generation,

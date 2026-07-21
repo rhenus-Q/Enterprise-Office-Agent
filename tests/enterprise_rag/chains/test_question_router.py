@@ -15,7 +15,7 @@ so only unambiguous examples are used here.
 
 import pytest
 
-from enterprise_rag.graph.chains.question_router import RouteQuery, question_router
+from enterprise_rag.graph.chains.question_router import RouteQuery, get_question_router
 from enterprise_rag.graph.consts import RETRIEVE, WEBSEARCH
 from tests.conftest import requires_openai
 
@@ -44,7 +44,7 @@ WEBSEARCH_QUESTIONS = [
 def test_router_returns_routequery_with_valid_datasource():
     """The result should be a RouteQuery, with datasource one of the two valid values."""
 
-    result = question_router.invoke({"question": "How do I request VPN access?"})
+    result = get_question_router().invoke({"question": "How do I request VPN access?"})
 
     assert isinstance(result, RouteQuery)
     assert result.datasource in {RETRIEVE, WEBSEARCH}
@@ -55,7 +55,7 @@ def test_router_returns_routequery_with_valid_datasource():
 def test_router_routes_internal_topics_to_retrieve(user_question):
     """Questions on internal knowledge-base topics should route to retrieve."""
 
-    result = question_router.invoke({"question": user_question})
+    result = get_question_router().invoke({"question": user_question})
 
     assert result.datasource == RETRIEVE, (
         f"expected retrieve, got {result.datasource!r}, question: {user_question!r}"
@@ -67,7 +67,7 @@ def test_router_routes_internal_topics_to_retrieve(user_question):
 def test_router_routes_external_topics_to_websearch(user_question):
     """Questions needing real-time / external info should route to websearch."""
 
-    result = question_router.invoke({"question": user_question})
+    result = get_question_router().invoke({"question": user_question})
 
     assert result.datasource == WEBSEARCH, (
         f"expected websearch, got {result.datasource!r}, question: {user_question!r}"
