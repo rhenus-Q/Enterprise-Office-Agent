@@ -48,7 +48,16 @@ git diff -- <file>
 
 for changed files that need closer review.
 
-For any `??` (untracked) files shown by `git status --short`, read the file directly using the Read tool before assessing commit readiness. An untracked file may be a new corpus document, a generated file, a secrets file, or an accidental addition — it is invisible to `git diff` and must be reviewed explicitly.
+For any `??` (untracked) files shown by `git status --short`, read the file directly using the Read tool before assessing commit readiness. An untracked file may be a new corpus document, a generated file, or an accidental addition — it is invisible to `git diff` and must be reviewed explicitly.
+
+**Never read secret-bearing files.** Do not open the contents of:
+
+* `.env`, `.env.*`, `*.env`, `.envrc`
+* any file whose name suggests credentials (`*secret*`, `*credential*`, `*token*`, `*.pem`, `*.key`, `*.pfx`, `id_rsa*`)
+
+`.env.example` is the one exception — it is a committed template and is safe to read.
+
+For an excluded file, assess it from its path and `git status` state alone. If such a file appears as `??` or staged, that is itself a ❌ blocking finding: it means the file is not covered by `.gitignore` and is at risk of being committed. Report the filename and say it must be gitignored (or removed from the index) before commit — do not quote or summarize its contents.
 
 ## Step 3. Review scope
 
