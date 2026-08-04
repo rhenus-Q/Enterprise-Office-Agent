@@ -42,6 +42,20 @@ test.describe('wide desktop (1440x900)', () => {
     // web server started in VITE_API_MODE=mock.
     await expect(page.getByText('Mock environment')).toBeVisible();
 
+    // Desktop retains the complete server-policy strip and top-level refresh.
+    const status = page.getByRole('list', { name: 'Runtime status' });
+    for (const value of [
+      'Privacy',
+      'Offline restrictions',
+      'LLM assist',
+      'Web search',
+      'Mock environment',
+      'Fixtures',
+    ]) {
+      await expect(status.getByText(value, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole('button', { name: 'Refresh runtime status' })).toBeVisible();
+
     const nav = page.getByRole('navigation', { name: 'Office Agent capabilities' });
     const main = page.getByRole('main');
     const aside = page.getByRole('complementary', { name: 'Execution details' });
@@ -57,7 +71,12 @@ test.describe('wide desktop (1440x900)', () => {
 
     // Composer and Run Settings are visible and usable.
     await expect(page.getByRole('textbox', { name: REQUEST_LABEL })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Run settings' })).toBeVisible();
+    const runSettings = page.getByRole('region', { name: 'Run settings' });
+    await expect(runSettings).toBeVisible();
+    await expect(runSettings.getByRole('button', { name: /run settings/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
 
     // Side by side: the aside starts at/after main's right edge and shares its row.
     const mainBox = await main.boundingBox();
@@ -110,37 +129,151 @@ test.describe('medium (1000x900)', () => {
 test.describe('narrow / mobile (390x844)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('collapses the sidebar behind a keyboard-operable toggle', async ({ page }) => {
+  test('opens capabilities as a keyboard-operable overlay drawer', async ({ page }) => {
     await gotoWorkspace(page);
 
     const nav = page.getByRole('navigation', { name: 'Office Agent capabilities' });
     const toggle = page.getByRole('button', { name: /capabilities/i });
+    const main = page.getByRole('main');
 
     // Sidebar starts collapsed; the toggle is visible and reports collapsed.
     await expect(nav).toBeHidden();
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
-    // Click opens it: aria-expanded flips and the rail becomes visible.
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(nav).toBeVisible();
+    const triggerStyle = await toggle.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderTopWidth: style.borderTopWidth,
+        height: Number.parseFloat(style.height),
+        width: Number.parseFloat(style.width),
+      };
+    });
+    expect(triggerStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(triggerStyle.borderTopWidth).toBe('0px');
+    expect(triggerStyle.width).toBeGreaterThanOrEqual(40);
+    expect(triggerStyle.width).toBeLessThanOrEqual(44);
+    expect(triggerStyle.height).toBeGreaterThanOrEqual(40);
+    expect(triggerStyle.height).toBeLessThanOrEqual(44);
 
-    // Keyboard closes it: focus the toggle and press Enter.
+    const mainBefore = await main.boundingBox();
+
+    // Keyboard activation opens a fixed drawer with a backdrop and close control.
     await toggle.focus();
     await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(nav).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Capabilities' })).toBeVisible();
+    await expect(page.locator('.app__sidebar-backdrop')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Close' })).toBeFocused();
+
+    // The overlay is out of normal flow: opening it does not move the workspace.
+    const mainAfter = await main.boundingBox();
+    expect(mainBefore).not.toBeNull();
+    expect(mainAfter).not.toBeNull();
+    if (mainBefore && mainAfter) {
+      expect(mainAfter.y).toBeCloseTo(mainBefore.y, 0);
+    }
+
+    // Escape closes it and returns focus to the compact trigger.
+    await page.keyboard.press('Escape');
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(nav).toBeHidden();
+    await expect(toggle).toBeFocused();
 
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('uses one compact status summary with an inline policy disclosure', async ({ page }) => {
+    await gotoWorkspace(page);
+
+    const header = page.locator('.app__header');
+    const composer = page.locator('.composer');
+    const summary = page.locator('.status-mobile__toggle');
+
+    await expect(summary).toBeVisible();
+    await expect(summary).toHaveAccessibleName(
+      'Server policy: Standard. Mock runtime available. Expand details.',
+    );
+    await expect(summary.getByText('Standard', { exact: true })).toBeVisible();
+    await expect(summary.getByText('Fixtures', { exact: true })).toHaveCount(0);
+    await expect(summary.locator('.status-mobile__availability--online')).toHaveCount(0);
+    await expect(summary).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByRole('list', { name: 'Runtime status' })).toHaveCount(0);
+    await expect(page.locator('.status-chip')).toHaveCount(0);
+    await expect(page.getByText('Observability workspace')).toBeHidden();
+    const productTitle = page.locator('.app__title');
+    await expect(productTitle).toHaveText('Enterprise Office Agent');
+    const titleSize = await productTitle.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    expect(titleSize.scrollWidth).toBeLessThanOrEqual(titleSize.clientWidth + 1);
+
+    // The persistent app bar remains one compact row and leaves the composer nearby.
+    const headerBox = await header.boundingBox();
+    const composerBox = await composer.boundingBox();
+    expect(headerBox).not.toBeNull();
+    expect(composerBox).not.toBeNull();
+    if (headerBox && composerBox) {
+      expect(headerBox.height).toBeLessThanOrEqual(64);
+      expect(composerBox.y - (headerBox.y + headerBox.height)).toBeLessThanOrEqual(20);
+    }
+    const summaryBox = await summary.boundingBox();
+    expect(summaryBox).not.toBeNull();
+    if (summaryBox) {
+      expect(summaryBox.width).toBeLessThanOrEqual(120);
+    }
+
+    const panelId = await summary.getAttribute('aria-controls');
+    const toggleId = await summary.getAttribute('id');
+    expect(panelId).toBeTruthy();
+    expect(toggleId).toBeTruthy();
+    await summary.click();
+    await expect(summary).toHaveAttribute('aria-expanded', 'true');
+    await expect(summary).toHaveAccessibleName(
+      'Server policy: Standard. Mock runtime available. Collapse details.',
+    );
+
+    const panel = page.locator(`[id="${panelId}"]`);
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute('aria-labelledby', toggleId!);
+    for (const [label, value] of [
+      ['Privacy', 'Standard'],
+      ['Offline restrictions', 'Off'],
+      ['LLM assist', 'Off'],
+      ['Web search', 'Available'],
+      ['Data source', 'Fixtures'],
+    ]) {
+      const term = panel.locator('dt').filter({ hasText: label });
+      await expect(term).toHaveText(label);
+      await expect(term.locator('..').locator('dd')).toContainText(value);
+    }
+    await expect(panel.getByText(/Last checked:/)).toBeVisible();
+    const refresh = panel.getByRole('button', { name: 'Refresh runtime status' });
+    await expect(refresh).toBeVisible();
+    await refresh.click();
+    await expect(refresh).toBeEnabled();
+
+    await summary.click();
+    await expect(panel).toBeHidden();
     await expectNoHorizontalOverflow(page);
   });
 
   test('keeps composer, result, actions, and execution details usable', async ({ page }) => {
     await gotoWorkspace(page);
 
-    // Composer and Run Settings remain visible and usable.
+    // Composer remains ready while Run Settings takes its compact mobile default.
     await expect(page.getByRole('textbox', { name: REQUEST_LABEL })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Run settings' })).toBeVisible();
+    const runSettings = page.getByRole('region', { name: 'Run settings' });
+    await expect(runSettings).toBeVisible();
+    const settingsToggle = runSettings.getByRole('button', { name: /run settings/i });
+    await expect(settingsToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(runSettings.getByText('Standard · Assist Off · Web Off')).toBeVisible();
+    await settingsToggle.click();
+    await expect(settingsToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(runSettings.getByRole('radio', { name: 'Standard' })).toBeChecked();
 
     // Submit a mock request and read its result.
     await page.getByRole('textbox', { name: REQUEST_LABEL }).fill('Show my open tickets');

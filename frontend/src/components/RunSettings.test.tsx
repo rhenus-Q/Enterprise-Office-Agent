@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
 import { createMockClient, type AgentClient } from '../api/client';
@@ -29,6 +29,10 @@ function settingsGroup() {
 }
 
 const STANDARD_OFF = { privacy_mode: 'standard', llm_assist: false, web_search: false } as const;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 async function submit(user: ReturnType<typeof userEvent.setup>, prompt: string) {
   await user.clear(screen.getByLabelText('Request'));
@@ -249,6 +253,32 @@ describe('run settings controls', () => {
 
     await user.click(settingsGroup().getByRole('button', { name: /run settings/i }));
     expect(settingsGroup().getByRole('radio', { name: 'Standard' })).toBeInTheDocument();
+  });
+
+  it('starts collapsed on mobile while retaining the same settings and disclosure', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(max-width: 860px)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const user = userEvent.setup();
+    render(<App client={testClient()} />);
+
+    const toggle = settingsGroup().getByRole('button', { name: /run settings/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(settingsGroup().queryByRole('radio', { name: 'Standard' })).not.toBeInTheDocument();
+    expect(settingsGroup().getByText('Standard · Assist Off · Web Off')).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(settingsGroup().getByRole('radio', { name: 'Standard' })).toBeChecked();
   });
 });
 
