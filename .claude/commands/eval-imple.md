@@ -105,7 +105,7 @@ Continue to Step 6.
 
 Run:
 
-```powershell
+```bash
 git status --short
 ```
 
@@ -147,7 +147,7 @@ Run the **narrowest relevant validation first**, then expand only when justified
 Run each keys-free suite as its own command so it matches its scoped
 `allowed-tools` permission:
 
-```powershell
+```bash
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy

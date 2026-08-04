@@ -30,7 +30,7 @@ Read:
 
 Run:
 
-```powershell
+```bash
 git status --short
 git diff --stat
 git diff --name-only
@@ -42,7 +42,7 @@ Prefer targeted diffs over reading entire files.
 
 Use:
 
-```powershell
+```bash
 git diff -- <file>
 ```
 
@@ -105,7 +105,7 @@ If not available, recommend the smallest appropriate validation set.
 
 For most changes, recommend:
 
-```powershell
+```bash
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
@@ -115,13 +115,13 @@ uv run python evals/enterprise_rag/run_eval.py --validate-only
 
 For graph/node/eval-behavior changes, recommend:
 
-```powershell
+```bash
 uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ -q
 ```
 
 Only recommend full eval when the diff changes eval rows, eval expectations, retrieval behavior, fallback behavior, or generated eval results:
 
-```powershell
+```bash
 uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/results.md
 ```
 
@@ -161,7 +161,7 @@ Then suggest a concise commit message.
 
 Example:
 
-```powershell
+```bash
 git add evals/enterprise_rag/questions.jsonl evals/enterprise_rag/results.md
 git commit -m "Refresh eval results after Phase 3 calibration"
 ```
@@ -198,7 +198,7 @@ List tests/checks already evidenced or still recommended.
 
 If ready, provide:
 
-```powershell
+```bash
 git add <files>
 git commit -m "<message>"
 ```

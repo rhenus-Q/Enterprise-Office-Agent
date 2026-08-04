@@ -239,7 +239,7 @@ If applying a documentation fix:
 
 Always run:
 
-```powershell
+```bash
 git status --short
 git diff --stat
 git diff
@@ -249,7 +249,7 @@ Then run the smallest relevant validation only if applicable.
 
 Allowed validation examples:
 
-```powershell
+```bash
 uv run python -m py_compile enterprise_rag/graph/engine.py enterprise_rag/graph/config.py
 uv run pytest tests/enterprise_rag/graph -q
 uv run pytest tests/enterprise_rag/nodes -q

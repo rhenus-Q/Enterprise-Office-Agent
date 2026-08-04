@@ -184,7 +184,7 @@ Examples of unacceptable guidance:
 
 Run:
 
-```powershell
+```bash
 git status --short
 git diff -- CLAUDE.md docs/roadmap/README.md
 git diff --stat -- CLAUDE.md docs/roadmap/README.md

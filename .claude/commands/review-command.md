@@ -1,7 +1,7 @@
 ---
 description: Review a Claude Code command file for correctness, safety, and project fit
 argument-hint: Command path or command name, for example .claude/commands/arch-review.md or /arch-review
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(date:*)
 ---
 
 You are reviewing a Claude Code command file for this Agentic RAG project.
@@ -74,7 +74,7 @@ Do not overwrite previous command review reports.
 
 Before the first report write, run this command exactly once:
 
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+    date "+%Y-%m-%d %H:%M:%S %z"
 
 Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
 
@@ -137,7 +137,7 @@ Do not read unrelated project files unless needed to avoid an incorrect review.
 
 Run only:
 
-```powershell
+```bash
 git status --short
 ```
 

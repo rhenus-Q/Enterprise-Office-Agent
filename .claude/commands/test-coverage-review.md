@@ -1,7 +1,7 @@
 ---
 description: Review test coverage gaps and write a timestamped test coverage review report
 argument-hint: Optional review focus, for example "graph routing" or "privacy mode"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*)
 ---
 
 You are reviewing test coverage for this Agentic RAG project.
@@ -81,7 +81,7 @@ Do not overwrite previous test coverage review reports.
 
 Before the first report write, run this command exactly once:
 
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+    date "+%Y-%m-%d %H:%M:%S %z"
 
 Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
 
@@ -150,7 +150,7 @@ Read:
 
 Run:
 
-```powershell
+```bash
 git status --short
 ```
 

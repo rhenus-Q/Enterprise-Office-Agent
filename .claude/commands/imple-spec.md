@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/enterprise_rag/nodes:*), Bash(uv run python -m pytest tests/enterprise_rag/nodes:*), Bash(uv run pytest tests/enterprise_rag/graph:*), Bash(uv run python -m pytest tests/enterprise_rag/graph:*), Bash(uv run pytest tests/enterprise_rag/evals:*), Bash(uv run python -m pytest tests/enterprise_rag/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/enterprise_rag/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(date:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/enterprise_rag/nodes:*), Bash(uv run python -m pytest tests/enterprise_rag/nodes:*), Bash(uv run pytest tests/enterprise_rag/graph:*), Bash(uv run python -m pytest tests/enterprise_rag/graph:*), Bash(uv run pytest tests/enterprise_rag/evals:*), Bash(uv run python -m pytest tests/enterprise_rag/evals:*), Bash(uv run pytest tests/office_agent:*), Bash(uv run python -m pytest tests/office_agent:*), Bash(uv run python evals/enterprise_rag/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -66,7 +66,7 @@ If it does not exist, continue implementation, but do not create an implementati
 
 Run:
 
-```powershell
+```bash
 git status --short
 ```
 
@@ -226,7 +226,7 @@ Run each keys-free suite as its own command so each matches its own scoped
 `allowed-tools` permission (do not combine test directories into one `pytest`
 invocation — the permission match then depends on which directory appears first):
 
-```powershell
+```bash
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
@@ -241,7 +241,7 @@ Do not run full eval unless the plan or spec explicitly says it is needed and th
 
 Full eval command:
 
-```powershell
+```bash
 uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/results.md
 ```
 
@@ -250,7 +250,7 @@ uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/res
 Before writing the report, determine the authoritative date and time by running
 this command exactly once:
 
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+    date "+%Y-%m-%d %H:%M:%S %z"
 
 Treat the returned timestamp as the only authoritative current local time, and
 use its `YYYY-MM-DD` portion for the template's `Date:` field and any other

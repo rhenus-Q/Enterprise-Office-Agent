@@ -1,7 +1,7 @@
 ---
 description: Create an implementation-ready function spec from a short feature description
 argument-hint: Short feature description
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(date:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are creating a single implementation-ready **function spec** for this Agentic RAG project.
@@ -78,7 +78,7 @@ Do not invent a replacement template.
 
 Run:
 
-```powershell
+```bash
 git status --short
 ```
 
@@ -194,7 +194,7 @@ Do not silently overwrite an existing function spec.
 Before writing the spec, determine the authoritative date and time by running
 this command exactly once:
 
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+    date "+%Y-%m-%d %H:%M:%S %z"
 
 Treat the returned timestamp as the only authoritative current local time, and
 use its `YYYY-MM-DD` portion for the `Date:` field in the document header below.
@@ -280,7 +280,7 @@ Include these (each holds unless the feature explicitly approves an exception):
 Recommend the project's safe, keys-free validation set, with each suite run as its
 own command (do not combine test directories into one `pytest` invocation):
 
-```powershell
+```bash
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
@@ -293,7 +293,7 @@ uv run python evals/enterprise_rag/run_eval.py --validate-only
 
 Mark full eval as requiring separate approval and only when the feature needs it:
 
-```powershell
+```bash
 uv run python evals/enterprise_rag/run_eval.py --output evals/enterprise_rag/results.md
 ```
 

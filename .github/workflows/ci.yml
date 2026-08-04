@@ -9,7 +9,7 @@
 # its lazy factory seam (the evals/ helper tests cover only the eval harness's
 # pure helpers; tests/office_agent/ patches the knowledge adapter so no real
 # enterprise_rag graph call is made), so the job needs NO API keys (OpenAI /
-# Tavily / LangSmith). The api dependency group (fastapi/uvicorn/httpx) is
+# Tavily / LangSmith). The api dependency group (fastapi/uvicorn/httpx2) is
 # installed alongside dev so the adapter imports and TestClient resolve. The
 # real-model suites (tests/enterprise_rag/chains/ and
 # tests/office_agent/integration/) call the real model and the full eval run
@@ -46,6 +46,12 @@ name: CI
 on:
   push:
   pull_request:
+
+# Least privilege: every job only reads the checked-out source. No job publishes
+# packages, writes commits, comments on pull requests, or touches releases. The
+# default GITHUB_TOKEN is write-capable, so this has to be stated explicitly.
+permissions:
+  contents: read
 
 jobs:
   mocked-tests:

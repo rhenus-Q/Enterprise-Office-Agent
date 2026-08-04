@@ -207,7 +207,7 @@ If fixing output/report behavior:
 
 Run only:
 
-```powershell
+```bash
 git status --short
 git diff -- <target-command-file>
 git diff --stat -- <target-command-file>
