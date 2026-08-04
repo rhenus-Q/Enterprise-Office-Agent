@@ -1,7 +1,7 @@
 """
 Tests for the engine's lightweight observability (graph/engine.py):
 run_id generation/preservation, node-path and timing collection, total
-duration, and the optional metadata-only trace JSON (AnswerOptions.trace_path).
+duration, and the optional limited trace JSON (AnswerOptions.trace_path).
 
 Tracing must be additive: the same final state as app.invoke(), no behavior
 change, and no document page_content / raw state in the trace file.
@@ -597,7 +597,7 @@ def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
 
 def test_sanitized_web_source_metadata_reaches_trace_source_lines(monkeypatch):
     # A hostile web title + an unsafe-scheme URL sanitized by the web_search node
-    # must reach the metadata-only trace `sources` already cleaned: the unsafe
+    # must reach the limited trace `sources` already cleaned: the unsafe
     # entry omitted, the title stripped of control bytes and newlines.
     web_module = importlib.import_module("enterprise_rag.graph.nodes.web_search")
 

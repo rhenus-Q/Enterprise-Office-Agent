@@ -20,10 +20,11 @@ logic that used to be duplicated per caller:
 Lightweight observability (additive, never behavior-changing): every run
 gets a run_id (caller-provided or generated), the executed node path and
 per-node wall-clock timings are collected by streaming the compiled graph's
-node updates, and an optional metadata-only trace JSON can be written via
-AnswerOptions.trace_path. Trace data is safe by construction: it contains
-node names, timings, counters, flags, and citation lines — never document
-page_content, prompts, raw graph state, or secrets.
+node updates, and an optional limited trace JSON can be written via
+AnswerOptions.trace_path. The trace excludes document page_content, prompts,
+full responses, and raw graph state, but it includes a best-effort-redacted
+question preview and an unkeyed hash of the original input. Treat trace files
+as potentially sensitive local debugging artifacts.
 
 Import is side-effect-free in the repo's sense: no external client is
 constructed (enterprise_rag.graph.graph builds clients lazily), so importing this module
@@ -60,8 +61,9 @@ class AnswerOptions:
     written back to os.environ.
 
     run_id: caller-provided run identifier, preserved verbatim; when None a
-    fresh one is generated. trace_path: when set, a metadata-only trace JSON
-    (see build_trace) is written there after the run; default None = no file.
+    fresh one is generated. trace_path: when set, a limited, potentially
+    sensitive trace JSON (see build_trace) is written there after the run;
+    default None = no file.
     """
 
     web_search_enabled: bool | None = None
@@ -88,9 +90,9 @@ class AnswerResult:
     graph actually executed — secret-like values are replaced with
     [REDACTED] before the question enters GraphState, so the original raw
     input is never stored here or in `raw_state`. `question_sha256` is the
-    SHA-256 of the ORIGINAL (pre-redaction) input, so identical inputs still
-    correlate across runs; `input_redacted` is True when redaction changed
-    the input.
+    unkeyed SHA-256 of the ORIGINAL (pre-redaction) input, so identical inputs
+    correlate across runs and predictable inputs may be guessable;
+    `input_redacted` is True when redaction changed the input.
 
     Observability fields: `run_id` is always set (caller-provided or
     generated). `node_path` is the executed node sequence in order (repeats
@@ -297,18 +299,20 @@ def _question_sha256(question: str) -> str:
 
 def build_trace(result: AnswerResult) -> dict[str, Any]:
     """
-    Metadata-only trace payload for one run (what AnswerOptions.trace_path
-    writes as JSON).
+    Build the limited trace payload written by AnswerOptions.trace_path.
 
-    Safe by construction: node names, timings, counters, flags, and the
-    deduplicated citation lines — never document page_content, prompts,
-    raw graph state, or secrets. The user question is stored only as a
-    redacted/truncated preview (`question_redacted`, capped at
-    QUESTION_PREVIEW_MAX_CHARS) plus the SHA-256 of the original input
-    (`question_sha256`); `input_redacted` flags whether the input was
-    scrubbed. `result.question` is already the redacted runtime question; the
-    preview re-redacts defensively before truncating so a directly-constructed
-    result can never leak a raw secret. `generated_at` is UTC ISO-8601.
+    The payload excludes document page_content, prompts, full responses, and
+    raw graph state. It does include a best-effort secret-pattern-redacted and
+    truncated question preview (`question_redacted`, capped at
+    QUESTION_PREVIEW_MAX_CHARS), the unkeyed SHA-256 of the original input
+    (`question_sha256`), and `input_redacted`. Pattern redaction does not remove
+    all personal, confidential, or business-sensitive prose; the preview can
+    retain sensitive context, and the hash can correlate identical inputs or
+    permit guessing of predictable inputs. `result.question` is already the
+    redacted runtime question, and the preview is re-redacted defensively before
+    truncation. `generated_at` is UTC ISO-8601. Callers must treat the resulting
+    file as a potentially sensitive local debugging artifact and review it
+    before sharing or committing it.
     """
 
     return {
@@ -368,16 +372,16 @@ def answer_question(
     the fallback policy.
 
     Observability: a missing run_id is generated, the executed node path and
-    timings are collected, and when options.trace_path is set a
-    metadata-only trace JSON is written after the run (see build_trace).
+    timings are collected, and when options.trace_path is set a limited,
+    potentially sensitive trace JSON is written after the run (see build_trace).
 
-    Input redaction: secret-like values in `question` are scrubbed to
-    [REDACTED] before the question enters GraphState, so no secret reaches the
-    retriever, router, generator, graders, or the outbound web-search query.
-    The original input is used only to compute `question_sha256` (so identical
-    inputs still correlate) and the `input_redacted` flag; it is never stored
-    in the result, raw_state, or trace. Redaction does not change routing,
-    privacy mode, or the fallback policy.
+    Input redaction: values matching the supported secret patterns are scrubbed
+    to [REDACTED] before the question enters GraphState. This is best-effort
+    credential hygiene, not general personal/confidential-text redaction. The
+    original input is used only to compute the unkeyed `question_sha256` (so
+    identical inputs still correlate) and the `input_redacted` flag; it is never
+    stored verbatim in the result, raw_state, or trace. Redaction does not change
+    routing, privacy mode, or the fallback policy.
 
     Exception contract: *expected* external-dependency failures (retriever,
     web search, generation LLM, graders, query rewriter, router) are handled

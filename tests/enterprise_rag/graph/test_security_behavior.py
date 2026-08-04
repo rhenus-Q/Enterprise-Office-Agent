@@ -7,7 +7,7 @@ code-level guarantees the graph already enforces. Every external seam is mocked
 at its lazy get_*() factory (and the generate_answer seam), so the suite runs
 offline with no API keys and never depends on a live LLM "resisting" injection.
 
-Scope and honest limits (see docs/roadmap/spec/security-behavior-tests-injection.md):
+Scope and honest limits of these mocked graph-level containment and provenance checks:
 
 - These tests verify **graph-level containment / provenance behavior only**.
   Because generation and the graders are mocked, they do NOT prove that a real

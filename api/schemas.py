@@ -20,8 +20,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# Adapter-derived execution classification (spec §8.2 matrix). Not engine
-# telemetry — no engine reports such a field.
+# Adapter-derived execution classification. Not engine telemetry — no engine
+# reports such a field.
 ExecutionMode = Literal[
     "none",
     "deterministic",
@@ -104,7 +104,7 @@ class RunSettingsModel(BaseModel):
 
 
 class NodeTimingModel(BaseModel):
-    """One graph step's wall-clock timing (Phase 4 payload)."""
+    """One graph step's wall-clock timing."""
 
     node: str
     duration_ms: float
@@ -113,9 +113,8 @@ class NodeTimingModel(BaseModel):
 class KnowledgeObservabilityModel(BaseModel):
     """Knowledge Q&A observability carried through from `AnswerResult`.
 
-    Defined now so the wire contract is complete and typed, but always `null`
-    in Phase 2: the `office_agent` carry-through lands in Phase 4. Never
-    fabricated.
+    Populated only for Knowledge Q&A responses that carry real engine metadata;
+    never fabricated for deterministic capabilities.
 
     `tracked_llm_calls` is the budgeted operational counter, not total LLM
     usage — the UI must label it "tracked".
@@ -140,7 +139,7 @@ class AgentRunResponse(BaseModel):
     `intent`, `tool`, `content`, `stop_reason`, `sources`, and `run_id` map 1:1
     from `OfficeAgentResponse` — unaltered, unparsed, unreformatted.
 
-    Only three fields are added by the adapter:
+    Four fields are added by the adapter:
     - `duration_ms` — **adapter-measured** (`time.perf_counter()` around the
       single engine call), never claimed to be engine telemetry.
     - `execution_mode` — **adapter-derived** presentation classification.
