@@ -5,16 +5,18 @@
 # excluding the gated real-model tests/office_agent/integration/) plus the mocked
 # thin-adapter suite tests/api/ (fastapi.testclient over the api/ package, with
 # answer_office_request and the flag readers monkeypatched — no real engine call),
-# on every push and pull request. These suites mock every external dependency at
+# the environment-isolation regression tests, and the deterministic generation
+# tests selected with `not real_model`, on every push and pull request. These
+# selections mock or avoid every external dependency at
 # its lazy factory seam (the evals/ helper tests cover only the eval harness's
 # pure helpers; tests/office_agent/ patches the knowledge adapter so no real
 # enterprise_rag graph call is made), so the job needs NO API keys (OpenAI /
 # Tavily / LangSmith). The api dependency group (fastapi/uvicorn/httpx2) is
 # installed alongside dev so the adapter imports and TestClient resolve. The
-# real-model suites (tests/enterprise_rag/chains/ and
-# tests/office_agent/integration/) call the real model and the full eval run
-# (evals/enterprise_rag/run_eval.py) costs real API money; all are deliberately
-# excluded from CI.
+# tests marked real_model under tests/enterprise_rag/chains/ and the
+# tests/office_agent/integration/ suite call the real model; the full eval run
+# (evals/enterprise_rag/run_eval.py) also costs real API money. All are
+# deliberately excluded from CI.
 #
 # frontend: builds and tests the Vite + React + TypeScript workspace under
 # frontend/ (npm ci against the committed package-lock.json, then npm run build —
@@ -76,6 +78,12 @@ jobs:
 
       - name: Run mocked API adapter tests (no API keys required)
         run: uv run pytest tests/api/ -q
+
+      - name: Verify keys-free environment isolation
+        run: uv run pytest tests/test_environment_isolation.py -v
+
+      - name: Run deterministic generation tests (no real model)
+        run: uv run pytest tests/enterprise_rag/chains/test_generation.py -m "not real_model" -v
 
   lint:
     runs-on: ubuntu-latest
