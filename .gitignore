@@ -16,6 +16,9 @@ __pycache__/
 # ---- Node / frontend ----
 # The Vite frontend is npm-managed; its build output is covered by `dist/` below.
 node_modules/
+# Vite's dependency cache. It normally lives in node_modules/.vite (already covered
+# above), but Vite falls back to a project-root .vite/ when node_modules is absent.
+.vite/
 
 # ---- Playwright (frontend responsive e2e) ----
 # Generated report / artifact dirs; never committed. Browser binaries live in a
@@ -43,10 +46,17 @@ ENV/
 .coverage.*
 htmlcov/
 coverage.xml
+# Vitest coverage output (only produced when coverage is explicitly requested;
+# the `npm test` script runs `vitest run` without it).
+coverage/
 
 # ---- Project data: persisted vector store ----
 # Rebuilt locally via `uv run python -m enterprise_rag.ingestion`; do not commit.
 chroma_db/
+
+# ---- Local trace artifacts ----
+# Explicit trace_path outputs can contain user-derived previews and hashes.
+/traces/
 
 # ---- Build artifacts ----
 build/
