@@ -1,8 +1,8 @@
 /**
- * Typed mock responses for the Phase 1 static UI.
+ * Typed mock responses for the frontend's optional offline mock mode.
  *
  * Every fixture is a real `AgentRunResponse`, so the components are exercised
- * against the exact shape the Phase 2 adapter will return.
+ * against the exact shape the current adapter returns.
  *
  * Date semantics: all dates below are anchored to the repository's read-only
  * mock data (which centres on 2026-07-01) and are written verbatim into the
@@ -444,7 +444,7 @@ export const ERROR_PROMPT = 'Demo: simulated API error';
  *
  * This is deliberately NOT intent detection: it is exact string equality over
  * the canned prompts shipped in the sidebar. Real routing is the deterministic
- * Python router's job and stays server-side (Phase 3). Anything not listed here
+ * Python router's job and stays server-side. Anything not listed here
  * falls back to the unsupported response.
  */
 export const RESPONSES_BY_PROMPT: Record<string, AgentRunResponse> = {

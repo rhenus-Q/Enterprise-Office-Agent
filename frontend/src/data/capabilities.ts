@@ -1,13 +1,13 @@
 /**
  * The seven Office Agent capabilities shown in the left rail, the featured
  * prompts surfaced in the workspace, and the demo scenarios that make every UI
- * state reachable in the static Phase 1 build.
+ * state reachable in offline mock mode.
  *
  * Every example prompt was verified against the deterministic router's keyword
  * lists and rule order in `office_agent/router.py`
  * (email -> workflow/approval -> ticket -> meeting-prep -> calendar -> briefing
  * -> knowledge -> unknown), so each prompt routes to the capability it is listed
- * under once the real backend is connected in Phase 3. No routing logic is
+ * under when submitted through the default HTTP client. No routing logic is
  * reimplemented here — this is display copy only.
  *
  * Icons and accents are presentation metadata: each capability gets a distinct
@@ -137,7 +137,7 @@ export interface DemoScenario {
 /**
  * Explicit demo triggers so a reviewer can reach the degraded, unsupported, and
  * error states without a backend. They are clearly-labeled demo strings, not
- * real user requests, and they disappear once the mock client is replaced.
+ * real user requests, and they are available only through the optional mock client.
  */
 export const DEMO_SCENARIOS: DemoScenario[] = [
   {

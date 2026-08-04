@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import type { RunOptions, RunPrivacyMode } from '../types/api';
 
 interface RunSettingsControlsProps {
@@ -18,9 +19,10 @@ interface RunSettingsControlsProps {
  * the point — badges are static text, these are real form controls with labels,
  * focus states, and keyboard operation.
  *
- * The panel is a disclosure (default open): collapsing hides only the body. The
- * header stays, and while collapsed it carries a compact summary of the current
- * selection so the per-run configuration is glanceable without expanding.
+ * The panel is a disclosure (desktop default open, mobile default collapsed):
+ * collapsing hides only the body. The header stays, and while collapsed it
+ * carries a compact summary of the current selection so the per-run
+ * configuration is glanceable without expanding.
  *
  * Two honesty rules are encoded here:
  *
@@ -32,9 +34,11 @@ interface RunSettingsControlsProps {
  *    mid-run cannot affect the request already in flight.
  */
 export function RunSettingsControls({ value, onChange, disabled }: RunSettingsControlsProps) {
-  // Default expanded so the controls are visible on load; collapsing hides only
-  // the body, never the header.
-  const [open, setOpen] = useState(true);
+  const isMobile = useMediaQuery('(max-width: 860px)');
+  // The initial state follows the layout: desktop keeps the established open
+  // panel while mobile starts compact. After mount, the user's choice wins even
+  // if the viewport changes.
+  const [open, setOpen] = useState(() => !isMobile);
   const ChevronIcon = open ? ChevronUp : ChevronDown;
   const summary =
     `${value.privacy_mode === 'strict' ? 'Strict' : 'Standard'} · ` +

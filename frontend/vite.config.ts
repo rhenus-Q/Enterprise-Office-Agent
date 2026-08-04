@@ -1,9 +1,8 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
-// The `/api` dev proxy is declared now but inert in Phase 1: the UI runs entirely
-// on the typed mock client until Phase 3 introduces the HTTP client. Keeping the
-// proxy here means Phase 3 is a client swap, not a build-config change.
+// The default HTTP client uses this development proxy to reach the local
+// FastAPI adapter; typed mock mode remains available for offline demos and tests.
 export default defineConfig({
   plugins: [react()],
   server: {

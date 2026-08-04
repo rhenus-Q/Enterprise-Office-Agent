@@ -1,9 +1,9 @@
 /**
- * Typed frontend mirror of the Phase 2 API contract (spec §8.2 / §8.3).
+ * Typed frontend mirror of the current API contract.
  *
  * This file is the single source of truth the mocks, components, and tests must
- * satisfy. Every field name here matches the planned Pydantic models exactly, so
- * Phase 3 can swap the mock client for the HTTP client without touching types.
+ * satisfy. Every field name here matches the Pydantic models exactly, and both
+ * the default HTTP client and the optional mock client use this contract.
  *
  * Honesty rules encoded here:
  * - `duration_ms` is ADAPTER-MEASURED (wall clock around the engine call), not
@@ -49,7 +49,7 @@ export type StopReason =
   | 'tool_error'
   | 'llm_assist_error';
 
-/** Adapter-derived execution classification (spec §8.2 matrix). */
+/** Adapter-derived execution classification. */
 export type ExecutionMode =
   | 'none'
   | 'deterministic'
@@ -173,11 +173,11 @@ export interface HealthResponse {
   web_search_effective: boolean;
 }
 
-/** Presentation-only run classification (spec §8.4). */
+/** Presentation-only run classification. */
 export type RunStatus = 'success' | 'degraded' | 'unsupported' | 'error';
 
 /**
- * Exact request-text bound enforced by the Phase 2 Pydantic model
+ * Exact request-text bound enforced by the Pydantic request model
  * (`min_length=1`, `max_length=4000`). Mirrored here so the composer cannot
  * submit input the API would reject with a 422.
  */
