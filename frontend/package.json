@@ -1,7 +1,8 @@
 {
   "name": "enterprise-office-agent-frontend",
-  "version": "0.1.0",
+  "version": "1.7.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Enterprise Office Agent observability workspace — React + TypeScript + Vite frontend.",
   "scripts": {

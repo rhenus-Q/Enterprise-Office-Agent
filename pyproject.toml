@@ -1,7 +1,22 @@
 [project]
 name = "enterprise-office-agent"
-version = "0.1.0"
+version = "1.7.0"
 description = "A production-oriented Enterprise RAG engine with a deterministic Office Agent, local mock workflows, and optional bounded LLM assists."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "rhenus-Q" }]
+keywords = [
+    "langgraph",
+    "langchain",
+    "ai-agent",
+    "agentic-rag",
+    "rag",
+    "llm",
+    "office-automation",
+    "fastapi",
+    "observability",
+]
 requires-python = ">=3.11"
 dependencies = [
     "langgraph",
@@ -15,6 +30,11 @@ dependencies = [
     "python-dotenv",
     "pydantic",
 ]
+
+[project.urls]
+Homepage = "https://github.com/rhenus-Q/Enterprise-Office-Agent"
+Repository = "https://github.com/rhenus-Q/Enterprise-Office-Agent"
+Issues = "https://github.com/rhenus-Q/Enterprise-Office-Agent/issues"
 
 # This is an application, not a library to be packaged/installed; tell uv not to build the project itself as a package.
 [tool.uv]
