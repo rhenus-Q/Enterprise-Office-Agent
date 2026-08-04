@@ -1,0 +1,48 @@
+title = "Enterprise Office Agent — gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# False positives are allowed by "path AND value", never by blanket-clearing a
+# file. Any other secret in the same file, and any of these literals appearing
+# somewhere else, is still reported.
+# ---------------------------------------------------------------------------
+
+# The engine scrubs secret-shaped values out of a question before it enters
+# GraphState (enterprise_rag/graph/engine.py). Testing that scrubber means
+# feeding it strings that look exactly like credentials. These are synthetic —
+# a textbook JWT whose signature is the literal word "signaturevalue", and two
+# obviously fake key strings — but a scanner cannot tell that from shape alone.
+#
+# Both paths are listed because `gitleaks git` scans history: the suite moved
+# from tests/graph/ to tests/enterprise_rag/graph/ when the RAG engine was
+# packaged (ADR 014), and the older path still exists in earlier commits.
+[[allowlists]]
+description = "Synthetic credential fixtures for the input-redaction tests"
+condition = "AND"
+paths = [
+    '''tests/enterprise_rag/graph/test_observability\.py''',
+    '''tests/graph/test_observability\.py''',
+]
+regexes = [
+    '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.signaturevalue''',
+    '''abcdef123456''',
+    '''sk-WEBSECRET-123''',
+]
+
+# Dependency trees and compiled caches are never committed; they are here so
+# that a working-tree scan (`gitleaks dir .`) reports this repository's own
+# source instead of drowning in vendored packages and .pyc copies of the
+# fixtures above. They have no effect on `gitleaks git`.
+[[allowlists]]
+description = "Vendored dependencies and build caches (never committed)"
+paths = [
+    '''^\.venv/''',
+    '''^frontend/node_modules/''',
+    '''__pycache__/''',
+]
+
+# .env is deliberately NOT allowlisted. It is gitignored, so it cannot reach
+# history and `gitleaks git` will never see it — but a directory scan *should*
+# keep reporting it. That is the check working, not a false positive.
