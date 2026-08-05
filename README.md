@@ -1,6 +1,8 @@
 # Enterprise Office Agent
 
 [![CI](https://github.com/rhenus-Q/Enterprise-Office-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/rhenus-Q/Enterprise-Office-Agent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
 **An enterprise AI agent engineering project built with LangGraph.** The
 repository is organized as two focused, independently reasoned modules: a
@@ -21,6 +23,39 @@ The two modules stay decoupled: `office_agent` reaches `enterprise_rag` only
 through a thin Knowledge Q&A adapter, and it never duplicates retrieval,
 generation, or graph logic. See [`structure.md`](structure.md) for the module
 boundary in detail.
+
+The retrieval layer under `enterprise_rag/` shares its design with
+[Enterprise-Agentic-RAG](https://github.com/rhenus-Q/Enterprise-Agentic-RAG),
+embedded here as the agent's knowledge-retrieval tier rather than maintained as
+a separate service.
+
+## Product Tour
+
+![Enterprise Office Agent desktop observability workspace](docs/assets/screenshots/office-agent-workspace.png)
+
+### Knowledge Q&A
+
+The workspace shows the routed intent, effective run settings, execution mode,
+and the beginning of the grounded response.
+
+![Knowledge Q&A request, routing, and response](docs/assets/screenshots/knowledge-qa-result.png)
+
+### Graph observability
+
+Knowledge Q&A exposes the graph execution path, node timings, retries, tracked
+LLM calls, source provenance, and fallback state.
+
+![Knowledge Q&A graph execution timeline](docs/assets/screenshots/knowledge-qa-observability.png)
+
+### Responsive workspace
+
+The same request workspace adapts to narrow mobile viewports.
+
+<img
+  src="docs/assets/screenshots/office-agent-mobile.png"
+  alt="Enterprise Office Agent responsive mobile workspace"
+  width="360"
+/>
 
 ## What the system does
 
@@ -118,7 +153,7 @@ deterministic Office capabilities keep working.
 Requires **Python ≥ 3.11** and [uv](https://docs.astral.sh/uv/). All commands run
 from the repository root.
 
-```powershell
+```bash
 # 1. Clone and enter the repository
 git clone https://github.com/rhenus-Q/Enterprise-Office-Agent.git
 cd Enterprise-Office-Agent
@@ -128,7 +163,7 @@ cd Enterprise-Office-Agent
 uv sync --group dev --group api
 
 # 3. Configure environment variables (only needed for the RAG engine / Knowledge Q&A)
-Copy-Item .env.example .env   # then edit .env and add your keys
+cp .env.example .env   # then edit .env and add your keys
 
 # 4. Build the knowledge base (one-time, before first RAG run)
 uv run python -m enterprise_rag.ingestion
@@ -142,7 +177,7 @@ uv run python -m enterprise_rag.cli
 
 ### Run the Office Agent
 
-```powershell
+```bash
 # Interactive Office Agent CLI — deterministic and offline by default (no API
 # keys or index required while the optional Office LLM assists are disabled).
 # `uv run python main.py` launches the same interface.
@@ -194,7 +229,7 @@ Knowledge Q&A timeline appears only when the engine reported it (never fabricate
 and `effective` Run Settings are shown only from the backend. See
 [ADR 021](docs/adr/021-frontend-observability-workspace.md).
 
-```powershell
+```bash
 # 1. Start the adapter (localhost only). The deterministic six capabilities and the
 #    unknown route need no keys; only a real Knowledge Q&A run reaches the RAG engine.
 uv sync --group dev --group api
@@ -219,18 +254,21 @@ Ordinary pytest runs are always keys-free: test bootstrap overwrites
 for the pytest process. A local `.env` therefore cannot enable an Office LLM
 assist or supply credentials to ordinary tests.
 
-```powershell
+```bash
 # Fully mocked suites — NO API keys required
 uv run python -m pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ tests/office_agent/ --ignore=tests/office_agent/integration -v
+
+# Additional deterministic CI gates — NO API keys required
+uv run pytest tests/test_environment_isolation.py -v
+uv run pytest tests/enterprise_rag/chains/test_generation.py -m "not real_model" -v
 
 # Office Agent suite only (fully mocked / deterministic)
 uv run python -m pytest tests/office_agent/ --ignore=tests/office_agent/integration -v
 
 # Real-model integration tests — require an exported OPENAI_API_KEY plus this opt-in
-# and may incur provider cost. The key alone is not authorization.
-$env:RUN_REAL_MODEL_TESTS="1"  # separate, deliberate opt-in; calls may incur cost
-uv run python -m pytest -m real_model tests/enterprise_rag/chains/ tests/office_agent/integration/ -v
-Remove-Item Env:RUN_REAL_MODEL_TESTS
+# and may incur provider cost. The key alone is not authorization. Setting the
+# opt-in inline keeps it scoped to this one command.
+RUN_REAL_MODEL_TESTS=1 uv run python -m pytest -m real_model tests/enterprise_rag/chains/ tests/office_agent/integration/ -v
 
 # Whole ordinary suite (real-model tests skip unless explicitly authorized above)
 uv run python -m pytest -v
@@ -238,7 +276,7 @@ uv run python -m pytest -v
 
 ## Lint, format, and type checks
 
-```powershell
+```bash
 uv run ruff check .            # lint
 uv run ruff format --check .   # format check (CI mode)
 uv run python -m mypy          # type-check the scoped engine-API surface
@@ -256,27 +294,29 @@ uv run python -m mypy          # type-check the scoped engine-API surface
 
 ## Validation
 
-A dated local validation snapshot of the v1.6 baseline (**2026-07-02** — a
-historical record, not the current baseline; the suites have grown since, so
-re-run the commands above for present totals):
+A dated local validation snapshot (**2026-08-04**). These are point-in-time
+numbers, not a guarantee — re-run the commands above for present totals:
 
 - Office Agent demo: **passed** (local-only, no keys)
-- `tests/office_agent/`: **137 passed**
-- Full suite (`uv run python -m pytest`): **592 passed**
+- `tests/office_agent/`: **350 passed**
+- Full suite (`uv run python -m pytest`): **1103 passed, 35 skipped** — the
+  skips are the real-model tests, which stay gated behind the explicit opt-in
+- Frontend (`npm test`): **165 passed** across 11 files
 - `ruff check`: **passed**
-- `ruff format --check`: **passed**
-- `mypy`: **passed**
+- `ruff format --check`: **passed** (123 files)
+- `mypy`: **passed** (51 source files in the scoped surface)
 
 GitHub Actions CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs
 three parallel keys-free jobs on every push and pull request: **`mocked-tests`**
-(the fully mocked suites, including `tests/api/`), **`lint`** (`ruff check`,
-`ruff format --check`, and scoped `mypy`, now covering `api/`), and **`frontend`**
-(`npm ci`, `npm run build`, `npm test`, and — after
-`npx playwright install --with-deps chromium` — `npm run test:responsive` on
-Node 20). No job uses API keys and none
-performs any deployment step. The key-gated `tests/enterprise_rag/chains/` and
-`tests/office_agent/integration/` suites and the full eval run are
-deliberately excluded.
+(the fully mocked suites including `tests/api/`, plus the environment-isolation
+regression tests and the deterministic generation cases selected with
+`not real_model`), **`lint`** (`ruff check`, `ruff format --check`, and scoped
+`mypy`, now covering `api/`), and **`frontend`** (`npm ci`, `npm run build`,
+`npm test`, and — after `npx playwright install --with-deps chromium` —
+`npm run test:responsive` on Node 20). The workflow declares
+`permissions: contents: read`, so no job can write to the repository. No job uses
+API keys and none performs any deployment step. The tests marked `real_model`
+and the full eval run are deliberately excluded.
 
 ## Limitations and non-goals
 
@@ -317,8 +357,12 @@ deliberately excluded.
   design, and when evals apply.
 - **[`docs/engineering/release-checklist.md`](docs/engineering/release-checklist.md)** —
   the release checklist (validation, docs consistency, hygiene, PR/tag steps).
-- **[`docs/releases/office-agent-v1.6.md`](docs/releases/office-agent-v1.6.md)** —
-  Office Agent v1.6 release notes.
+- **[`docs/ai-workflow.md`](docs/ai-workflow.md)** — the AI-assisted development
+  workflow: the committed commands, which project rules are enforced as tests,
+  and why the review reports themselves are not published.
+- **[`docs/releases/office-agent-v1.7.0.md`](docs/releases/office-agent-v1.7.0.md)**,
+  **[`docs/releases/office-agent-v1.6.md`](docs/releases/office-agent-v1.6.md)** —
+  release notes.
 - **[`docs/adr/`](docs/adr/README.md)** — Architecture Decision Records: *why* the
   code is the way it is. The package refactor that introduced this module layout is
   [ADR 014](docs/adr/enterprise_rag/014-enterprise-rag-package-and-office-agent-placeholder.md);
@@ -341,3 +385,44 @@ deliberately excluded.
 - **`office_agent` uses deterministic routing and local base workflows by default.** Keep the router LLM-free (no LLM routing), keep the mock tools local-only and CI-safe, invoke Knowledge Q&A only through the adapter, keep the two optional LLM assists default-off with their byte-for-byte flag-off guarantee, and never regress `enterprise_rag`.
 - Both modules follow the same discipline: side-effect-free imports and lazy
   `@lru_cache` external clients.
+
+Contribution guidelines are in [CONTRIBUTING.md](CONTRIBUTING.md); security
+reporting and the trust boundaries are in [SECURITY.md](SECURITY.md).
+
+## AI-assisted development
+
+This project was built primarily with [Claude Code](https://claude.com/claude-code),
+working against a spec-driven workflow that is itself committed to this
+repository. [Codex](https://openai.com/codex/) was used for a few isolated
+frontend changes. Architectural decisions and reviews were made by a human; the
+agent worked inside explicit, version-controlled rules.
+
+[`CLAUDE.md`](CLAUDE.md) holds the durable project rules, and
+[`.claude/commands/`](.claude/commands/README.md) holds 13 slash commands
+covering the spec → plan → implement → review loop plus focused audit passes
+(architecture, security, failure modes, test coverage, documentation drift).
+
+Three properties are worth calling out:
+
+* **Rules are executable, not prose.** The invariants that matter most are
+  enforced as tests, so a violation fails CI: credentials alone never authorize
+  a paid model call
+  ([`tests/test_environment_isolation.py`](tests/test_environment_isolation.py)),
+  and the module boundary is asserted rather than merely documented — importing
+  the root entry point must not pull in `enterprise_rag`
+  ([`tests/office_agent/test_cli.py`](tests/office_agent/test_cli.py)).
+* **Permissions are narrow.** Every command declares an explicit `allowed-tools`
+  allowlist — no command gets unrestricted `Bash`; grants are scoped down to
+  `Bash(git status:*)` and `Bash(git diff:*)`. The diff-review command is
+  additionally forbidden from reading secret-bearing files at all.
+* **Methods are published; findings are not.** Specs, plans, and review reports
+  are written under `docs/roadmap/` and gitignored — only the four workflow
+  templates are tracked. A security-review report is a findings list about this
+  repository's own code; issues that matter are resolved and then recorded in an
+  ADR, a test, or [Limitations and non-goals](#limitations-and-non-goals).
+
+Full detail: [`docs/ai-workflow.md`](docs/ai-workflow.md).
+
+## License
+
+Released under the [MIT License](LICENSE).
