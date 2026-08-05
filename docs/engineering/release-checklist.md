@@ -135,9 +135,9 @@ expect **no output**, excluding two intentional sources: this checklist file
 must not be rewritten). To skip those automatically, append the pathspecs shown:
 
 ```powershell
-git grep -n "added in v1.5 / Phase 7"          -- ':!docs/engineering/release-checklist.md'
-git grep -n "Workflow / Approval Agent.*v1.5"  -- ':!docs/engineering/release-checklist.md'
-git grep -n "Phase 7.*v1.5"                    -- ':!docs/engineering/release-checklist.md'
+git grep -nE "added in v1\.5.*Phase 7"          -- ':!docs/engineering/release-checklist.md'
+git grep -nE "Workflow / Approval Agent.*v1\.5" -- ':!docs/engineering/release-checklist.md'
+git grep -nE "Phase 7.*v1\.5"                   -- ':!docs/engineering/release-checklist.md'
 git grep -n "office_agent.*placeholder"        -- ':!docs/engineering/release-checklist.md' ':!docs/adr/'
 git grep -n "five capabilities"                -- ':!docs/engineering/release-checklist.md'
 ```
@@ -146,9 +146,9 @@ Version map to enforce everywhere:
 
 | Release | Phase | Capabilities |
 |---|---|---|
-| v1 | Phases 1–5 | Knowledge Q&A, Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing |
-| v1.5 | Phase 6 | Meeting Agent / Meeting Prep |
-| v1.6 | Phase 7 | Workflow / Approval Agent |
+| v1.0.0 | Phases 1–5 | Knowledge Q&A, Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing |
+| v1.5.0 | Phase 6 | Meeting Agent / Meeting Prep |
+| v1.6.0 | Phase 7 | Workflow / Approval Agent |
 
 ## 7. Safety / scope checks
 

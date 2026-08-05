@@ -1,7 +1,7 @@
 """
 office_agent.tools.meeting — deterministic mock Meeting Agent / Meeting Prep.
 
-An advanced *composition* capability (Office Agent v1.5): it prepares the user
+An advanced *composition* capability (Office Agent v1.5.0): it prepares the user
 for a meeting by combining the existing local mock Office Agent data — calendar
 events, inbox, tickets, and tasks — into one concise, predictable prep sheet.
 

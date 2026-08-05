@@ -17,7 +17,7 @@ handling, and a fully mocked, CI-safe test suite.
 | Module | Status | What it is |
 |---|---|---|
 | [`enterprise_rag/`](enterprise_rag/README.md) | ✅ **Implemented** | **Enterprise Document Q&A Engine** — a self-correcting Agentic RAG (CRAG-style) LangGraph workflow that answers questions from an ingested internal-document knowledge base, with web-search fallback, privacy mode, three quality gates, bounded self-correction, per-run budgets, graceful degradation, and deterministic provenance. Entry point: `enterprise_rag.graph.engine.answer_question()`. |
-| [`office_agent/`](office_agent/) | ✅ **Implemented (v1.6 / Phase 7)** | **Enterprise Office Agent** — a **deterministic-by-default** intent router over seven capabilities: one Knowledge Q&A adapter over `enterprise_rag` plus six local mock-data tools. Entry point: `office_agent.engine.answer_office_request()`. The router and every core tool workflow are deterministic; Knowledge Q&A delegates to the `enterprise_rag` engine, and two capabilities (Email Summary, Daily Briefing) optionally support a bounded, single-pass LLM assist that is **disabled by default** and falls back to the deterministic output. |
+| [`office_agent/`](office_agent/) | ✅ **Implemented — seven capabilities, complete since v1.6.0** | **Enterprise Office Agent** — a **deterministic-by-default** intent router over seven capabilities: one Knowledge Q&A adapter over `enterprise_rag` plus six local mock-data tools. Entry point: `office_agent.engine.answer_office_request()`. The router and every core tool workflow are deterministic; Knowledge Q&A delegates to the `enterprise_rag` engine, and two capabilities (Email Summary, Daily Briefing) optionally support a bounded, single-pass LLM assist that is **disabled by default** and falls back to the deterministic output. |
 
 The two modules stay decoupled: `office_agent` reaches `enterprise_rag` only
 through a thin Knowledge Q&A adapter, and it never duplicates retrieval,
@@ -76,13 +76,13 @@ The same request workspace adapts to narrow mobile viewports.
 
 | # | Capability | Intent | Release | Backing |
 |---|---|---|---|---|
-| 1 | Knowledge Q&A | `knowledge_qa` | v1 | Adapter over the real `enterprise_rag` engine |
-| 2 | Email Summary | `email_summary` | v1 | Local mock data |
-| 3 | Calendar Lookup | `calendar_lookup` | v1 | Local mock data |
-| 4 | Task / Ticket Assistant | `ticket_assistant` | v1 | Local mock data |
-| 5 | Daily Briefing | `daily_briefing` | v1 | Aggregates the mock email/calendar/ticket data |
-| 6 | Meeting Agent / Meeting Prep | `meeting_agent` | v1.5 (Phase 6) | Composes the mock calendar/email/ticket data |
-| 7 | Workflow / Approval Agent | `workflow_approval` | v1.6 (Phase 7) | Local mock approval queue + audit log |
+| 1 | Knowledge Q&A | `knowledge_qa` | v1.0.0 | Adapter over the real `enterprise_rag` engine |
+| 2 | Email Summary | `email_summary` | v1.0.0 | Local mock data |
+| 3 | Calendar Lookup | `calendar_lookup` | v1.0.0 | Local mock data |
+| 4 | Task / Ticket Assistant | `ticket_assistant` | v1.0.0 | Local mock data |
+| 5 | Daily Briefing | `daily_briefing` | v1.0.0 | Aggregates the mock email/calendar/ticket data |
+| 6 | Meeting Agent / Meeting Prep | `meeting_agent` | v1.5.0 (Phase 6) | Composes the mock calendar/email/ticket data |
+| 7 | Workflow / Approval Agent | `workflow_approval` | v1.6.0 (Phase 7) | Local mock approval queue + audit log |
 
 ### Local mock behavior vs. future production integration
 
@@ -139,7 +139,7 @@ deterministic Office capabilities keep working.
 ├── structure.md                 # Architecture deep-dive: full workflow, state machine, module boundaries
 ├── docs/
 │   ├── engineering/             #   Onboarding, testing strategy, release checklist
-│   ├── releases/                #   Release notes (office-agent-v1.6.md)
+│   ├── releases/                #   Release notes (office-agent-v1.6.md, office-agent-v1.7.0.md)
 │   └── adr/                     #   Architecture Decision Records 001–021 (repo-level; index in docs/adr/README.md)
 ├── evals/                       # Eval harnesses by module (not in CI): enterprise_rag/ (RAG behavioral eval) + office_agent/llm_assist/ (assist evals)
 ├── tests/                       # enterprise_rag/{nodes,graph,evals} + office_agent/ + api/ (fully mocked); chains/ + office_agent/integration/ (key-gated)

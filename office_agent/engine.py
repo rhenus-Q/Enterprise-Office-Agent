@@ -2,7 +2,7 @@
 office_agent.engine — the Office Agent entry point.
 
 `answer_office_request(user_input, options=None)` routes the request and dispatches to a tool.
-As of Phase 7 (Office Agent v1.6) seven capabilities are supported —
+As of Phase 7 (Office Agent v1.6.0) seven capabilities are supported —
 `knowledge_qa` (the enterprise_rag adapter), `email_summary` (the local mock
 Email Summary tool), `calendar_lookup` (the local mock Calendar Lookup tool),
 `ticket_assistant` (the local mock Task / Ticket Assistant), `daily_briefing`

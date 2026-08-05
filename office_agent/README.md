@@ -25,16 +25,16 @@ today:
 
 | Release | Phase | Capabilities added |
 |---|---|---|
-| **v1** | Phases 1–5 | Knowledge Q&A, Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing |
-| **v1.5** | Phase 6 | Meeting Agent / Meeting Prep |
-| **v1.6** | Phase 7 | Workflow / Approval Agent |
+| **v1.0.0** | Phases 1–5 | Knowledge Q&A, Email Summary, Calendar Lookup, Task / Ticket Assistant, Daily Briefing |
+| **v1.5.0** | Phase 6 | Meeting Agent / Meeting Prep |
+| **v1.6.0** | Phase 7 | Workflow / Approval Agent |
 
-> **v1.5 (Phase 6)** added a **Meeting Agent / Meeting Prep** capability
+> **v1.5.0 (Phase 6)** added a **Meeting Agent / Meeting Prep** capability
 > (`meeting_agent`) — an advanced *composition* tool that combines the local
 > calendar, inbox, and ticket/task mock data into one deterministic meeting-prep
 > sheet. See [Meeting Agent / Meeting Prep](#meeting-agent--meeting-prep) below.
 >
-> **v1.6 (Phase 7)** added a **Workflow / Approval Agent** capability
+> **v1.6.0 (Phase 7)** added a **Workflow / Approval Agent** capability
 > (`workflow_approval`) — a deterministic mock approval assistant over a local
 > approval queue + audit log, with *simulated* approve/reject decisions and
 > follow-up tasks (mock data is never mutated). See
@@ -216,7 +216,7 @@ other tools' pure helpers to assemble one concise briefing:
 
 ## Meeting Agent / Meeting Prep
 
-Meeting Agent (`meeting_agent`, added in v1.5 / Phase 6) is an advanced
+Meeting Agent (`meeting_agent`, added in v1.5.0 / Phase 6) is an advanced
 **composition** capability: like Daily Briefing it reuses the other tools' pure
 helpers rather than reimplementing them, but it is *scoped to a single selected
 meeting* and produces a focused prep sheet. It is **local-only, LLM-free, and
@@ -247,7 +247,7 @@ review board"`, `"meeting prep for the budget workshop"`.
 
 ## Workflow / Approval Agent
 
-Workflow / Approval Agent (`workflow_approval`, added in v1.6 / Phase 7) is a
+Workflow / Approval Agent (`workflow_approval`, added in v1.6.0 / Phase 7) is a
 deterministic mock approval assistant over a local approval queue
 ([`mock_data/approvals.json`](mock_data/approvals.json)) and audit
 log ([`mock_data/audit_log.json`](mock_data/audit_log.json)). It

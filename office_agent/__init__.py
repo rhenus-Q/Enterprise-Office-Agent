@@ -1,5 +1,5 @@
 """
-office_agent — the Enterprise Office Agent (implemented through v1.6 / Phase 7).
+office_agent — the Enterprise Office Agent (seven capabilities, complete since v1.6.0 / Phase 7).
 
 The package provides a lightweight schema layer (:mod:`office_agent.schemas`), a
 deterministic rule-based router (:mod:`office_agent.router`), a set of tools, and
@@ -7,7 +7,7 @@ a thin dispatch entry point (:func:`office_agent.engine.answer_office_request`).
 
 Implemented capabilities (seven, across the version map below):
 
-Office Agent v1 / Phases 1-5:
+Office Agent v1.0.0 / Phases 1-5:
 
 - **Knowledge Q&A** (:mod:`office_agent.tools.knowledge`) — adapts the completed
   enterprise document Q&A engine (:mod:`enterprise_rag`).
@@ -24,14 +24,14 @@ Office Agent v1 / Phases 1-5:
   aggregation of the email/calendar/ticket mock data into one morning briefing;
   no LLM, no external service, anchored to the mock-data day (not the clock).
 
-Office Agent v1.5 / Phase 6:
+Office Agent v1.5.0 / Phase 6:
 
 - **Meeting Agent / Meeting Prep** (:mod:`office_agent.tools.meeting`) — a
   deterministic *composition* tool that assembles a per-meeting prep sheet from
   the local calendar/email/ticket mock data; no LLM and no external service, and
   it never calls the Enterprise RAG pipeline.
 
-Office Agent v1.6 / Phase 7:
+Office Agent v1.6.0 / Phase 7:
 
 - **Workflow / Approval Agent** (:mod:`office_agent.tools.approvals`) — a
   deterministic mock approval assistant over a local approval queue + audit log,

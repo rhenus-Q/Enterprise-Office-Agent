@@ -1,5 +1,5 @@
 """
-Demo: Office Agent (v1.6 — deterministic, local-only).
+Demo: Office Agent (all seven capabilities — deterministic, local-only).
 
 Runs a few requests through `office_agent.engine.answer_office_request` and
 prints the selected intent and response for each. By default it exercises only
@@ -60,7 +60,7 @@ def _print_result(title: str, request: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Office Agent v1 demo (local-only by default).")
+    parser = argparse.ArgumentParser(description="Office Agent demo (local-only by default).")
     parser.add_argument(
         "--include-knowledge",
         action="store_true",
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.include_knowledge:
         requests.append(KNOWLEDGE_REQUEST)
 
-    print("Office Agent v1 demo")
+    print("Office Agent demo")
     print(f"({len(requests)} request(s); local mock capabilities require no API keys)\n")
     for title, request in requests:
         _print_result(title, request)

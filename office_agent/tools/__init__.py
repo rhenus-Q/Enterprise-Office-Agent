@@ -1,7 +1,7 @@
 """
 office_agent.tools — one tool per Office Agent capability.
 
-Ships seven tools (Office Agent v1.6 / Phase 7):
+Ships seven tools (Office Agent v1.6.0 / Phase 7):
 
 - `knowledge` — a thin adapter over the completed enterprise_rag engine (the one
   tool that reaches an LLM); it never reimplements retrieval, generation, or graph

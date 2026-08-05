@@ -23,8 +23,8 @@ The repository is organized as named capability modules (see
   (`enterprise_rag/graph/…`, `enterprise_rag/ingestion.py`,
   `enterprise_rag/data/…`); its public entry point is
   `enterprise_rag.graph.engine.answer_question()`.
-- **`office_agent/`** — the implemented **Enterprise Office Agent** (through
-  v1.6 / Phase 7: seven capabilities). A **deterministic-by-default** intent router
+- **`office_agent/`** — the implemented **Enterprise Office Agent** (seven
+  capabilities, complete since v1.6.0 / Phase 7). A **deterministic-by-default** intent router
   over local capabilities; public entry point
   `office_agent.engine.answer_office_request()`. The router and core tool workflows
   are deterministic and LLM-free; two capabilities (Email Summary, Daily Briefing)
@@ -689,8 +689,8 @@ GitHub Actions CI (`.github/workflows/ci.yml`) runs three parallel jobs on every
 ## The Office Agent module
 
 `office_agent/` is the repository's second implemented module: the **Enterprise
-Office Agent**, implemented through v1.6 / Phase 7 with seven capabilities (v1 /
-Phases 1–5 core tools, the v1.5 / Phase 6 Meeting Agent, and the v1.6 / Phase 7
+Office Agent**, whose seven capabilities were completed in v1.6.0 / Phase 7 (v1.0.0 /
+Phases 1–5 core tools, the v1.5.0 / Phase 6 Meeting Agent, and the v1.6.0 / Phase 7
 Workflow / Approval Agent). It is the
 office-automation companion to the `enterprise_rag` engine and is intentionally
 small and **deterministic by default**: the router and every core tool workflow
@@ -736,8 +736,8 @@ single-pass LLM assist (`office_agent/llm_assist/`; see
 | `calendar.py` | `calendar_lookup` | Local mock `mock_data/calendar_events.json` |
 | `tickets.py` | `ticket_assistant` | Local mock `mock_data/tickets.json` + `mock_data/tasks.json` |
 | `briefing.py` | `daily_briefing` | Aggregates the email + calendar + ticket mock data |
-| `meeting.py` | `meeting_agent` | Composes the calendar + email + ticket/task mock data for one meeting (**v1.5 / Phase 6**) |
-| `approvals.py` | `workflow_approval` | Local mock `mock_data/approvals.json` + `mock_data/audit_log.json` (**v1.6 / Phase 7**) |
+| `meeting.py` | `meeting_agent` | Composes the calendar + email + ticket/task mock data for one meeting (**v1.5.0 / Phase 6**) |
+| `approvals.py` | `workflow_approval` | Local mock `mock_data/approvals.json` + `mock_data/audit_log.json` (**v1.6.0 / Phase 7**) |
 
 **`enterprise_rag` is not duplicated inside `office_agent`.** The Knowledge Q&A
 tool is a thin *adapter* that calls
@@ -762,7 +762,7 @@ Slack / Jira / Linear / Asana / Trello); the only external call any office tool 
 make is the optional, default-off `gpt-5-mini` assist on Email Summary / Daily
 Briefing described above (and the RAG engine behind Knowledge Q&A).
 
-**Meeting Agent / Meeting Prep (v1.5 / Phase 6)** is an advanced *composition*
+**Meeting Agent / Meeting Prep (v1.5.0 / Phase 6)** is an advanced *composition*
 capability. It selects one meeting deterministically ("next", best topic match on
 title/labels, or fallback to the next meeting — never the system clock) and
 assembles a concise, bounded prep sheet from the local mock data: meeting
@@ -771,7 +771,7 @@ suggested agenda, risks/blockers, and recommended follow-ups. It **does not call
 the Enterprise RAG pipeline** — "relevant knowledge areas" are inferred from
 labels, not retrieved — and it uses no LLM and no external services.
 
-**Workflow / Approval Agent (v1.6 / Phase 7)** is a deterministic mock approval
+**Workflow / Approval Agent (v1.6.0 / Phase 7)** is a deterministic mock approval
 assistant over the local approval queue (`approvals.json`) and audit log
 (`audit_log.json`). It supports list/filter views (all, pending, assigned-to-me,
 high-priority, approved, rejected, and topic filters like "expense approvals"),

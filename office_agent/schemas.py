@@ -3,7 +3,7 @@ office_agent.schemas — lightweight typed structures for the Office Agent.
 
 A user request, the router's routed intent, a tool result, and the final
 office-agent response. Intentionally minimal — plain dataclasses, no behavior.
-As of Phase 7 (Office Agent v1.6) eight intents exist (`knowledge_qa`,
+As of Phase 7 (Office Agent v1.6.0) eight intents exist (`knowledge_qa`,
 `email_summary`, `calendar_lookup`, `ticket_assistant`, `daily_briefing`,
 `meeting_agent`, `workflow_approval`, `unknown`).
 """
