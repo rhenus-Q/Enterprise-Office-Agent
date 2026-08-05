@@ -71,6 +71,11 @@ describe('workspace shell', () => {
 
     const statusList = await screen.findByRole('list', { name: 'Runtime status' });
 
+    // The list is already in the DOM while health is still loading, so awaiting it
+    // only proves the container exists. Wait for a loaded chip before querying
+    // synchronously, otherwise the assertions race the health response.
+    await within(statusList).findByText('Privacy');
+
     // Category labels and their state values are separate, readable text.
     for (const label of [
       'Privacy',
