@@ -52,7 +52,7 @@ The repository is organized as named capability modules (see
   the response and **must not mutate the repo mock data** — the only write path is
   an explicit persistence *seam* (`record_decision(..., persist_path=...)`) used
   by tests against a caller-provided path (e.g. pytest's `tmp_path`).
-- **Tests do not call external services.** The `tests/office_agent/` suite is
+- **Default and mocked tests do not call external services.** The `tests/office_agent/` suite is
   fully mocked/deterministic (the Knowledge adapter is patched), and the
   `enterprise_rag` mocked suites patch every lazy client seam.
 - The dedicated Office Agent demo / usage doc is
@@ -113,7 +113,7 @@ programmatic entry point: `answer_question()` / `AnswerOptions` /
 `AnswerResult`, plus `seed_state()` — the single state-seeding helper used by
 the CLI, the eval harness, and tests — and the lightweight per-run
 observability: `run_id`, executed node path, per-step timings, total
-duration, and an optional metadata-only trace JSON via
+duration, and an optional limited local trace JSON via
 `AnswerOptions.trace_path`; collected centrally by streaming the compiled
 graph's node updates (`stream_mode="updates"`), merged onto the seeded state
 — GraphState has only last-value channels, so this reproduces `invoke()`
@@ -512,18 +512,28 @@ document content (the engine exposes the same lines as
 
 ### `AnswerResult.raw_state` is content-bearing (persistence caveat)
 
-`AnswerResult` exposes two very different surfaces. `sources`, `stop_reason`, the
-budget/observability counters, and the optional metadata-only trace JSON are the
-**safe** persistence/observability surfaces — the trace is metadata-only *by
-construction* (`build_trace` reads named fields; it never dumps `raw_state`). By
-contrast, **`AnswerResult.raw_state` is content-bearing**: it is a copy of the
-final `GraphState` and can contain the full retrieved `Document` objects (including
-`page_content`) and other internal runtime state. It is retained in memory
-intentionally, so callers that need the user-facing rendering can call
-`enterprise_rag.graph.formatting.format_answer(result.raw_state)`. It **must not be
-logged, serialized, or persisted indiscriminately** — doing so would spill document
-content the metadata trace deliberately keeps out. Keeping `raw_state` in memory is
-intentional; the metadata-only trace not serializing it is the point of the split.
+`AnswerResult` exposes two different content-risk surfaces. The optional trace
+is deliberately limited: `build_trace` reads named fields rather than dumping
+`raw_state`, so it excludes document `page_content`, prompts, full responses,
+and raw graph state. It nevertheless includes `question_redacted` (an
+80-character, best-effort secret-pattern-redacted preview), `question_sha256`
+(an unkeyed hash of the original input), `input_redacted`, run metadata, policy
+flags, counters, and source lines. Pattern redaction does not guarantee removal
+of personal, confidential, or business-sensitive prose; the preview may retain
+sensitive context, and the hash may correlate or permit guessing of predictable
+inputs. Treat trace files as potentially sensitive local debugging artifacts:
+review them before sharing, do not commit them, and prefer the repository-root
+`/traces/` directory, which `.gitignore` excludes by default.
+
+By contrast, **`AnswerResult.raw_state` is fully content-bearing**: it is a copy
+of the final `GraphState` and can contain the full retrieved `Document` objects
+(including `page_content`) and other internal runtime state. It is retained in
+memory intentionally, so callers that need the user-facing rendering can call
+`enterprise_rag.graph.formatting.format_answer(result.raw_state)`. It **must not
+be logged, serialized, or persisted indiscriminately**. Keeping `raw_state` in
+memory while the trace selects a smaller schema is the point of the split; the
+smaller schema reduces content exposure but does not make the trace anonymous or
+non-sensitive.
 
 ## 11. Retry exhaustion
 
@@ -575,8 +585,8 @@ engine imposes **no one total wall-clock deadline over the complete run**. This 
 not an unbounded loop — the retry cap and the per-run budgets keep the number of
 steps finite — but several slow-yet-successful external calls (retrieval, multiple
 graded web results, repeated generations) can still add up to a long overall
-request. A future API front-end, queue worker, or service boundary that needs a
-hard end-to-end latency ceiling should enforce that total-request deadline itself
+request. A deployment boundary, queue worker, or other service that needs a hard
+end-to-end latency ceiling should enforce that total-request deadline itself
 (alongside the per-call timeout and the count budgets), as the engine does not.
 
 ## 13. External dependency failure handling
@@ -634,7 +644,8 @@ in privacy mode still never calls the router, Tavily, or the rewriter).
 |---|---|---|
 | `tests/enterprise_rag/nodes/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
 | `tests/enterprise_rag/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
-| `tests/enterprise_rag/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — marked `real_model` (via the `requires_openai` alias); skip unless `RUN_REAL_MODEL_TESTS=1` and `OPENAI_API_KEY` are both set, and always skip under `OFFLINE_MODE`; do not run without explicit approval |
+| `tests/test_environment_isolation.py` | Pytest's keys-free environment boundary and real-model authorization matrix | None — process settings are inspected through local mappings; no provider client is built |
+| `tests/enterprise_rag/chains/` | Deterministic generation formatting/no-context behavior plus the six LCEL chains' live-model behavior | None for `test_generation.py -m "not real_model"`; provider-backed cases are marked `real_model`, require explicit opt-in and credentials, and remain excluded from CI |
 | `tests/enterprise_rag/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
 
 Separate from the test suites, `evals/enterprise_rag/` holds a **behavioral eval
@@ -644,7 +655,9 @@ a 24-question JSONL dataset (local-corpus / web-fallback /
 insufficient-context / privacy-mode / multi-document / policy-fallback categories) run through the real compiled
 graph by `evals/enterprise_rag/run_eval.py`, scored with deterministic checks (stop reasons,
 source provenance including local title checks, counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes) and reported to
-`evals/enterprise_rag/results.md`. The harness runs each row through
+the local, gitignored `evals/enterprise_rag/results.md`. The committed reviewed
+artifact is [`evals/enterprise_rag/enterprise-rag-baseline.md`](evals/enterprise_rag/enterprise-rag-baseline.md).
+The harness runs each row through
 `enterprise_rag.graph.engine.answer_question()` — the same entry point the CLI (`enterprise_rag/cli.py`) uses — so
 state seeding is never duplicated; privacy-mode rows pass
 `web_search_enabled=False` per run (no env mutation) and hard-assert
@@ -660,7 +673,7 @@ Run the mocked suites with `uv run pytest tests/enterprise_rag/nodes/ tests/ente
 Limitations (deliberate scope):
 
 * Single-turn CLI; no conversation memory. The engine has no HTTP surface of its own — Knowledge Q&A reaches the web only through the Office Agent adapter and the presentation tier (`api/` + `frontend/`, whose only engine call is `answer_office_request()`, never this engine directly; see [The web workspace and API adapter](#the-web-workspace-and-api-adapter)).
-* Observability currently has two layers: LangSmith tracing can be enabled via environment variables for full LangChain/LangGraph trace inspection, and the engine records lightweight CI-safe metadata (`run_id`, node path, per-node timings, total duration, counters, stop reasons, and optional trace JSON). However, console logging is still `print()`-based, there is no structured logging or metrics backend, and the documentation does not yet include trace screenshots or trace-link evidence.
+* Observability currently has two layers: LangSmith tracing can be enabled via environment variables for full LangChain/LangGraph trace inspection, and the engine records lightweight run metadata plus an optional, potentially sensitive local trace JSON. However, console logging is still `print()`-based, there is no structured logging or metrics backend, and no LangSmith trace-link evidence is published — the graph execution timeline shown in the root README is the web workspace's own rendering, not a provider trace.
 * Sequential per-chunk / per-result grading (latency and cost scale with k).
 * Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
 * Prompt-injection defense is prompt-level only (ADR 010): no injection detection, content sanitization, or domain allowlisting; generation has no tools to call, which limits but does not eliminate the impact of injected instructions.
@@ -669,7 +682,7 @@ Future improvements (rough priority): structured logging and metrics-friendly ob
 
 GitHub Actions CI (`.github/workflows/ci.yml`) runs three parallel jobs on every push and pull request — all keys-free:
 
-* **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` + `tests/office_agent/`, excluding the gated `tests/office_agent/integration/`) plus the mocked thin-adapter suite `tests/api/`; the key-gated `tests/enterprise_rag/chains/` suite and the full eval run are excluded.
+* **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` + `tests/office_agent/`, excluding the gated `tests/office_agent/integration/`) plus `tests/api/`, `tests/test_environment_isolation.py`, and `tests/enterprise_rag/chains/test_generation.py -m "not real_model"`; tests marked `real_model` and the full eval run are excluded.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scope defined by the `[tool.mypy]` `files` list in `pyproject.toml`: the standalone CLI `enterprise_rag/cli.py` and the engine-API surface — `enterprise_rag/graph/engine.py`, `config.py`, `formatting.py`, `state.py`, `consts.py` — plus `enterprise_rag/graph/nodes/`, `enterprise_rag/graph/chains/`, the `office_agent/` package including the optional LLM-assist boundary `office_agent/llm_assist/`, and the `api/` adapter).
 * **`frontend`**: `npm ci`, `npm run build` (type-checks via `tsc`), `npm test` (Vitest), and `npm run test:responsive` (Playwright/Chromium responsive checks in typed mock mode) on Node 20 — npm-managed, independent of uv, no API keys, no deployment steps (see [The web workspace and API adapter](#the-web-workspace-and-api-adapter)).
 

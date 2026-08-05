@@ -113,6 +113,13 @@ uv run mypy
     deterministic fallback.
 - [ ] `office_agent/README.md` still exists and is referenced from the docs
   that should link it.
+- [ ] The root `LICENSE` file exists.
+- [ ] `README.md` names the selected license and links to `LICENSE`.
+- [ ] `LICENSE` contains the intended holder and year:
+  `Copyright (c) 2026 rhenus-Q`.
+- [ ] Newly added third-party assets or vendored code have compatible
+  redistribution terms and any required attribution.
+- [ ] No release is described as open source without an explicit license.
 
 ```powershell
 Test-Path office_agent/README.md
@@ -152,9 +159,9 @@ Version map to enforce everywhere:
 - [ ] **No accidental `enterprise_rag` changes** — graph logic, prompts, model
   names, state schema, corpus, and eval semantics unchanged unless the release is
   specifically about them.
-- [ ] **No test or mock-data changes** for a docs/refactor release.
-- [ ] **No `docs/roadmap/`** or architecture-review files touched for docs-only
+- [ ] **No `docs/roadmap/`** or review-report files touched for docs-only
   work.
+- [ ] **No test or mock-data changes** for a docs/refactor release.
 
 ```powershell
 git diff --name-only origin/main            # review every path in the diff
@@ -172,8 +179,10 @@ git diff --name-only origin/main            # review every path in the diff
 
 ## 9. Tag checklist (for a versioned release)
 
-- [ ] Release notes exist under `docs/releases/` (e.g.
-  `docs/releases/office-agent-v1.6.md`).
+- [ ] Release notes exist for the current release under `docs/releases/` (for
+  v1.7.0, `docs/releases/office-agent-v1.7.0.md`; use the corresponding file for
+  a future release).
 - [ ] Version map in the release notes matches the code and docs.
-- [ ] The tag name matches the release (e.g. `office-agent-v1.6`).
+- [ ] The tag name matches the release (for the current release,
+  `office-agent-v1.7.0`; use the corresponding tag for a future release).
 - [ ] The tag points at the merge commit that includes the validated changes.

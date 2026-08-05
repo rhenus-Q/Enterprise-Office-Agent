@@ -5,10 +5,24 @@ Source: `evals/enterprise_rag/results.md`
 - Dataset file at evaluation time: `evals/enterprise_rag/questions.jsonl`
 Dataset: synthetic AcmeCorp evaluation dataset
 
-This is an intentionally committed, reviewed snapshot for documentation and
-portfolio purposes. The runtime-generated report at
-`evals/enterprise_rag/results.md` is gitignored and may be overwritten by future
-eval runs.
+## Provenance and redistribution scope
+
+This file is a reviewed, committed evaluation snapshot derived from the local
+runtime-generated report named above. It contains evaluation questions, run
+metadata, scores, per-question results with truncated system-generated answer
+text, and source references where present. The exact model and provider used for
+this snapshot are not recorded in the committed baseline.
+
+Some web-backed entries summarize information derived from external sources.
+This baseline retains source URLs or identifiers for provenance where present,
+but does not include copies of fetched webpages or other external source
+documents. It is included for reproducibility, regression review, and
+engineering comparison. A source reference does not imply ownership,
+endorsement, or relicensing of the underlying source. Consult the original
+source and its terms before redistributing source material.
+
+The runtime-generated report at `evals/enterprise_rag/results.md` is gitignored
+and may be overwritten by future eval runs.
 
 # Eval results
 

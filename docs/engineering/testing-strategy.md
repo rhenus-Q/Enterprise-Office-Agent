@@ -15,8 +15,10 @@ network**, so anyone (and CI) can validate the repository offline.
 | [`tests/office_agent/`](../../tests/office_agent/) | The Office Agent: router, engine dispatch, each mock tool, **and the two LLM assists** — flag-off byte-for-byte guarantee, grounding validation, and deterministic fallback | None — fully mocked/deterministic; Knowledge adapter and the LLM assists patched at their seams |
 | [`tests/office_agent/evals/`](../../tests/office_agent/evals/) | The two Office Agent LLM-assist eval runners' pure helpers (env loading, dataset validation, CONFIG/INFRA/EVAL_FAIL classification) | None — offline; chain and env preconditions patched |
 | [`tests/api/`](../../tests/api/) | The thin FastAPI adapter (`api/`): the health flag matrix, 1:1 response mapping, the `execution_mode` matrix, request-validation bounds, the type-name-only 500 handler, the `observability` / `run_settings` pass-through, the app-factory tracing-privacy enforcement, and the OpenAPI wire contract | None — `fastapi.testclient` with `answer_office_request` and the flag readers monkeypatched; needs the `api` dependency group installed |
+| [`tests/test_environment_isolation.py`](../../tests/test_environment_isolation.py) | Pytest's environment isolation and real-model authorization matrix | None — local environment mappings only; no provider client is built |
+| [`tests/enterprise_rag/chains/test_generation.py`](../../tests/enterprise_rag/chains/test_generation.py) selected with `-m "not real_model"` | Document formatting and the no-context deterministic generation gate | None — the marked live-model cases are deselected |
 | `frontend/` (Vitest + Playwright) | The web workspace: components, client modes, status classification, and verbatim rendering (Vitest on jsdom), plus real-browser responsive layout in typed mock mode (`npm run test:responsive`, Playwright/Chromium) | None — mock client / localhost only; run with npm from `frontend/` |
-| [`tests/enterprise_rag/chains/`](../../tests/enterprise_rag/chains/) | The six **Enterprise RAG** LCEL chains against the real `gpt-5-mini` | **Real OpenAI API** — marked `real_model` (via the `requires_openai` alias); skips unless `RUN_REAL_MODEL_TESTS=1` **and** `OPENAI_API_KEY` are set; excluded from keys-free CI |
+| Tests marked `real_model` under [`tests/enterprise_rag/chains/`](../../tests/enterprise_rag/chains/) | The six **Enterprise RAG** LCEL chains against the real `gpt-5-mini` | **Real OpenAI API** — require `RUN_REAL_MODEL_TESTS=1` **and** `OPENAI_API_KEY`; excluded from keys-free CI |
 | [`tests/office_agent/integration/`](../../tests/office_agent/integration/) | The two **Office Agent LLM-assist** chains (email digest + briefing narrative) against the real `gpt-5-mini` | **Real OpenAI API** — marked `real_model` (via the `requires_openai` alias); skips unless `RUN_REAL_MODEL_TESTS=1` **and** `OPENAI_API_KEY` are set; excluded from keys-free CI |
 
 ## Unit tests
@@ -72,8 +74,10 @@ repo's `mock_data/` files.
   `RUN_REAL_MODEL_TESTS=1` opt-in — a key alone never authorizes a paid call.
 - CI ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) runs three
   parallel keys-free jobs: **`mocked-tests`** (the fully mocked Python suites,
-  including `tests/api/`), **`lint`** (`ruff check`, `ruff format --check`, and
-  scoped `mypy` — whose `pyproject.toml` scope includes `api/`), and
+  including `tests/api/`, plus `tests/test_environment_isolation.py` and
+  `tests/enterprise_rag/chains/test_generation.py -m "not real_model"`),
+  **`lint`** (`ruff check`, `ruff format --check`, and scoped `mypy` — whose
+  `pyproject.toml` scope includes `api/`), and
   **`frontend`** (`npm ci`, `npm run build`, `npm test`, `npm run test:responsive`
   on Node 20).
 
@@ -83,9 +87,10 @@ repo's `mock_data/` files.
   embeddings.** They pass with no API keys.
 - **Do not** introduce a real network call into these suites. If a new capability
   needs an external dependency, put it behind a lazy factory and patch that seam.
-- The suites that call real services are `tests/enterprise_rag/chains/` (Enterprise RAG chains)
-  and `tests/office_agent/integration/` (the two Office Agent LLM-assist chains). Both are
-  marked `real_model` (the legacy `requires_openai` name is an alias) and skip
+- The tests that call real services are marked `real_model` under
+  `tests/enterprise_rag/chains/` (Enterprise RAG chains) and
+  `tests/office_agent/integration/` (the two Office Agent LLM-assist chains).
+  The legacy `requires_openai` name is an alias; marked tests skip
   unless **both** the deliberate `RUN_REAL_MODEL_TESTS=1` opt-in and
   `OPENAI_API_KEY` are set; both suites are excluded
   from keys-free CI. **Do not run either without explicit approval.**
@@ -99,12 +104,17 @@ uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/ente
 # Mocked API adapter suite — keys-free (needs the api dependency group installed)
 uv run pytest tests/api/ -v
 
+# Environment-isolation and deterministic generation gates — keys-free
+uv run pytest tests/test_environment_isolation.py -v
+uv run pytest tests/enterprise_rag/chains/test_generation.py -m "not real_model" -v
+
 # Whole ordinary suite (real-model tests skip unless RUN_REAL_MODEL_TESTS=1 and OPENAI_API_KEY are both set)
 uv run pytest -v
 ```
 
-The fully mocked suites pass with no API keys; the key-gated `tests/enterprise_rag/chains/` and
-`tests/office_agent/integration/` suites are skipped unless both
+The fully mocked and deterministic selections pass with no API keys. Tests
+marked `real_model` under `tests/enterprise_rag/chains/` and the
+`tests/office_agent/integration/` suite are skipped unless both
 `RUN_REAL_MODEL_TESTS=1` and `OPENAI_API_KEY` are set.
 
 ## Behavioral evals
@@ -162,8 +172,8 @@ touched:
   commands above. The gated `tests/office_agent/integration/` real-model tests and full
   assist evals run **only with explicit approval** and a real key.
 - **Enterprise RAG change** —
-  `uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ -v`; `tests/enterprise_rag/chains/` and the
-  full RAG eval run **only with explicit approval**.
+  `uv run pytest tests/enterprise_rag/nodes/ tests/enterprise_rag/graph/ tests/enterprise_rag/evals/ -v` plus the deterministic generation selection above;
+  tests marked `real_model` and the full RAG eval run **only with explicit approval**.
 - **API adapter change (`api/` or the `OfficeAgentResponse` contract)** —
   `uv run pytest tests/api/ -v` (mocked, keys-free; needs the `api` dependency
   group installed) plus `mypy` (its scope covers `api/`).

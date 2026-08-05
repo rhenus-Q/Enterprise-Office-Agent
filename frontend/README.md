@@ -252,11 +252,6 @@ shell prefix), so the command is identical on Windows, macOS, and Linux. Generat
 with reporter `list` and trace/screenshot/video off, so nothing is produced to
 commit.
 
-## Screenshots
-
-_Placeholder — add workspace screenshots here (three-pane layout, a Knowledge Q&A
-timeline, and a degraded run) when capturing them for the portfolio._
-
 ## Non-goals
 
 No token streaming/SSE/WebSocket, no authentication, no database or persistent

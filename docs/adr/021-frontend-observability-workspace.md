@@ -146,9 +146,9 @@ runs `npm ci` / `npm run build` / `npm test` on Node 20. Every job stays keys-fr
 
 ## Consequences
 
-- The repository has a portfolio-quality web surface that makes the engines'
-  existing observability visible for the first time, while the terminal CLIs
-  remain unchanged.
+- The repository has a localhost web surface that makes the engines' existing
+  observability visible for the first time, while the terminal CLIs remain
+  unchanged.
 - The engines stay the single source of truth: the only engine call from the web
   tier is `answer_office_request()`, and every production change is additive — the
   `observability` carry-through and the request-scoped Run Settings surface (see the

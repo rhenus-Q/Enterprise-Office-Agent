@@ -121,7 +121,7 @@ enterprise_rag/                  # Enterprise Document Q&A Engine (企业文档�
 └── graph/
     ├── graph.py                 # StateGraph assembly, routing/decision functions, MAX_RETRIES, compiled `app`
     ├── engine.py                # Canonical engine API: answer_question(), AnswerOptions/AnswerResult, seed_state(),
-    │                            #   lightweight observability (run_id, node path, timings, optional trace JSON)
+    │                            #   lightweight observability (run_id, node path, timings, optional local trace JSON)
     ├── formatting.py            # Shared presentation: stop-reason caveats + deterministic Sources section
     ├── state.py                 # GraphState TypedDict
     ├── config.py                # Env-driven runtime flags: WEB_SEARCH_ENABLED, WEB_FALLBACK_POLICY,
@@ -277,7 +277,7 @@ Options left as `None` fall back to the environment defaults
 unchanged: `web_search_enabled=False` — per run or via the environment —
 means zero external web searches regardless of the fallback policy.
 
-#### Run traces (optional, metadata-only)
+#### Run traces (optional local debugging artifacts)
 
 Every run carries lightweight observability: a `run_id`, the executed node
 path, per-step timings, and the total duration, collected centrally in the
@@ -293,18 +293,30 @@ result = answer_question(
 )
 ```
 
-The trace contains `run_id`, `generated_at`, `question`, `node_path`,
-`total_duration_ms`, `node_timings_ms`, `stop_reason`, the run counters
-(`retries`, `tracked_llm_calls`, `web_search_count`,
-`web_result_grading_count`), `web_search_enabled`, `web_fallback_policy`,
-and the citation lines (`sources`). It deliberately **never** contains
-document `page_content`, prompts, raw graph state, or API keys. By default
-(`trace_path=None`) no file is written. Note that the question text itself
-is part of the trace — store trace files accordingly.
+The trace contains `run_id`, `generated_at`, `question_redacted`,
+`question_sha256`, `input_redacted`, `node_path`, `total_duration_ms`,
+`node_timings_ms`, `stop_reason`, the run counters (`retries`,
+`tracked_llm_calls`, `web_search_count`, `web_result_grading_count`),
+`web_search_enabled`, `web_fallback_policy`, and the citation lines (`sources`).
+`question_redacted` is a best-effort secret-pattern-redacted preview capped at
+80 characters. That redaction is deliberately targeted at recognized credential
+shapes; it does **not** guarantee removal of personal, confidential, or
+business-sensitive prose, so even the short preview can retain sensitive
+context. `question_sha256` is an ordinary, unkeyed SHA-256 of the original
+input, which can correlate identical questions and may permit guessing of
+predictable or low-entropy inputs.
+
+The limited trace excludes document `page_content`, prompts, full responses,
+and raw graph state, but it must still be treated as a potentially sensitive
+local debugging artifact. Review it before sharing, and do not commit it. The
+repository-root `/traces/` directory used by the example is ignored by default.
+Trace files written elsewhere are the caller's responsibility. By default
+(`trace_path=None`) no file is written; a file is created only when the caller
+explicitly supplies `trace_path`.
 
 #### LangSmith tracing (optional)
 
-In addition to the engine's lightweight metadata-only trace JSON, LangSmith
+In addition to the engine's limited local trace JSON, LangSmith
 tracing can be enabled through environment variables:
 
 ```env
@@ -318,14 +330,15 @@ The two tracing layers serve different purposes:
 * **LangSmith tracing** captures detailed LangChain/LangGraph execution traces
   for debugging, including chain runs, prompts, model inputs/outputs, latency,
   token usage, and failures.
-* **Engine trace JSON** is a small, CI-safe project artifact that records
-  metadata only: `run_id`, node path, timings, counters, stop reason, policy
-  flags, and source lines. It deliberately avoids document content, prompts,
-  raw graph state, and API keys.
+* **Engine trace JSON** is a small, opt-in local debugging artifact that records
+  run metadata, source lines, a best-effort-redacted question preview, and an
+  unkeyed original-input hash. It avoids document `page_content`, prompts, full
+  responses, and raw graph state, but remains potentially sensitive and must be
+  reviewed before it is committed or shared.
 
 LangSmith is useful for development-time inspection; the engine trace is useful
-for reproducible reports, eval artifacts, and lightweight debugging without
-exposing internal content.
+for reproducible reports, eval artifacts, and lightweight debugging when its
+residual privacy risks and local handling requirements are acceptable.
 
 ### Retry-exhaustion warnings
 
@@ -486,9 +499,11 @@ uv run pytest tests/enterprise_rag/graph/ -v
 # Eval-harness helper tests — fully mocked, NO API keys required
 uv run pytest tests/enterprise_rag/evals/ -v
 
-# RAG chain integration tests — real gpt-5-mini; marked real_model, so they skip
-# unless RUN_REAL_MODEL_TESTS=1 and OPENAI_API_KEY are both set
-uv run pytest tests/enterprise_rag/chains/ -v
+# Deterministic generation-chain tests — no model call or API key
+uv run pytest tests/enterprise_rag/chains/test_generation.py -m "not real_model" -v
+
+# Provider-backed chain tests — marked real_model and skipped unless explicitly authorized
+uv run pytest tests/enterprise_rag/chains/ -m real_model -v
 
 # Whole suite
 uv run pytest -v
@@ -505,8 +520,10 @@ jobs on every push and pull request — all keys-free:
 * **`mocked-tests`**: the fully mocked suites (`tests/enterprise_rag/nodes/`,
   `tests/enterprise_rag/graph/`, `tests/enterprise_rag/evals/`, the Office
   Agent's `tests/office_agent/` excluding its gated `integration/`, and the
-  mocked thin-adapter suite `tests/api/`), which also
-  doubles as a regression test that imports stay side-effect-free.
+  mocked thin-adapter suite `tests/api/`), plus
+  `tests/test_environment_isolation.py` and the deterministic tests in
+  `tests/enterprise_rag/chains/test_generation.py` selected with
+  `-m "not real_model"`.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy`. The mypy scope is
   the `[tool.mypy]` `files` list in `pyproject.toml`: the standalone CLI
   (`enterprise_rag/cli.py`) and the engine-API surface
@@ -518,9 +535,9 @@ jobs on every push and pull request — all keys-free:
   Node 20 — the presentation tier is documented in the
   [repo-level README](../README.md) and [structure.md](../structure.md), not here.
 
-The key-gated integration suites (`tests/enterprise_rag/chains/`,
-`tests/office_agent/integration/`) and
-the full eval runs are deliberately excluded from CI.
+Tests marked `real_model` under `tests/enterprise_rag/chains/`, the
+`tests/office_agent/integration/` suite, and the full eval runs are deliberately
+excluded from CI.
 
 ## Dev hygiene
 
@@ -558,7 +575,8 @@ LangChain-typed code); run it directly or via CI instead.
 
 Beyond code-path tests, the repo-root [`evals/`](../evals/) directory holds the
 **Enterprise RAG behavioral eval** — `evals/enterprise_rag/run_eval.py` over
-`evals/enterprise_rag/questions.jsonl`, writing `evals/enterprise_rag/results.md` — which exercises *this*
+`evals/enterprise_rag/questions.jsonl`, writing the local generated output
+`evals/enterprise_rag/results.md` — which exercises *this*
 `enterprise_rag` graph. (A separate `evals/office_agent/llm_assist/` subdirectory evaluates
 the Office Agent's optional Email Digest and Daily Briefing LLM assists; it is
 not part of this engine's eval and is documented with the Office Agent.) The
@@ -568,8 +586,9 @@ answerable from the AcmeCorp corpus (5), requiring web fallback (5),
 unanswerable without fabricating (3), privacy-mode guarantees (2), multi-document provenance (4), and fallback-policy behavior (5). The
 runner drives the real graph and applies **deterministic** checks (stop
 reasons, source provenance including required local titles, run counters including web-search-count expectations, expected substrings, and effective fallback-policy echoes — no
-LLM-as-judge), then writes a Markdown report to
-[`evals/enterprise_rag/results.md`](../evals/enterprise_rag/results.md):
+LLM-as-judge), then writes `evals/enterprise_rag/results.md` as a local,
+gitignored report that is not checked in. The committed reviewed artifact is
+[`evals/enterprise_rag/enterprise-rag-baseline.md`](../evals/enterprise_rag/enterprise-rag-baseline.md):
 
 ```powershell
 # Validate the dataset format only — no API calls
@@ -598,20 +617,20 @@ accepted, and the alternatives deliberately not chosen. Start with the
 
 ### Mocked unit tests vs. API-based chain tests
 
-|                | `tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` (unit)                                                                       | `tests/enterprise_rag/chains/` (integration)                                                                 |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model                      |
-| External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories           | Real OpenAI API calls                                                                         |
-| Requirements   | No API keys                                                                                                                  | `RUN_REAL_MODEL_TESTS=1` + `OPENAI_API_KEY` (marked `real_model` via `requires_openai`; skipped, not failed, without both) |
-| Speed / cost   | Seconds, free                                                                                                                | ~1 minute, small API cost                                                                     |
-| CI             | Run keys-free on every push/PR (the `mocked-tests` job, alongside `tests/office_agent/` and `tests/api/`)                    | Excluded from CI — needs a real key                                                           |
+|                | `tests/enterprise_rag/nodes/` + `tests/enterprise_rag/graph/` + `tests/enterprise_rag/evals/` (unit) | `tests/enterprise_rag/chains/` (deterministic helpers + integration) |
+| -------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| What is tested | Node functions, routing decisions, compiled-graph behavior, and eval helpers                         | Deterministic generation formatting/no-context behavior plus marked live-model chain behavior |
+| External calls | **None** — every external seam is patched                                                           | None for `-m "not real_model"`; marked `real_model` tests call OpenAI |
+| Requirements   | No API keys                                                                                         | No keys for deterministic tests; marked tests require `RUN_REAL_MODEL_TESTS=1` + `OPENAI_API_KEY` |
+| Speed / cost   | Seconds, free                                                                                       | Deterministic tests are free; marked tests may incur provider cost |
+| CI             | Run keys-free on every push/PR                                                                      | `test_generation.py -m "not real_model"` runs in CI; marked tests are excluded |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
 ## Current Limitations
 
 * **Single-turn CLI** — no conversation memory; each question is independent. The engine has no HTTP endpoint of its own: its Knowledge Q&A path is exposed on the web only through the Office Agent adapter and the repository's presentation tier (`api/` + `frontend/`, [ADR 021](../docs/adr/021-frontend-observability-workspace.md)), whose only engine call is `answer_office_request()` — never this engine directly.
-* **Observability is split across two layers, but not yet production-grade** — LangSmith tracing is supported through environment variables, and the engine records lightweight per-run metadata (`run_id`, node path, timings, counters, stop reasons, and optional trace JSON). However, console logs are still `print()`-based, there is no structured logging or metrics backend, and the README does not yet include trace screenshots or saved LangSmith trace examples.
+* **Observability is split across two layers, but not yet production-grade** — LangSmith tracing is supported through environment variables, and the engine records lightweight per-run metadata plus an optional, potentially sensitive local trace JSON. However, console logs are still `print()`-based, there is no structured logging or metrics backend, and no saved LangSmith trace example is published — the graph execution timeline in the root README's Product Tour is the web workspace's own rendering, not a provider trace.
 * **Per-document sequential grading** — relevance grading makes one LLM call per chunk/result, so latency and cost scale with the number of items graded.
 * **Grounding feedback is coarse-grained** — failed grounding currently produces a fixed corrective instruction, not a rationale listing which claims were unsupported.
 * **Prompt-injection defense is layered but still not a complete security boundary** — the trust boundary spans the whole pipeline: the generation prompt treats retrieved content, especially web results, as untrusted evidence, never as instructions ([ADR 010](../docs/adr/enterprise_rag/010-prompt-injection-defense.md)); the control-plane chains (router, both graders, query rewriter) carry explicit *Security rules* blocks so a payload embedded in the content they classify cannot steer the decision, and each document in the generation context is wrapped in explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters ([ADR 012](../docs/adr/enterprise_rag/012-prompt-injection-hardening.md)). Deterministic, key-free graph-level tests pin the structural containment (privacy mode and `disabled` fallback can't be flipped by content, ungraded content never reaches generation, provenance stays metadata-only). These reduce risk but do not constitute a production security boundary: instruction and data still share one context window, so a sufficiently adversarial payload can still influence a real model's verdict or answer; the relevance gate checks topicality, not safety; and there is still no dedicated injection detector, content-sanitization layer, or domain allowlist. The mocked tests prove wiring-level containment, not live-model immunity. Generation has no tools to call, which limits — but does not eliminate — the impact of injected instructions.
